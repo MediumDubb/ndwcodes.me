@@ -4,9 +4,6 @@ jQuery.noConflict();
         AOS.init({
             once: true,
         });
-
-        homePgFull();
-
         const debounce = (fn) => {
             // This holds the requestAnimationFrame reference, so we can cancel it if we wish
             let frame;
@@ -24,13 +21,20 @@ jQuery.noConflict();
             }
         };
 
+        initHomePageFullScreen();
+
+        function initHomePageFullScreen() {
+            // set on page load
+            homePgFull();
+            // watch for changes
+            window.addEventListener('resize', debounce(homePgFull), { passive: true });
+        }
+
         function homePgFull() {
             let documentHeight = $(window).height();
             let footerHeight = $('footer.footer').height();
             documentHeight -= Math.round(footerHeight);
             $("#home .center-piece").parent().height(documentHeight);
-            // watch for changes
-            window.addEventListener('resize', debounce(homePgFull), { passive: true });
         }
 
         function overrideSearchForm() {

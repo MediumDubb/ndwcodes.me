@@ -1,15 +1,10 @@
 .home-page {
+    min-height: 480px;
     .center-piece {
         max-width: 1000px;
         text-align: center;
-        h1 {
-
-        }
-        h2 {
-
-        }
-        .body {
-
+        @media screen and (max-height: 480px) {
+            padding-top: 100px;
         }
     }
 }

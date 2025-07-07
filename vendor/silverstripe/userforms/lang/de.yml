@@ -1,0 +1,102 @@
+de:
+  SilverStripe\CMS\Model\SiteTree:
+    TABMAIN: Hauptteil
+  SilverStripe\UserForms:
+    ADDEMAILRECIPIENT: 'E-Mail-Empfänger hinzufügen'
+    CLEARBUTTON: Löschen
+    CONFIGURATION: Einstellungen
+    DISABLECSRFSECURITYTOKEN: 'Deaktiviere CSRF-Token'
+    DISPLAYERRORMESSAGESATTOP: 'Fehlermeldungen über dem Formular anzeigen?'
+    ENABLELIVEVALIDATION: 'Live Validierung aktivieren'
+    NORECIPIENTS: 'Warnung: Sie haben keine Empfänger konfiguriert. Einsendungen gehen möglicherweise verloren.'
+    RECIPIENTS: Empfänger
+    SAVESUBMISSIONS: 'Speichern von Einreichungen auf dem Server deaktivieren'
+    SHOWCLEARFORM: '"Formular zurücksetzen" Button anzeigen'
+    SUBMISSIONS: Einsendungen
+    SUBMITBUTTON: Absenden
+    TEXTONCLEAR: "Text auf 'Löschen'-Button"
+    TEXTONSUBMIT: 'Text auf Absende-Button'
+  SilverStripe\UserForms\Control\UserDefinedFormAdmin:
+    CANCEL: Abbrechen
+    CONFIRM_FOLDER_LABEL_A: 'Dateien, die Ihre Nutzer hochladen, sollten sorgfältig gespeichert werden, um das Risiko der Offenlegung sensibler Daten zu verringern. Stellen Sie sicher, dass der von Ihnen gewählte Ordner nur von den entsprechenden Personen eingesehen werden kann. Die Ordnerberechtigungen können im Bereich „Dateien“ verwaltet werden.'
+    FOLDER_OPTIONS_EXISTING: 'Einen vorhandenen Ordner verwenden'
+    FOLDER_OPTIONS_NEW: 'Neuen Ordner erzeugen (empfohlen)'
+    FOLDER_OPTIONS_TITLE: 'Optionen für Formularordner'
+    FORM_ACTION_CONFIRM: 'Speichern und weiter'
+  SilverStripe\UserForms\Extension\UserFormFieldEditorExtension:
+    ADD_FIELD: 'Feld hinzufügen'
+  SilverStripe\UserForms\Form\UserFormsGridFieldFilterHeader:
+    FROM: Von
+    RESET: Zurücksetzen
+  SilverStripe\UserForms\Model\EditableCustomRule:
+    has_one_Parent: Übergeordnet
+  SilverStripe\UserForms\Model\EditableFormField:
+    CUSTOMOPTIONS: Optionen
+    FIELDISREQUIRED: '{name} muss ausgefüllt werden'
+    GROUP: Gruppe
+    'NO': Nein
+    TITLE: Titel
+    TYPE: Typ
+    'YES': Ja
+    db_Sort: Sortierung
+    db_Title: Titel
+    has_one_Parent: Übergeordnet
+  SilverStripe\UserForms\Model\EditableFormField\EditableFieldGroupEnd:
+    belongs_to_Group: Gruppe
+  SilverStripe\UserForms\Model\EditableFormField\EditableFileField:
+    has_one_Folder: Ordner
+  SilverStripe\UserForms\Model\EditableFormField\EditableFormStep:
+    STEP_NEXT: Weiter
+    STEP_PREV: Vorige
+    STEP_TITLE: 'Seite {page}'
+  SilverStripe\UserForms\Model\EditableFormField\EditableLiteralField:
+    db_Content: Inhalt
+  SilverStripe\UserForms\Model\EditableFormField\EditableMemberListField:
+    has_one_Group: Gruppe
+  SilverStripe\UserForms\Model\EditableFormField\EditableMultipleOptionField:
+    OPTIONSTAB: Optionen
+    TITLE: Titel
+    has_many_Options: Optionen
+  SilverStripe\UserForms\Model\EditableFormField\EditableNumericField:
+    RANGE: 'Erlaubte numerische Range'
+    RANGE_TO: bis
+  SilverStripe\UserForms\Model\EditableFormField\EditableOption:
+    db_Sort: Sortierung
+    db_Title: Titel
+    has_one_Parent: Übergeordnet
+  SilverStripe\UserForms\Model\EditableFormField\EditableTextField:
+    RANGE_TO: bis
+  SilverStripe\UserForms\Model\Recipient\EmailRecipient:
+    db_EmailAddress: E-Mail-Adresse
+    db_EmailFrom: 'E-Mail von'
+    db_EmailSubject: E-Mail-Betreff
+    db_EmailTemplate: E-Mail-Vorlage
+  SilverStripe\UserForms\Model\Recipient\EmailRecipientCondition:
+    has_one_Parent: Übergeordnet
+  SilverStripe\UserForms\Model\Submission\SubmittedForm:
+    has_one_Parent: Übergeordnet
+  SilverStripe\UserForms\Model\Submission\SubmittedFormField:
+    db_Title: Titel
+    has_one_Parent: Übergeordnet
+  SilverStripe\UserForms\Model\UserDefinedForm:
+    ADDEMAILRECIPIENT: 'E-Mail-Empfänger hinzufügen'
+    CLEARBUTTON: Löschen
+    CONFIGURATION: Einstellungen
+    DISABLECSRFSECURITYTOKEN: 'Deaktiviere CSRF-Token'
+    DISPLAYERRORMESSAGESATTOP: 'Fehlermeldungen über dem Formular anzeigen?'
+    EMAILADDRESS: E-Mail
+    EMAILFROM: Von
+    EMAILSUBJECT: E-Mail-Betreff
+    EMAILTEMPLATE: E-Mail-Vorlage
+    ENABLELIVEVALIDATION: 'Live Validierung aktivieren'
+    NORECIPIENTS: 'Warnung: Sie haben keine Empfänger konfiguriert. Einsendungen gehen möglicherweise verloren.'
+    PLURALNAME: 'Basis Seiten'
+    RECIPIENTS: Empfänger
+    SAVESUBMISSIONS: 'Speichern von Einreichungen auf dem Server deaktivieren'
+    SHOWCLEARFORM: '"Formular zurücksetzen" Button anzeigen'
+    SUBMISSIONS: Einsendungen
+    SUBMITBUTTON: Absenden
+    TEXTONCLEAR: "Text auf 'Löschen'-Button"
+    TEXTONSUBMIT: 'Text auf Absende-Button'
+    db_EnableLiveValidation: 'Live Validierung aktivieren'
+    has_many_Submissions: Einsendungen

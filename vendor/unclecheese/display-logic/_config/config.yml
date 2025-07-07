@@ -1,0 +1,26 @@
+UncleCheese\DisplayLogic\Criteria:
+  comparisons:
+    - isEqualTo
+    - isNotEqualTo
+    - isGreaterThan
+    - isLessThan
+    - contains
+    - startsWith
+    - endsWith
+    - isEmpty
+    - isNotEmpty
+    - isBetween
+    - isChecked
+    - isNotChecked
+    - hasCheckedOption
+    - hasCheckedAtLeast
+    - hasCheckedLessThan
+  animations:
+    - toggle
+    - slide
+    - fade
+  default_animation: toggle
+    
+SilverStripe\Forms\FormField:
+  extensions:
+    - UncleCheese\DisplayLogic\Extensions\DisplayLogic

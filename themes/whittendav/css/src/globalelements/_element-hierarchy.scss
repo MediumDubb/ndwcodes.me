@@ -1,0 +1,32 @@
+// no more  than four!
+h1 {
+    font-family: "Poppins", sans-serif;
+    font-weight:800;
+    font-size: clamp(42px, 7cqw, 92px);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    line-height: clamp(42px, 8.5cqw, 92px);
+    margin:0;
+    //text-shadow:  0 1px 5px rgba(0,0,0,0.1);
+}
+
+h2 {
+    font-family: "Roboto Mono", sans-serif;
+    font-weight:500;
+    font-size: clamp(14px, 2cqw, 21px);
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+}
+
+.cta {
+
+}
+
+.body {
+    * {
+        text-transform: none;
+        font-weight:500;
+        font-size: clamp(14px, 2cqw, 21px);
+        line-height: clamp(22px, 3cqw, 29px);
+    }
+}

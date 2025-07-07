@@ -1,0 +1,68 @@
+{
+    "name": "silverstripe/installer",
+    "type": "silverstripe-recipe",
+    "description": "The SilverStripe Framework Installer",
+    "license": "BSD-3-Clause",
+    "require": {
+        "php": "^8.1",
+        "silverstripe/recipe-plugin": "~2.1.0@stable",
+        "silverstripe/vendor-plugin": "~2.1.0@stable",
+        "silverstripe/recipe-cms": "~5.4.0@stable",
+        "silverstripe/login-forms": "~5.3.0@stable",
+        "dnadesign/silverstripe-elemental": "^5.2",
+        "undefinedoffset/sortablegridfield": "^2.2",
+        "bummzack/sortablefile": "^2.2",
+        "dnadesign/silverstripe-elemental-userforms": "^4.1",
+        "undefinedoffset/silverstripe-nocaptcha": "^2.4",
+        "silverstripe/spamprotection": "^4.2",
+        "wilr/silverstripe-googlesitemaps": "^3.1",
+        "innis-maggiore/silverstripe-content-extensions": "^5.0",
+        "innis-maggiore/silverstripe-smtp-tester": "^5.0",
+        "innis-maggiore/silverstripe-social-meta-tags": "^5.0",
+        "symbiote/silverstripe-gridfieldextensions": "^4.1",
+        "twbs/bootstrap": "5.3.6",
+        "fortawesome/font-awesome": "^6.7",
+        "unclecheese/display-logic": "^3.0",
+        "moo/hasoneselector": "dev-master",
+        "silverstripe/blog": "^4.4"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    },
+    "scripts": {
+        "expose-theme-vendor": [
+            "cp -R vendor/twbs/bootstrap/dist themes/whittendav/vendor/bootstrap",
+            "cp -R vendor/fortawesome/font-awesome/js-packages/@fortawesome/fontawesome-free themes/whittendav/vendor/fontawesome-free"
+        ]
+    },
+    "extra": {
+        "project-files-installed": [
+            ".htaccess",
+            "app/.htaccess",
+            "app/_config/mimevalidator.yml",
+            "app/_config/mysite.yml",
+            "app/src/Page.php",
+            "app/src/PageController.php"
+        ],
+        "public-files-installed": [
+            ".htaccess",
+            "index.php",
+            "web.config"
+        ]
+    },
+    "config": {
+        "process-timeout": 600,
+        "allow-plugins": {
+            "composer/installers": true,
+            "silverstripe/recipe-plugin": true,
+            "silverstripe/vendor-plugin": true
+        }
+    },
+    "prefer-stable": true,
+    "minimum-stability": "dev",
+    "autoload": {
+        "psr-4": {
+            "SirNoah\\Whittendav\\": "app/src/"
+        }
+    }
+}

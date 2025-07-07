@@ -1,0 +1,19 @@
+pl:
+  GridFieldSiteTreeAddNewButton:
+    Add: 'Dodaj nową {name}'
+    AddMultipleOptions: 'Dodaj nową'
+  GridFieldSiteTreeState:
+    Draft: '<i class="btn-icon gridfield-icon btn-icon-pencil"></i> Zapisano jaki szkic {date}'
+    Modified: Zmodyfikowano
+    Published: '<i class="btn-icon gridfield-icon btn-icon-accept"></i> Opublikowano {date}'
+    StateTitle: Stan
+  Lumberjack:
+    TabTitle: Podstrony
+  SilverStripe\Lumberjack\Forms\GridFieldSiteTreeAddNewButton:
+    Add: 'Dodaj nową {name}'
+    AddMultipleOptions: 'Dodaj nową'
+  SilverStripe\Lumberjack\Forms\GridFieldSiteTreeState:
+    Modified: Zmodyfikowano
+    StateTitle: Stan
+  SilverStripe\Lumberjack\Model\Lumberjack:
+    TabTitle: Podstrony

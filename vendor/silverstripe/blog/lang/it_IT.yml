@@ -1,0 +1,23 @@
+it_IT:
+  SilverStripe\Blog\Forms\GridField\GridFieldBlogPostState:
+    Draft: 'Salva come Bozza in {date}'
+    Published: 'Pubblicato in {date}'
+    Timer: 'Pubblica il {date}'
+  SilverStripe\Blog\Model\Blog:
+    CLASS_DESCRIPTION: 'Aggiunti un blog al tuo website'
+    Categories: Categorie
+    Category: Categoria
+    Comments: Commenti
+    DESCRIPTION: 'Aggiunti un blog al tuo website'
+    FILTERDESCRIPTION_AUTHOR: 'Di {author}'
+    FILTERDESCRIPTION_CATEGORY: 'In categoria {category}'
+    FILTERDESCRIPTION_DATE: 'Il {date}'
+    FILTERDESCRIPTION_PAGE: 'Pagina {page}'
+    FILTERDESCRIPTION_TAG: 'Taggato con {tag}'
+    NoPosts: 'Non ci sono post'
+    PERMISSIONS_CATEGORY: 'Permessi Blog'
+    Tagged: Taggato
+    has_many_Categories: Categorie
+  SilverStripe\Blog\Model\BlogPost:
+    Categories: Categorie
+    many_many_Categories: Categorie

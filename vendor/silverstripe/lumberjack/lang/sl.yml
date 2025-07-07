@@ -1,0 +1,19 @@
+sl:
+  GridFieldSiteTreeAddNewButton:
+    Add: "Dodaj '{name}'"
+    AddMultipleOptions: Dodaj
+  GridFieldSiteTreeState:
+    Draft: '<i class="btn-icon gridfield-icon btn-icon-pencil"></i> Osnutek pripravljen {date}'
+    Modified: Spremenjeno
+    Published: '<i class="btn-icon gridfield-icon btn-icon-accept"></i> Objavljeno {date}'
+    StateTitle: Status
+  Lumberjack:
+    TabTitle: Podstrani
+  SilverStripe\Lumberjack\Forms\GridFieldSiteTreeAddNewButton:
+    Add: "Dodaj '{name}'"
+    AddMultipleOptions: Dodaj
+  SilverStripe\Lumberjack\Forms\GridFieldSiteTreeState:
+    Modified: Spremenjeno
+    StateTitle: Status
+  SilverStripe\Lumberjack\Model\Lumberjack:
+    TabTitle: Podstrani

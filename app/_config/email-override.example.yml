@@ -1,0 +1,14 @@
+# Instructions
+# Do not remove this file from the repository
+# Copy this file and rename it to email-override.yml
+# Uncomment the new config and change the email address.
+# Do not check-in email-override.yml
+
+#---
+#Name: email-override
+#After: '#dev-email'
+#Only:
+#  environment: dev
+#---
+#SilverStripe\Control\Email\Email:
+#  send_all_emails_to: 'youremail@innismaggiore.com'

@@ -1,0 +1,16 @@
+$theme-assets: '_resources/themes/whittendav/images';
+@import "vorged";
+
+@import "globalelements/body";
+@import "globalelements/buttons";
+@import "globalelements/colors";
+@import "globalelements/footer";
+@import "globalelements/element-hierarchy";
+
+@import "includes/progress-bar";
+@import "includes/nav";
+
+@import "pagetypes/home-page";
+
+
+

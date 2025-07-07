@@ -1,0 +1,27 @@
+id:
+  SilverStripe\Blog\Admin\GridFieldCategorisationConfig:
+    Title: Judul
+  SilverStripe\Blog\Forms\GridField\GridFieldAddByDBField:
+    Add: 'Tambah {name}'
+  SilverStripe\Blog\Forms\GridField\GridFieldBlogPostState:
+    Modified: Diubah
+  SilverStripe\Blog\Model:
+    Title: Judul
+  SilverStripe\Blog\Model\Blog:
+    Archive: Arsip
+    By: oleh
+    Comments: Komentar
+    PLURALNAME: 'Laman Dasar'
+    Tags: Penanda
+    has_many_Tags: Penanda
+  SilverStripe\Blog\Model\BlogCategory:
+    db_Title: Judul
+  SilverStripe\Blog\Model\BlogObject:
+    Title: Judul
+  SilverStripe\Blog\Model\BlogPost:
+    AUTHOR: Penulis
+    PLURALNAME: 'Laman Dasar'
+    Tags: Penanda
+    many_many_Tags: Penanda
+  SilverStripe\Blog\Model\BlogTag:
+    db_Title: Judul

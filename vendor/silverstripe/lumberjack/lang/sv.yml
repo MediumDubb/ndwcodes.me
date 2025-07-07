@@ -1,0 +1,19 @@
+sv:
+  GridFieldSiteTreeAddNewButton:
+    Add: 'Lägg till {name}'
+    AddMultipleOptions: 'Lägg till'
+  GridFieldSiteTreeState:
+    Draft: '<i class="btn-icon gridfield-icon btn-icon-pencil"></i> Sparat som utkast {date}'
+    Modified: Ändrad
+    Published: '<i class="btn-icon gridfield-icon btn-icon-accept"></i> Publicerad {date}'
+    StateTitle: Status
+  Lumberjack:
+    TabTitle: Undersidor
+  SilverStripe\Lumberjack\Forms\GridFieldSiteTreeAddNewButton:
+    Add: 'Lägg till {name}'
+    AddMultipleOptions: 'Lägg till'
+  SilverStripe\Lumberjack\Forms\GridFieldSiteTreeState:
+    Modified: Ändrad
+    StateTitle: Status
+  SilverStripe\Lumberjack\Model\Lumberjack:
+    TabTitle: Undersidor

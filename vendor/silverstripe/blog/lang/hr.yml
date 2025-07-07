@@ -1,0 +1,68 @@
+hr:
+  SilverStripe\Blog\Admin\GridFieldCategorisationConfig:
+    Title: Naslov
+  SilverStripe\Blog\Forms\GridField\GridFieldAddByDBField:
+    Add: 'Dodaj {name}'
+  SilverStripe\Blog\Forms\GridField\GridFieldBlogPostState:
+    Modified: Izmjenjeno
+  SilverStripe\Blog\Model:
+    Title: Naslov
+  SilverStripe\Blog\Model\Blog:
+    AND: i
+    Archive: Arhiva
+    By: od
+    CLASS_DESCRIPTION: 'Dodaje blog na Vašu web stranicu.'
+    CONTRIBUTOR: Suradnik
+    Categories: Kategorije
+    Category: Kategorija
+    Comments: Komentari
+    DESCRIPTION: 'Dodaje blog na Vašu web stranicu.'
+    EDITOR: Urednik
+    FILTERDESCRIPTION_AUTHOR: 'od {author}'
+    FILTERDESCRIPTION_CATEGORY: 'U kategoriji {category}'
+    FILTERDESCRIPTION_DATE: 'od {date}'
+    FILTERDESCRIPTION_PAGE: 'Stranica {page} '
+    FILTERDESCRIPTION_TAG: 'Tagiran s {tag}'
+    LumberjackTitle: 'Blog zapisi'
+    NoPosts: 'Nema zapisa'
+    PERMISSIONS_CATEGORY: 'Blog dozvole'
+    PERMISSION_MANAGE_USERS_DESCRIPTION: 'Upravljaj korisnike za pojedinačne blogove'
+    PLURALNAME: 'Bazne stranice'
+    Posted: Objavljeno
+    PostedIn: 'Objavljeno u'
+    PostsPerPage: 'Postova po stranici'
+    ReadMoreAbout: "Pročitaj više o '{title}'..."
+    Tagged: Tagirano
+    Tags: Tagovi
+    WRITER: Pisac
+    has_many_Categories: Kategorije
+    has_many_Tags: Tagovi
+  SilverStripe\Blog\Model\BlogCategory:
+    db_Title: Naslov
+  SilverStripe\Blog\Model\BlogMemberExtension:
+    BLOGPOSTS: 'Bazna stranica'
+    TABBLOGPOSTS: 'Bazna stranica'
+  SilverStripe\Blog\Model\BlogObject:
+    Title: Naslov
+  SilverStripe\Blog\Model\BlogPost:
+    AUTHOR: Autor
+    Authors: Autori
+    Categories: Kategorije
+    FeaturedImage: 'Izdvojena slika'
+    PLURALNAME: 'Bazna stranica'
+    PageTitleLabel: 'Naslov posta'
+    PublishDate: 'Datum objave'
+    SINGULARNAME: 'Blog zapis'
+    Tags: Tagovi
+    many_many_Authors: Autori
+    many_many_Categories: Kategorije
+    many_many_Tags: Tagovi
+  SilverStripe\Blog\Model\BlogTag:
+    db_Title: Naslov
+  SilverStripe\Blog\Widgets\BlogArchiveWidget:
+    ArchiveType: 'Tip arhive'
+    NumberToDisplay: 'Broj za prikaz'
+  SilverStripe\Blog\Widgets\BlogFeaturedPostsWidget:
+    NumberOfPosts: 'Broj zapisa'
+  SilverStripe\Blog\Widgets\BlogRecentPostsWidget:
+    NumberOfPosts: 'Broj zapisa'

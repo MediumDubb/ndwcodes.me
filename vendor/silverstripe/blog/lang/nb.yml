@@ -1,0 +1,22 @@
+nb:
+  SilverStripe\Blog\Admin\GridFieldCategorisationConfig:
+    Posts: Meldinger
+    Title: Tittel
+  SilverStripe\Blog\Forms\GridField\GridFieldAddByDBField:
+    Add: 'Legg til {name}'
+  SilverStripe\Blog\Forms\GridField\GridFieldBlogPostState:
+    Modified: Endret
+  SilverStripe\Blog\Model:
+    Title: Tittel
+  SilverStripe\Blog\Model\Blog:
+    Archive: Arkiver
+    By: av
+    Comments: Kommentarer
+  SilverStripe\Blog\Model\BlogCategory:
+    db_Title: Tittel
+  SilverStripe\Blog\Model\BlogObject:
+    Title: Tittel
+  SilverStripe\Blog\Model\BlogPost:
+    AUTHOR: Forfatter
+  SilverStripe\Blog\Model\BlogTag:
+    db_Title: Tittel

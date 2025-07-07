@@ -1,0 +1,14 @@
+/silverstripe-cache/
+.sass-cache/
+.idea/
+.DS_Store
+/public/assets/*
+/public/_resources
+.editorconfig
+/logs/*
+/.graphql-generated/*
+/public/_graphql/*
+/app/_config/email-override.yml
+composer.phar
+!*/.gitkeep
+!*/*/.gitkeep

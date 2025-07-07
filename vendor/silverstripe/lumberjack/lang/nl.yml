@@ -1,0 +1,21 @@
+nl:
+  GridFieldSiteTreeAddNewButton:
+    Add: 'Voeg nieuwe {name} toe'
+    AddMultipleOptions: 'Voeg nieuwe toe'
+  GridFieldSiteTreeState:
+    Draft: '<i class="btn-icon gridfield-icon btn-icon-pencil"></i> Opgeslagen als concept op {date}'
+    Modified: Aangepast
+    Published: '<i class="btn-icon gridfield-icon btn-icon-accept"></i> Gepubliceerd op {date}'
+    StateTitle: Status
+  Lumberjack:
+    TabTitle: "Onderliggende pagina's"
+  SilverStripe\Lumberjack\Forms\GridFieldSiteTreeAddNewButton:
+    Add: 'Voeg nieuwe {name} toe'
+    AddMultipleOptions: 'Voeg nieuwe toe'
+  SilverStripe\Lumberjack\Forms\GridFieldSiteTreeState:
+    Draft: 'Opgeslagen als concept op {date}'
+    Modified: Aangepast
+    Published: 'Gepubliceerd op {date}'
+    StateTitle: Status
+  SilverStripe\Lumberjack\Model\Lumberjack:
+    TabTitle: "Onderliggende pagina's"

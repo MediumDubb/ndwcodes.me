@@ -1,0 +1,85 @@
+
+header {
+    border-bottom: 1px solid #ffffff33;
+    #main-nav {
+        background-color: #212121;
+
+        .container {
+            display: flex;
+            justify-content: space-between;
+
+            a,
+            span {
+                font-weight: 600;
+                font-size: 14px;
+                text-decoration: none;
+
+                &.logo {
+                    text-transform: lowercase;
+                    padding: 0;
+                }
+            }
+
+            * {
+                color: #DADADA;
+            }
+
+            li,
+            .nav-link {
+                padding: 0;
+            }
+
+            li.nav-item {
+                padding-left: 2rem;
+                display: flex;
+                align-items: center;
+                & > a,
+                & > span {
+                    border-bottom: 2px solid transparent;
+                }
+
+                &:hover > a,
+                &:hover > span {
+                    border-color: #212121;
+                }
+
+                .dropdown-toggle::after {
+                    margin-left: 0;
+                }
+
+                .dropdown-menu {
+                    * {
+                        color: #212121;
+                    }
+                }
+            }
+            .navbar-toggler-icon {
+                background-image: url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 32 32' xmlns='http://www.w3.org/2000/svg' %3E%3Cpath stroke='rgba(255, 255, 255, 0.6)' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 8h24M4 16h24M4 24h24' /%3E%3C/svg%3E");
+            }
+            @media screen and (max-width: 991px) {
+                .navbar-collapse {
+                    position: fixed;
+                    width: 100vw;
+                    left: 0;
+                    top: 50px;
+                    padding: 12px var(--bs-navbar-padding-x) 0 var(--bs-navbar-padding-x);
+                    .nav-item {
+                        padding: 0 12px 8px 12px;
+                        margin: 0 auto;
+                        display: block;
+                        width: 100%;
+                        @media screen and (max-width: 991px) {
+                            max-width: 720px;
+                        }
+                        @media screen and (max-width: 767px) {
+                            max-width: 540px;
+                        }
+                        @media screen and (max-width: 575px) {
+                            max-width: unset;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

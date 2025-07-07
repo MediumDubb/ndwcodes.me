@@ -1,0 +1,180 @@
+eo:
+  SilverStripe\Blog\Admin\GridFieldCategorisationConfig:
+    Posts: Afiŝoj
+    Title: Titolo
+  SilverStripe\Blog\Admin\GridFieldMergeAction:
+    MovePostsTo: 'Movi afiŝojn al'
+  SilverStripe\Blog\Forms\GridField\GridFieldAddByDBField:
+    Add: 'Aldoni {name}'
+    AddFail: '{klaso} ne estas konservebla al la datumbazo.'
+    PermissionFail: 'Vi ne havas permeson krei je {klaso}.'
+  SilverStripe\Blog\Forms\GridField\GridFieldBlogPostState:
+    Draft: 'Konservita kiel malneto je {dato}'
+    Modified: Ŝanĝita
+    Published: 'Publikigita je {dato}'
+    Timer: 'Publikigi je {dato}'
+  SilverStripe\Blog\Model:
+    Title: Titolo
+  SilverStripe\Blog\Model\Blog:
+    AND: kaj
+    Archive: Arkivo
+    By: de
+    CLASS_DESCRIPTION: 'Aldonas blogon al via retejo.'
+    CONTRIBUTOR: Kontribuinto
+    Categories: Kategorioj
+    Categorisation: Kategoriigi
+    Category: Kategorio
+    Comments: Komentoj
+    DESCRIPTION: 'Aldonas blogon al via retejo.'
+    EDITOR: Redaktinto
+    FILTERDESCRIPTION_AUTHOR: 'De {aŭtoro}'
+    FILTERDESCRIPTION_CATEGORY: 'En kategorio {kategorio}'
+    FILTERDESCRIPTION_DATE: 'En {dato}'
+    FILTERDESCRIPTION_PAGE: 'Paĝo {paĝo}'
+    FILTERDESCRIPTION_TAG: 'Etikedo {etikedo}'
+    LessThanAMinuteToRead: 'Malpli ol minuto por legi'
+    LumberjackTitle: 'Blogaj afiŝoj'
+    MinutesToRead: 'Minuto(j) por legi'
+    NoPosts: 'Mankas afiŝoj'
+    PERMISSIONS_CATEGORY: 'Blogaj permesoj'
+    PERMISSION_MANAGE_USERS_DESCRIPTION: 'Administri uzantojn por specifaj blogaĵoj'
+    PERMISSION_MANAGE_USERS_HELP: 'Permesi agordi redaktantojn, verkantojn, aŭ kontribuantojn al blogoj'
+    PLURALNAME: 'Bazaj paĝoj'
+    PLURALS:
+      one: 'Unu blogo'
+      other: '{count} blogoj'
+    Posted: Afiŝita
+    PostedIn: 'Afiŝita en'
+    PostsByUser: 'Afiŝoj laŭ {firstname} {surname} por {title}'
+    PostsPerPage: 'Afiŝoj en ĉiu paĝo'
+    ReadMoreAbout: "Legi plu pri '{title}'..."
+    SINGULARNAME: Blogo
+    Tag: Etikedo
+    Tagged: 'Havas etikedon'
+    Tags: Etikedoj
+    UsersContributorsFieldDescription: "Kontribuantoj rajtas krei aŭ redakti BlogAfiŝojn, sed ne publikigi sen \npermeso de redaktanto, Ankaŭ ili ne rajtas asigni aliajn kontribuantajn aŭtorojn al iu el \n                         siaj BlogAfiŝoj.<br />\n                        <br />\n                        Kontribuantoj rajtas:<br />\n                        <br />\n                        Ĝisdatigi iun BlogAfiŝon kiun ili aŭtoris aŭ al kiu li/ŝi estas asignita."
+    UsersEditorsFieldDescription: "Redaktanto regas specifajn BlogAfiŝojn, kaj ĉiujn afiŝojn en ĉiu.\n                     Malpli ol asigni aliajn redaktantojn al blogo, ili rajtas trakti plejmultajn ŝanĝojn al\n                    sia asignita blogo. <br /><br />\n                    Redaktantoj havas ĉi tiujn permesojn:<br />\n                    <br />\n                    Ĝisdatigi aŭ publikigi ajnan BlogAfiŝon en sia Blogo<br />\n                    Ĝisdatigi aŭ publikigi sian Blogon<br />\n                    Asigni/malasigni verkantojn al sia Blogo<br />\n                    Asigni/malasigni kontribuantojn al sia Blogo<br />\n                    Asigni/malasigni ajnan membron aŭtoro de specifa BlogAfiŝo"
+    UsersWritersFieldDescription: "Verkanto tute regas krei, redakti kaj publikigi BlogAfiŝojn kiujn ili verkis\n                      aŭ al kiuj ili estas asignitaj. Verkantoj ne rajtas redakti  BlogAfiŝon al kiu ili ne estas asignitaj.\n                    <br /><br />\n                    Verkantoj havas la jenajn permesojn:<br />\n                    <br />\n                    Ĝisdatigi aŭ publikigi ajnan BlogAfiŝon kiun ili verkis, aŭ al kiu ili estas asignitaj<br />\n                    Asigni/malasigni ajnan membron aŭtoro de specifa BlogAfiŝo kiun ili verkis aŭ al kiu ili estas asignita."
+    WRITER: Verkanto
+    db_PostsPerPage: 'Afiŝoj en ĉiu paĝo'
+    has_many_Categories: Kategorioj
+    has_many_Tags: Etikedoj
+    many_many_Contributors: Kontribuintoj
+    many_many_Editors: Redaktantoj
+    many_many_Writers: Verkantoj
+  SilverStripe\Blog\Model\BlogCategory:
+    Duplicate: 'Bloga kategorio jam ekzistas kun tiu nomo'
+    PLURALNAME: 'Blogaj kategorioj'
+    PLURALS:
+      one: 'Unu bloga kategorio'
+      other: '{count} blogaj kategorioj'
+    SINGULARNAME: 'Bloga kategorio'
+    belongs_many_many_BlogPosts: 'Blogaj afiŝoj'
+    db_Title: Titolo
+    db_URLSegment: URL-segmento
+    has_one_Blog: Blogo
+  SilverStripe\Blog\Model\BlogMemberExtension:
+    BLOGPOSTS: 'Blogaj afiŝoj'
+    TABBLOGPOSTS: 'Blogaj afiŝoj'
+    belongs_many_many_BlogPosts: 'Blogaj afiŝoj'
+    db_BlogProfileSummary: 'Bloga profila resumo'
+    db_URLSegment: URL-segmento
+    has_one_BlogProfileImage: 'Bloga profila bildo'
+  SilverStripe\Blog\Model\BlogObject:
+    Title: Titolo
+  SilverStripe\Blog\Model\BlogPost:
+    AUTHOR: Aŭtoro
+    AdditionalCredits: 'Kromaj agnoskoj'
+    AdditionalCredits_Description: 'Se iuj aŭtoroj de ĉi tiu afiŝo ne havas CMS-aliron, enigu iliajn nomo(j)n ĉi tie. Vi povas apartigi plurajn nomojn per komo.'
+    Authors: Aŭtoroj
+    CUSTOMSUMMARY: 'Aldoni propran resumon'
+    Categories: Kategorioj
+    FeaturedImage: 'Prezentita bildo'
+    PLURALNAME: 'Blogaj afiŝoj'
+    PLURALS:
+      one: 'Unu bloga afiŝo'
+      other: '{count} blogaj afiŝoj'
+    PageTitleLabel: 'Titolo de afiŝo'
+    PostOptions: 'Afiŝaj agordoj'
+    PublishDate: 'Dato de publikigo'
+    PublishDate_Description: 'Agordiĝos al "nun", se publikigita sen valoro'
+    SINGULARNAME: Blogaĵo
+    SUMMARY_DESCRIPTION: 'Se resumo ne estas agordita, la unuaj 30 vortoj uziĝos.'
+    Tags: Etikedoj
+    db_AuthorNames: 'Nomoj de aŭtoroj'
+    db_PublishDate: 'Dato de publikigo'
+    db_Summary: Resumo
+    has_one_FeaturedImage: 'Prezentita bildo'
+    many_many_Authors: Aŭtoroj
+    many_many_Categories: Kategorioj
+    many_many_Tags: Etikedoj
+  SilverStripe\Blog\Model\BlogPostFeaturedExtension:
+    FEATURED: 'Inkludi afiŝon en elstara fenestraĵo'
+    db_FeaturedInWidget: 'Prezentita en fenestraĵo'
+  SilverStripe\Blog\Model\BlogTag:
+    Duplicate: 'Blogaj etikedoj jam ekzistas kun tiu nomo'
+    PLURALNAME: 'Blogaj etikedoj'
+    PLURALS:
+      one: 'Unu bloga etikedo'
+      other: '{count} blogaj etikedoj'
+    SINGULARNAME: 'Bloga etikedo'
+    belongs_many_many_BlogPosts: 'Blogaj afiŝoj'
+    db_Title: Titolo
+    db_URLSegment: URL-segmento
+    has_one_Blog: Blogo
+  SilverStripe\Blog\Widgets\BlogArchiveWidget:
+    ArchiveType: ArkivoTipo
+    Blog: Blogo
+    NumberToDisplay: 'Nombro vidigotaj'
+    PLURALNAME: 'Fenestraĵoj por bloga arkivo'
+    PLURALS:
+      one: 'Unu fenestraĵo por bloga arkivo'
+      other: '{count} fenestraĵoj por bloga arkivo'
+    SINGULARNAME: 'Fenestraĵo por bloga arkivo'
+  SilverStripe\Blog\Widgets\BlogCategoriesWidget:
+    Blog: Blogo
+    Direction: Direkto
+    Direction_Description: 'Ŝanĝi la direkton de ordigo de kategorioj vidigotaj de tiu fenestraĵo.'
+    Limit: Limigi
+    Limit_Description: 'Limigu la nombron da kategorioj vidigotaj de tiu fenestraĵo (agordu al 0 por vidigi ĉiujn kategoriojn).'
+    PLURALNAME: 'Fenestraĵoj por blogaj kategorioj'
+    PLURALS:
+      one: 'Unu fenestraĵo por blogaj kategorioj'
+      other: '{count} fenestraĵoj por blogaj kategorioj'
+    SINGULARNAME: 'Fenestraĵo por blogaj kategorioj'
+    Sort: Ordigi
+    Sort_Description: 'Ŝanĝi la ordon de kategorioj vidigotaj de tiu fenestraĵo.'
+  SilverStripe\Blog\Widgets\BlogFeaturedPostsWidget:
+    Blog: Blogo
+    NumberOfPosts: 'Nombro da afiŝoj'
+    PLURALNAME: 'Fenestraĵoj de lastatempaj blogaĵoj'
+    PLURALS:
+      one: 'Unu fenestraĵo de lastatempa blogaĵo'
+      other: '{count} fenestraĵoj de lastatempaj blogaĵoj'
+    SINGULARNAME: 'Fenestraĵo de lastatempa blogaĵo'
+  SilverStripe\Blog\Widgets\BlogRecentPostsWidget:
+    NumberOfPosts: 'Nombro da afiŝoj'
+    PLURALNAME: 'Fenestraĵoj de lastatempaj blogaĵoj'
+    PLURALS:
+      one: 'Unu fenestraĵo de lastatempaj blogaĵoj'
+      other: '{count} fenestraĵoj de lastatempaj blogaĵoj'
+    SINGULARNAME: 'Fenestraĵo de lastaj blogaĵoj'
+  SilverStripe\Blog\Widgets\BlogTagsCloudWidget:
+    Blog: Blogo
+    PLURALNAME: 'Nubaj fenestraĵoj por blogaj etikedoj'
+    PLURALS:
+      one: 'Unu nuba fenestraĵo por blogaj etikedoj'
+      other: '{count} nubaj fenestraĵoj por blogaj etikedoj'
+    SINGULARNAME: 'Nuba fenestraĵo por blogaj etikedoj'
+  SilverStripe\Blog\Widgets\BlogTagsWidget:
+    Direction: Direkto
+    Direction_Description: 'Ŝanĝi la direkton de ordigo de etikedoj vidigotaj de tiu fenestraĵo.'
+    Limit: Limigi
+    Limit_Description: 'Limigu la nombron da etikedoj vidigotaj de tiu fenestraĵo (agordu al 0 por vidigi ĉiujn etikedojn).'
+    PLURALNAME: 'Fenestraĵoj por blogaj etikedoj'
+    PLURALS:
+      one: 'Unu fenestraĵo por blogaj etikedoj'
+      other: '{count} fenestraĵoj por blogaj etikedoj'
+    SINGULARNAME: 'Fenestraĵo por blogaj etikedoj'
+    Sort: Ordigi
+    Sort_Description: 'Ŝanĝi la ordon de etikedoj vidigotaj de tiu fenestraĵo.'

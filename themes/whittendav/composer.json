@@ -1,0 +1,30 @@
+{
+    "name": "silverstripe-themes/noahdw",
+    "description": "The noahdw.me Theme for SilverStripe",
+    "type": "silverstripe-theme",
+    "keywords": [
+        "silverstripe",
+        "theme"
+    ],
+    "license": "BSD-3-Clause",
+    "authors": [
+        {
+            "name": "Noah Whittington",
+            "homepage": "https://noahdw.me"
+
+        }
+    ],
+    "require": {
+        "composer/installers": "*",
+        "silverstripe/framework": ">=3.5"
+    },
+    "extra": {
+        "expose": [
+            "css",
+            "images",
+            "javascript",
+            "webfonts",
+            "vendor"
+        ]
+    }
+}

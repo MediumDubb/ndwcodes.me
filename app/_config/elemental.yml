@@ -1,0 +1,14 @@
+---
+Name: my-elemental
+After: '#myproject'
+Only:
+  moduleexists:
+    - 'dnadesign/silverstripe-elemental'
+    - 'dnadesign/silverstripe-elemental-userforms'
+---
+SirNoah\Whittendav\PageTypes\ComponentPage:
+  extensions:
+    - DNADesign\Elemental\Extensions\ElementalPageExtension
+  disallowed_elements:
+      - DNADesign\Elemental\Models\ElementContent
+      - SirNoah\Whittendav\Elements\BasePanel

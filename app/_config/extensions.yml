@@ -1,0 +1,6 @@
+---
+Name: siteconfig-extensions
+---
+Silverstripe\SiteConfig\SiteConfig:
+  extensions:
+    - SirNoah\Whittendav\SiteConfig\CustomSiteConfig

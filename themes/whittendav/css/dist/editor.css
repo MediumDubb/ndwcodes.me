@@ -1,0 +1,102 @@
+.text-body-lg {
+    font-size: 25px;
+    line-height: 30px;
+}
+
+@media (max-width: 1200px) {
+    .text-body-lg {
+        font-size: 20px;
+        line-height: 25px;
+    }
+}
+
+@media (max-width: 768px) {
+    .text-body-lg {
+        font-size: 19px;
+    }
+}
+
+@media (max-width: 576px) {
+    .text-body-lg {
+        font-size: 17px;
+        line-height: 23px;
+    }
+}
+
+.text-body-md {
+    font-size: 20px;
+    line-height: 25px;
+}
+
+@media (max-width: 1200px) {
+    .text-body-md {
+        font-size: 17px;
+        line-height: 21px;
+    }
+}
+
+@media (max-width: 768px) {
+    .text-body-md {
+        font-size: 16px;
+        line-height: 20px;
+    }
+}
+
+.text-body-sm {
+    font-size: 18px;
+    line-height: 23px;
+}
+
+@media (max-width: 1200px) {
+    .text-body-sm {
+        font-size: 15px;
+        line-height: 18px;
+    }
+}
+
+@media (max-width: 768px) {
+    .text-body-sm {
+        font-size: 14px;
+        line-height: 17px;
+    }
+}
+
+.text-body-xsm {
+    font-size: 17px;
+    line-height: 23px;
+}
+
+ul.list-style-lg {
+    font-size: 21px;
+    line-height: 27px;
+    padding-left: 24px;
+}
+
+@media (max-width: 992px) {
+    ul.list-style-lg {
+        font-size: 19px;
+        line-height: 25px;
+    }
+}
+
+@media (max-width: 768px) {
+    ul.list-style-lg {
+        font-size: 19px;
+        line-height: 25px;
+    }
+}
+
+@media (max-width: 576px) {
+    ul.list-style-lg {
+        font-size: 17px;
+        line-height: 23px;
+    }
+}
+
+ul.list-style-lg li {
+    margin-bottom: 14px;
+}
+
+.text-brand-green {
+    color: #44b649;
+}

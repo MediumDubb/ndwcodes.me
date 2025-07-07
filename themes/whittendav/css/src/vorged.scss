@@ -1,0 +1,13 @@
+$vorgedDirty_font: '../../webfonts/Vorged_Dirtyblackletter.otf';
+$vorged_font: '../../webfonts/Vorged.otf';
+
+@font-face {
+    font-family: 'VorgedDirty';
+    src: url('#{$vorgedDirty_font}');
+    font-weight: normal;
+}
+@font-face {
+    font-family: 'Vorged';
+    src: url('#{$vorged_font}');
+    font-weight: normal;
+}

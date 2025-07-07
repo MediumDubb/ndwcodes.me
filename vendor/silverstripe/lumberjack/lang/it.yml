@@ -1,0 +1,21 @@
+it:
+  GridFieldSiteTreeAddNewButton:
+    Add: 'Aggiungi nuovo {name}'
+    AddMultipleOptions: 'Aggiungi nuovo'
+  GridFieldSiteTreeState:
+    Draft: '<i class="btn-icon gridfield-icon btn-icon-pencil"></i>Salvato come Bozza il {date}'
+    Modified: Modificato
+    Published: '<i class="btn-icon gridfield-icon btn-icon-accept"></i>Pubblicato il {date}'
+    StateTitle: Stato
+  Lumberjack:
+    TabTitle: 'Pagine Figlio'
+  SilverStripe\Lumberjack\Forms\GridFieldSiteTreeAddNewButton:
+    Add: 'Aggiungi nuovo {name}'
+    AddMultipleOptions: 'Aggiungi nuovo'
+  SilverStripe\Lumberjack\Forms\GridFieldSiteTreeState:
+    Draft: 'Salvato come Bozza il {date}'
+    Modified: Modificato
+    Published: 'Pubblicato il {date}'
+    StateTitle: Stato
+  SilverStripe\Lumberjack\Model\Lumberjack:
+    TabTitle: 'Pagine Figlio'

@@ -1,0 +1,15 @@
+body {
+    overflow-x: hidden;
+    margin:0;
+    background: #212121; //#e57373; //#a1887f70; //#3d5c4070; //#3D5C40; //#212121
+    * {
+        color: #DADADA;
+        box-sizing: border-box;
+        font-family: "Roboto Mono", sans-serif;
+    }
+    &.home {
+        height: 100vh;
+        max-height: 100vh;
+        overflow: hidden;
+    }
+}

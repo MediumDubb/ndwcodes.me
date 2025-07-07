@@ -23,6 +23,7 @@
 		$Layout
 	</div>
 </div>
+<% include SearchModal %>
 <% include Footer %>
 </body>
 </html>

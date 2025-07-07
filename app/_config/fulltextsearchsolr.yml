@@ -1,0 +1,14 @@
+---
+Name: mysolrconfig
+Only:
+  environment: dev
+---
+SilverStripe\TextExtraction\Extractor\SolrCellTextExtractor:
+  base_url: 'http://localhost:8983/solr/update/extract'
+SilverStripe\TextExtraction\Extractor\TikaServerTextExtractor:
+  server_endpoint: 'http://localhost:9998'
+SilverStripe\FullTextSearch\Search\Services\SearchableService:
+  variant_state_draft_excluded: false
+  indexing_canview_exclude_classes:
+    # This will disable the check for all pagetypes:
+    - SilverStripe\CMS\Model\SiteTree

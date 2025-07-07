@@ -1,0 +1,8 @@
+---
+Name: customsearch
+---
+SilverStripe\Core\Injector\Injector:
+  SilverStripe\CMS\Search\SearchForm:
+    class: SirNoah\Whittendav\Extensions\Search\CustomSearchForm
+  SilverStripe\CMS\Search\ContentControllerSearchExtension:
+    class: SirNoah\Whittendav\Extensions\Search\CustomContentControllerSearchExtension

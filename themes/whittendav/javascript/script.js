@@ -23,14 +23,40 @@ jQuery.noConflict();
                 });
             }
         };
-        // Listen for new scroll events, here we debounce our `storeScroll` function
-        window.addEventListener('resize', debounce(homePgFull), { passive: true });
 
         function homePgFull() {
             let documentHeight = $(window).height();
             let footerHeight = $('footer.footer').height();
             documentHeight -= Math.round(footerHeight);
             $("#home .center-piece").parent().height(documentHeight);
+            // watch for changes
+            window.addEventListener('resize', debounce(homePgFull), { passive: true });
+        }
+
+        function overrideSearchForm() {
+            const searchForm = $('form#SearchForm_SearchForm');
+
+            overrideDefaultAction();
+
+            function overrideDefaultAction() {
+                searchForm.on('submit', () => {
+                    $(this).preventDefault();
+                    const formData = new FormData(this);
+                    $.ajax({
+                        type: 'POST',
+                        url: '/home/SearchForm',
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        success: function(response) {
+                            console.log('Success:', response);
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Error:', error);
+                        }
+                    });
+                });
+            }
         }
     });
 }(jQuery));

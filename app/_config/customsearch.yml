@@ -3,6 +3,6 @@ Name: customsearch
 ---
 SilverStripe\Core\Injector\Injector:
   SilverStripe\CMS\Search\SearchForm:
-    class: SirNoah\Whittendav\Extensions\Search\CustomSearchForm
+    class: SirNoah\Whittendav\Extensions\CustomSearch\CustomSearchForm
   SilverStripe\CMS\Search\ContentControllerSearchExtension:
-    class: SirNoah\Whittendav\Extensions\Search\CustomContentControllerSearchExtension
+    class: SirNoah\Whittendav\Extensions\CustomSearch\CustomContentControllerSearchExtension

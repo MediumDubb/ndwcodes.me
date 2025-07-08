@@ -1,14 +1,12 @@
 <?php
 
-namespace InnisMaggiore\Documents\Solr;
+namespace SirNoah\Whittendav\Solr;
 
 use SilverStripe\Assets\File;
 use SilverStripe\Blog\Model\Blog;
 use SilverStripe\Blog\Model\BlogPost;
 use SilverStripe\CMS\Model\SiteTree;
-use SilverStripe\FullTextSearch\Search\Variants\SearchVariantVersioned;
 use SilverStripe\FullTextSearch\Solr\SolrIndex;
-use SilverStripe\Versioned\Versioned;
 use SirNoah\Whittendav\Models\Project;
 
 class MyCustomIndex extends SolrIndex
@@ -30,8 +28,6 @@ class MyCustomIndex extends SolrIndex
         $this->addFulltextField('Content');
         $this->addFulltextField('TagValues');
         $this->addFulltextField('FileContent');
-        $this->excludeVariantState([SearchVariantVersioned::class => Versioned::DRAFT]);
-
     }
 
 }

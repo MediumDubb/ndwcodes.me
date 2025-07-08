@@ -2,9 +2,13 @@
 
 namespace SirNoah\Whittendav\Extensions\CustomSearch;
 
+use Psr\Log\LoggerInterface;
 use SilverStripe\CMS\Search\ContentControllerSearchExtension;
 use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Core\Injector\Injector;
+use SilverStripe\FullTextSearch\Search\Queries\SearchQuery;
 use SilverStripe\ORM\FieldType\DBField;
+use SirNoah\Whittendav\Solr\MyCustomIndex;
 
 class CustomContentControllerSearchExtension extends ContentControllerSearchExtension
 {
@@ -17,9 +21,16 @@ class CustomContentControllerSearchExtension extends ContentControllerSearchExte
      */
     public function results($data, $form, $request)
     {
-        $search = $request->getVar('Search');
+        $search = SearchQuery::create()->addFuzzySearchTerm($request->getVar('Search'));
         $tab = $request->getVar('tab');
         $basePageURL = $request->getURL(false) . "?Search={$search}";
+
+        try {
+            $results = MyCustomIndex::create()->search($search);
+        } catch (\Apache_Solr_HttpTransportException|\Apache_Solr_InvalidArgumentException $e) {
+            Injector::inst()->get(LoggerInterface::class)->error( CustomContentControllerSearchExtension::class . ' line 27: ' . $e->getMessage());
+        }
+
 
         $pagesTabActive = false;
         $articlesTabActive = false;

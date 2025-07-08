@@ -34,7 +34,7 @@ jQuery.noConflict();
             let documentHeight = $(window).height();
             let footerHeight = $('footer.footer').height();
             documentHeight -= Math.round(footerHeight);
-            $("#home .center-piece").parent().height(documentHeight);
+            $(".page.full-window .content-area").parent().height(documentHeight);
         }
 
         function overrideSearchForm() {

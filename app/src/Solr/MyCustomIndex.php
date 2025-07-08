@@ -26,7 +26,6 @@ class MyCustomIndex extends SolrIndex
         $this->addFulltextField('FileHash');
         $this->addFulltextField('Title');
         $this->addFulltextField('Content');
-        $this->addFulltextField('TagValues');
         $this->addFulltextField('FileContent');
     }
 

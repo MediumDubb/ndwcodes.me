@@ -1,7 +1,7 @@
-<div class="home-page" id="home">
+<div class="home-page page full-window">
     <div class="container">
         <div class="d-flex align-items-center justify-content-center">
-            <div class="center-piece">
+            <div class="content-area center">
                 <h1>
                     <%if $First %>$First&nbsp;<% end_if %><%if $Middle %>$Middle&nbsp;<% end_if %><%if $Last %>$Last<% end_if %>
                 </h1>

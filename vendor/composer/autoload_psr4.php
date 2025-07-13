@@ -6,7 +6,7 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
-    'phpDocumentor\\Reflection\\' => array($vendorDir . '/phpdocumentor/reflection-common/src', $vendorDir . '/phpdocumentor/type-resolver/src', $vendorDir . '/phpdocumentor/reflection-docblock/src'),
+    'phpDocumentor\\Reflection\\' => array($vendorDir . '/phpdocumentor/reflection-common/src', $vendorDir . '/phpdocumentor/reflection-docblock/src', $vendorDir . '/phpdocumentor/type-resolver/src'),
     'Wilr\\GoogleSitemaps\\Tests\\' => array($vendorDir . '/wilr/silverstripe-googlesitemaps/tests'),
     'Wilr\\GoogleSitemaps\\' => array($vendorDir . '/wilr/silverstripe-googlesitemaps/src'),
     'Webmozart\\Assert\\' => array($vendorDir . '/webmozart/assert/src'),
@@ -60,8 +60,6 @@ return array(
     'SilverStripe\\UserForms\\Tests\\Behat\\Context\\' => array($vendorDir . '/silverstripe/userforms/tests/behat/src'),
     'SilverStripe\\UserForms\\Tests\\' => array($vendorDir . '/silverstripe/userforms/tests/php'),
     'SilverStripe\\UserForms\\' => array($vendorDir . '/silverstripe/userforms/code'),
-    'SilverStripe\\TextExtraction\\Tests\\' => array($vendorDir . '/silverstripe/textextraction/tests'),
-    'SilverStripe\\TextExtraction\\' => array($vendorDir . '/silverstripe/textextraction/src'),
     'SilverStripe\\TagField\\Tests\\' => array($vendorDir . '/silverstripe/tagfield/tests'),
     'SilverStripe\\TagField\\' => array($vendorDir . '/silverstripe/tagfield/src'),
     'SilverStripe\\SupportedModules\\Tests\\' => array($vendorDir . '/silverstripe/supported-modules/tests'),

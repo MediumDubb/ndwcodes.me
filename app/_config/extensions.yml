@@ -4,3 +4,6 @@ Name: siteconfig-extensions
 Silverstripe\SiteConfig\SiteConfig:
   extensions:
     - SirNoah\Whittendav\SiteConfig\CustomSiteConfig
+SilverStripe\Assets\Image:
+  has_one:
+    - SirNoah\Whittendav\Models\ImageBlockRotator

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "aebba95037bb944c631cac0ab42a844c",
+    "content-hash": "2038a0a0538edfa87907d1d69b3e0d60",
     "packages": [
         {
             "name": "bummzack/sortablefile",
@@ -4958,70 +4958,6 @@
                 "source": "https://github.com/silverstripe/silverstripe-tagfield/tree/3.4.0"
             },
             "time": "2025-04-08T03:17:33+00:00"
-        },
-        {
-            "name": "silverstripe/textextraction",
-            "version": "4.1.1",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/silverstripe/silverstripe-textextraction.git",
-                "reference": "f70ad8119d816242efe89e38f8e8330fd2319dfb"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/silverstripe/silverstripe-textextraction/zipball/f70ad8119d816242efe89e38f8e8330fd2319dfb",
-                "reference": "f70ad8119d816242efe89e38f8e8330fd2319dfb",
-                "shasum": ""
-            },
-            "require": {
-                "guzzlehttp/guzzle": "^7.5",
-                "php": "^8.1",
-                "silverstripe/assets": "^2",
-                "silverstripe/framework": "^5",
-                "silverstripe/versioned": "^2"
-            },
-            "require-dev": {
-                "phpstan/extension-installer": "^1.3",
-                "phpunit/phpunit": "^9.6",
-                "silverstripe/standards": "^1",
-                "squizlabs/php_codesniffer": "^3"
-            },
-            "suggest": {
-                "ext-fileinfo": "Improved support for file mime detection"
-            },
-            "type": "silverstripe-vendormodule",
-            "autoload": {
-                "psr-4": {
-                    "SilverStripe\\TextExtraction\\": "src/",
-                    "SilverStripe\\TextExtraction\\Tests\\": "tests/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "BSD-3-Clause"
-            ],
-            "authors": [
-                {
-                    "name": "SilverStripe",
-                    "homepage": "http://silverstripe.com"
-                },
-                {
-                    "name": "The SilverStripe Community",
-                    "homepage": "http://silverstripe.org"
-                }
-            ],
-            "description": "Text Extraction API for SilverStripe CMS (mostly used with 'fulltextsearch' module)",
-            "homepage": "http://silverstripe.org",
-            "keywords": [
-                "fulltext",
-                "pdf",
-                "silverstripe"
-            ],
-            "support": {
-                "issues": "https://github.com/silverstripe/silverstripe-textextraction/issues",
-                "source": "https://github.com/silverstripe/silverstripe-textextraction/tree/4.1.1"
-            },
-            "time": "2024-06-17T00:50:28+00:00"
         },
         {
             "name": "silverstripe/userforms",

@@ -21,9 +21,10 @@ jQuery.noConflict();
             }
         };
 
-        initHomePageFullScreen();
+        initPageFullScreen();
+        overrideSearchForm();
 
-        function initHomePageFullScreen() {
+        function initPageFullScreen() {
             // set on page load
             homePgFull();
             // watch for changes
@@ -38,20 +39,17 @@ jQuery.noConflict();
         }
 
         function overrideSearchForm() {
-            const searchForm = $('form#SearchForm_SearchForm');
+            const searchForm = $('form#CustomSearchForm_SearchForm');
 
             overrideDefaultAction();
 
             function overrideDefaultAction() {
-                searchForm.on('submit', () => {
-                    $(this).preventDefault();
-                    const formData = new FormData(this);
+                searchForm.on('submit', (e) => {
+                    e.preventDefault();
+                    const search = $('#CustomSearchForm_SearchForm_Search').val();
                     $.ajax({
-                        type: 'POST',
-                        url: '/home/SearchForm',
-                        data: formData,
-                        processData: false,
-                        contentType: false,
+                        type: 'GET',
+                        url: '/home/SearchForm?q=' + search.trim(),
                         success: function(response) {
                             console.log('Success:', response);
                         },

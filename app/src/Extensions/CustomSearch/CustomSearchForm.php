@@ -9,7 +9,10 @@ use SilverStripe\Control\RequestHandler;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\TextField;
+use SilverStripe\ORM\DB;
+use SilverStripe\ORM\PaginatedList;
 use SilverStripe\ORM\SS_List;
+use SirNoah\Whittendav\Models\Project;
 
 class CustomSearchForm extends SearchForm
 {
@@ -72,7 +75,7 @@ class CustomSearchForm extends SearchForm
         // Get request data from request handler
         $request = $this->getRequestHandler()->getRequest();
 
-        $keywords = $request->requestVar('Search');
+        $keywords = $request->requestVar('q');
 
         $andProcessor = function ($matches) {
             return ' +' . $matches[2] . ' +' . $matches[4] . ' ';
@@ -115,77 +118,25 @@ class CustomSearchForm extends SearchForm
         return $results;
     }
 
-
-    public function getArticlesResults()
+    /**
+     * @throws \Exception
+     */
+    public function getProjectResults()
     {
         $request = $this->getRequestHandler()->getRequest();
-        $keywords = $request->requestVar("Search");
+        $keywords = $request->requestVar("q");
 
-        $articles = Article::get()
+        $articles = Project::get()
             ->filterAny([
                 "Title:PartialMatch"        => $keywords,
                 "Copy:PartialMatch"         => $keywords,
                 "Heading:PartialMatch"      => $keywords,
                 "Subheading:PartialMatch"   => $keywords,
             ])
-            ->sort('PublishedDate', 'DESC')
-            ->filter(['SubsiteID' => SubsiteState::singleton()->getSubsiteId()]);
+            ->sort('PublishedDate', 'DESC');
 
         $list = new PaginatedList($articles);
         $list->setRequest($request);
         return $list;
-    }
-
-
-    public function getCaseStudyResults()
-    {
-        $request = $this->getRequestHandler()->getRequest();
-        $keywords = $request->requestVar("Search");
-
-        $cases = CaseStudy::get()
-            ->filterAny([
-                "Title:PartialMatch"        => $keywords,
-                "Copy:PartialMatch"         => $keywords,
-                "Heading:PartialMatch"      => $keywords,
-                "Subheading:PartialMatch"   => $keywords,
-            ])
-            ->filter(['SubsiteID' => SubsiteState::singleton()->getSubsiteId()])
-            ->sort('PublishedDate', 'DESC');
-
-        $list = new PaginatedList($cases);
-        $list->setRequest($request);
-        return $list;
-    }
-
-    public function getNewsResults()
-    {
-        $request = $this->getRequestHandler()->getRequest();
-        $keywords = $request->requestVar("Search");
-
-        $newsReleases = NewsItem::get()
-            ->filterAny([
-                "Title:PartialMatch"        => $keywords,
-                "CopyUpper:PartialMatch"    => $keywords,
-                "CopyLower:PartialMatch"    => $keywords,
-            ])
-            ->filter(['SubsiteID' => SubsiteState::singleton()->getSubsiteId()])
-            ->sort('PublishedDate', 'DESC');
-
-        $list = new PaginatedList($newsReleases);
-        $list->setRequest($request);
-        return $list;
-    }
-
-    public function getPeopleResults() {
-        $request = $this->getRequestHandler()->getRequest();
-        $keywords = $request->requestVar("Search");
-
-        return Staff::get()
-            ->filterAny([
-                "Name:PartialMatch"     => $keywords,
-                "Title:PartialMatch"    => $keywords,
-                "Copy:PartialMatch"     => $keywords,
-            ])
-            ->filter(['SubsiteID' => SubsiteState::singleton()->getSubsiteId()]);
     }
 }

@@ -92,8 +92,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
             'SilverStripe\\UserForms\\Tests\\Behat\\Context\\' => 43,
             'SilverStripe\\UserForms\\Tests\\' => 29,
             'SilverStripe\\UserForms\\' => 23,
-            'SilverStripe\\TextExtraction\\Tests\\' => 34,
-            'SilverStripe\\TextExtraction\\' => 28,
             'SilverStripe\\TagField\\Tests\\' => 28,
             'SilverStripe\\TagField\\' => 22,
             'SilverStripe\\SupportedModules\\Tests\\' => 36,
@@ -240,8 +238,8 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
         'phpDocumentor\\Reflection\\' => 
         array (
             0 => __DIR__ . '/..' . '/phpdocumentor/reflection-common/src',
-            1 => __DIR__ . '/..' . '/phpdocumentor/type-resolver/src',
-            2 => __DIR__ . '/..' . '/phpdocumentor/reflection-docblock/src',
+            1 => __DIR__ . '/..' . '/phpdocumentor/reflection-docblock/src',
+            2 => __DIR__ . '/..' . '/phpdocumentor/type-resolver/src',
         ),
         'Wilr\\GoogleSitemaps\\Tests\\' => 
         array (
@@ -454,14 +452,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
         'SilverStripe\\UserForms\\' => 
         array (
             0 => __DIR__ . '/..' . '/silverstripe/userforms/code',
-        ),
-        'SilverStripe\\TextExtraction\\Tests\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/silverstripe/textextraction/tests',
-        ),
-        'SilverStripe\\TextExtraction\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/silverstripe/textextraction/src',
         ),
         'SilverStripe\\TagField\\Tests\\' => 
         array (

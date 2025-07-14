@@ -117,26 +117,4 @@ class CustomSearchForm extends SearchForm
 
         return $results;
     }
-
-    /**
-     * @throws \Exception
-     */
-    public function getProjectResults()
-    {
-        $request = $this->getRequestHandler()->getRequest();
-        $keywords = $request->requestVar("q");
-
-        $articles = Project::get()
-            ->filterAny([
-                "Title:PartialMatch"        => $keywords,
-                "Copy:PartialMatch"         => $keywords,
-                "Heading:PartialMatch"      => $keywords,
-                "Subheading:PartialMatch"   => $keywords,
-            ])
-            ->sort('PublishedDate', 'DESC');
-
-        $list = new PaginatedList($articles);
-        $list->setRequest($request);
-        return $list;
-    }
 }

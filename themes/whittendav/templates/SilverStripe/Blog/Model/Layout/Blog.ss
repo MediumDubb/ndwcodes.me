@@ -25,12 +25,21 @@
                     <div class="content">$Content</div>
 
                     <% if $PaginatedList.Exists %>
-                        <% loop $PaginatedList %>
-                            <% include SilverStripe\\Blog\\PostSummary %>
-                        <% end_loop %>
+                        <div id="blog-posts">
+                            <% loop $PaginatedList %>
+                                <% include SilverStripe\\Blog\\PostSummary %>
+                            <% end_loop %>
+                        </div>
+                        <% with $PaginatedList %>
+                            <% include SilverStripe\\Blog\\Pagination %>
+                        <% end_with %>
                     <% else %>
-                        <p><%t SilverStripe\\Blog\\Model\\Blog.NoPosts 'There are no posts' %></p>
+                        <div id="blog-posts">
+                            <p><%t SilverStripe\\Blog\\Model\\Blog.NoPosts 'There are no posts' %></p>
+                        </div>
                     <% end_if %>
+
+
                 </article>
             </div>
         </div>

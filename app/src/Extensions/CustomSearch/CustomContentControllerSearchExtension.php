@@ -21,22 +21,11 @@ class CustomContentControllerSearchExtension extends ContentControllerSearchExte
         $search = $request->getVar('q');
         $basePageURL = $request->getURL(false) . "?q={$search}";
 
-        try {
-            $pageResults = $form->getResults();
-        } catch (\Apache_Solr_HttpTransportException|\Apache_Solr_InvalidArgumentException $e) {
-            Injector::inst()->get(LoggerInterface::class)->error( CustomContentControllerSearchExtension::class . ' line 27: ' . $e->getMessage());
-        }
-
-
-        $pagesTabActive = false;
-        $articlesTabActive = false;
-        $newsReleasesTabActive = false;
-        $peopleTabActive = false;
-        $caseStudyTabActive = false;
-
         $pageResults = $form->getResults();
+
         $showPageResults = $pageResults->TotalItems() > 0;
 
-
+        if ($showPageResults)
+            return $pageResults->
     }
 }

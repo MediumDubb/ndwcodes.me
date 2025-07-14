@@ -7,3 +7,6 @@ Silverstripe\SiteConfig\SiteConfig:
 SilverStripe\Assets\Image:
   has_one:
     - SirNoah\Whittendav\Models\ImageBlockRotator
+SilverStripe\Blog\Model\BlogPost:
+  extensions:
+    - SirNoah\Whittendav\Extensions\Blog\BlogPostExtension

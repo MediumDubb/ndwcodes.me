@@ -7,5 +7,4 @@ $baseDir = dirname($vendorDir);
 
 return array(
     'ML\\IRI' => array($vendorDir . '/ml/iri'),
-    'Apache_Solr_' => array($vendorDir . '/silverstripe/solr-php-client'),
 );

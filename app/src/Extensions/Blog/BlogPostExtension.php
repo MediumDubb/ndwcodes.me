@@ -40,4 +40,19 @@ class BlogPostExtension extends Extension
             'CustomSummary'
         );
     }
+
+    public function onBeforeWrite()
+    {
+        $dbString = '';
+
+        if ($this->getOwner()->ContentSections()) {
+            foreach($this->getOwner()->ContentSections() as $contentSection) {
+                !empty($contentSection->CopyBlock) ? $dbString .= ' ' . $contentSection->CopyBlock : $dbString .= '';
+            }
+        }
+
+        $this->getOwner()->Content = $dbString;
+
+        parent::getOwner()->onBeforeWrite();
+    }
 }

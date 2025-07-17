@@ -10,9 +10,6 @@ use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\TextField;
 use SilverStripe\ORM\DB;
-use SilverStripe\ORM\PaginatedList;
-use SilverStripe\ORM\SS_List;
-use SirNoah\Whittendav\Models\Project;
 
 class CustomSearchForm extends SearchForm
 {
@@ -67,8 +64,6 @@ class CustomSearchForm extends SearchForm
     /**
      * Return dataObjectSet of the results using current request to get info from form.
      * Wraps around {@link searchEngine()}.
-     *
-     * @return SS_List
      */
     public function getResults()
     {
@@ -115,6 +110,9 @@ class CustomSearchForm extends SearchForm
             }
         }
 
-        return $results;
+        if ($this->getRequest()->isAjax())
+            return $this->customise($results)->renderWith(['Page_results.ss', 'Page']);
+        else
+            return $results;
     }
 }

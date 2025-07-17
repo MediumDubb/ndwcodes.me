@@ -115,6 +115,7 @@ class Introspection
     kind
     name
     {$descriptions}
+    isOneOf
     fields(includeDeprecated: true) {
       name
       {$descriptions}
@@ -429,6 +430,12 @@ GRAPHQL;
                     'type' => self::_type(),
                     'resolve' => static fn ($type): ?Type => $type instanceof WrappingType
                         ? $type->getWrappedType()
+                        : null,
+                ],
+                'isOneOf' => [
+                    'type' => Type::boolean(),
+                    'resolve' => static fn ($type): ?bool => $type instanceof InputObjectType
+                        ? $type->isOneOf()
                         : null,
                 ],
             ],

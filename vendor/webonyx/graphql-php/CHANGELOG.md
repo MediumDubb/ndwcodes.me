@@ -9,6 +9,24 @@ You can find and compare releases at the [GitHub release page](https://github.co
 
 ## Unreleased
 
+## v15.21.2
+
+### Fixed
+
+- Add missing `isOneOf` to Introspection query https://github.com/webonyx/graphql-php/pull/1729
+
+## v15.21.1
+
+### Fixed
+
+- Output `@oneOf` directive in `SchemaPrinter` https://github.com/webonyx/graphql-php/pull/1727
+
+## v15.21.0
+
+### Added
+
+- Add support for `@oneOf` input object directive - enables "input unions" where exactly one field must be provided https://github.com/webonyx/graphql-php/pull/1715
+
 ## v15.20.1
 
 ### Fixed

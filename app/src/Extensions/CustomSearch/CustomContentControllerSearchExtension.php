@@ -26,6 +26,6 @@ class CustomContentControllerSearchExtension extends ContentControllerSearchExte
         $showPageResults = $pageResults->TotalItems() > 0;
 
         if ($showPageResults)
-            return $pageResults->
+            return $pageResults;
     }
 }

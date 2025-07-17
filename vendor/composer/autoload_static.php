@@ -24,15 +24,10 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
     );
 
     public static $prefixLengthsPsr4 = array (
-        'p' => 
-        array (
-            'phpDocumentor\\Reflection\\' => 25,
-        ),
         'W' => 
         array (
             'Wilr\\GoogleSitemaps\\Tests\\' => 26,
             'Wilr\\GoogleSitemaps\\' => 20,
-            'Webmozart\\Assert\\' => 17,
         ),
         'U' => 
         array (
@@ -43,12 +38,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
             'UncleCheese\\DisplayLogic\\Tests\\' => 31,
             'UncleCheese\\DisplayLogic\\' => 25,
             'UAParser\\' => 9,
-        ),
-        'T' => 
-        array (
-            'TractorCow\\SilverStripeProxyDB\\' => 31,
-            'TractorCow\\ClassProxy\\Tests\\' => 28,
-            'TractorCow\\ClassProxy\\' => 22,
         ),
         'S' => 
         array (
@@ -65,7 +54,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
             'Symfony\\Component\\VarExporter\\' => 30,
             'Symfony\\Component\\Validator\\' => 28,
             'Symfony\\Component\\Translation\\' => 30,
-            'Symfony\\Component\\Process\\' => 26,
             'Symfony\\Component\\Mime\\' => 23,
             'Symfony\\Component\\Mailer\\' => 25,
             'Symfony\\Component\\HttpFoundation\\' => 33,
@@ -120,8 +108,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
             'SilverStripe\\Logging\\' => 21,
             'SilverStripe\\GraphQL\\Tests\\' => 27,
             'SilverStripe\\GraphQL\\' => 21,
-            'SilverStripe\\FullTextSearch\\Tests\\' => 34,
-            'SilverStripe\\FullTextSearch\\' => 28,
             'SilverStripe\\Framework\\Tests\\Behaviour\\' => 39,
             'SilverStripe\\Forms\\Tests\\' => 25,
             'SilverStripe\\Forms\\' => 19,
@@ -164,9 +150,7 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
             'Psr\\EventDispatcher\\' => 20,
             'Psr\\Container\\' => 14,
             'Psr\\Cache\\' => 10,
-            'Prophecy\\' => 9,
             'PhpParser\\' => 10,
-            'PHPStan\\PhpDocParser\\' => 21,
         ),
         'M' => 
         array (
@@ -212,7 +196,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
         'D' => 
         array (
             'Doctrine\\Instantiator\\' => 22,
-            'Doctrine\\Deprecations\\' => 22,
             'Doctrine\\Common\\Lexer\\' => 22,
             'DeepCopy\\' => 9,
             'DNADesign\\Elemental\\Tests\\' => 26,
@@ -235,12 +218,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
     );
 
     public static $prefixDirsPsr4 = array (
-        'phpDocumentor\\Reflection\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/phpdocumentor/reflection-common/src',
-            1 => __DIR__ . '/..' . '/phpdocumentor/reflection-docblock/src',
-            2 => __DIR__ . '/..' . '/phpdocumentor/type-resolver/src',
-        ),
         'Wilr\\GoogleSitemaps\\Tests\\' => 
         array (
             0 => __DIR__ . '/..' . '/wilr/silverstripe-googlesitemaps/tests',
@@ -248,10 +225,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
         'Wilr\\GoogleSitemaps\\' => 
         array (
             0 => __DIR__ . '/..' . '/wilr/silverstripe-googlesitemaps/src',
-        ),
-        'Webmozart\\Assert\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/webmozart/assert/src',
         ),
         'UndefinedOffset\\SortableGridField\\Tests\\' => 
         array (
@@ -280,18 +253,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
         'UAParser\\' => 
         array (
             0 => __DIR__ . '/..' . '/ua-parser/uap-php/src',
-        ),
-        'TractorCow\\SilverStripeProxyDB\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/tractorcow/silverstripe-proxy-db/src',
-        ),
-        'TractorCow\\ClassProxy\\Tests\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/tractorcow/classproxy/tests',
-        ),
-        'TractorCow\\ClassProxy\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/tractorcow/classproxy/src',
         ),
         'Symfony\\Polyfill\\Php83\\' => 
         array (
@@ -344,10 +305,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
         'Symfony\\Component\\Translation\\' => 
         array (
             0 => __DIR__ . '/..' . '/symfony/translation',
-        ),
-        'Symfony\\Component\\Process\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/symfony/process',
         ),
         'Symfony\\Component\\Mime\\' => 
         array (
@@ -565,14 +522,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
         array (
             0 => __DIR__ . '/..' . '/silverstripe/graphql/src',
         ),
-        'SilverStripe\\FullTextSearch\\Tests\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/silverstripe/fulltextsearch/tests',
-        ),
-        'SilverStripe\\FullTextSearch\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/silverstripe/fulltextsearch/src',
-        ),
         'SilverStripe\\Framework\\Tests\\Behaviour\\' => 
         array (
             0 => __DIR__ . '/..' . '/silverstripe/framework/tests/behat/src',
@@ -733,17 +682,9 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
         array (
             0 => __DIR__ . '/..' . '/psr/cache/src',
         ),
-        'Prophecy\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/phpspec/prophecy/src/Prophecy',
-        ),
         'PhpParser\\' => 
         array (
             0 => __DIR__ . '/..' . '/nikic/php-parser/lib/PhpParser',
-        ),
-        'PHPStan\\PhpDocParser\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/phpstan/phpdoc-parser/src',
         ),
         'Moo\\Test\\' => 
         array (
@@ -841,10 +782,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
         array (
             0 => __DIR__ . '/..' . '/doctrine/instantiator/src/Doctrine/Instantiator',
         ),
-        'Doctrine\\Deprecations\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/doctrine/deprecations/src',
-        ),
         'Doctrine\\Common\\Lexer\\' => 
         array (
             0 => __DIR__ . '/..' . '/doctrine/lexer/src',
@@ -901,13 +838,6 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
             'ML\\IRI' => 
             array (
                 0 => __DIR__ . '/..' . '/ml/iri',
-            ),
-        ),
-        'A' => 
-        array (
-            'Apache_Solr_' => 
-            array (
-                0 => __DIR__ . '/..' . '/silverstripe/solr-php-client',
             ),
         ),
     );

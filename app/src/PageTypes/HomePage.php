@@ -5,6 +5,7 @@ namespace SirNoah\Whittendav\PageTypes;
 use Page;
 use SilverStripe\AssetAdmin\Forms\UploadField;
 use SilverStripe\Assets\Image;
+use SilverStripe\Forms\HTMLEditor\HTMLEditorField;
 use SilverStripe\Forms\TextField;
 
 class HomePage extends Page
@@ -19,6 +20,7 @@ class HomePage extends Page
         'Middle'        => 'Varchar(50)',
         'Last'          => 'Varchar(50)',
         'Sub'           => 'Varchar(255)',
+        'FrontEndCopy'  => 'HTMLText',
     ];
 
     private static array $has_one = [
@@ -41,6 +43,7 @@ class HomePage extends Page
             'Middle',
             'Last',
             'Image',
+            'Content',
         ]);
 
         $fields->addFieldsToTab('Root.Main', [
@@ -48,10 +51,25 @@ class HomePage extends Page
             TextField::create('Middle', 'Middle:'),
             TextField::create('Last', 'Last:'),
             TextField::create('Sub', 'Sub Heading:'),
+            HTMLEditorField::create('FrontEndCopy', 'Front End Copy:')
+                ->addExtraClass('stacked'),
             UploadField::create('Image')
                 ->setFolderName($folder)
-        ], 'Content');
+        ], 'Metadata');
 
         return $fields;
+    }
+
+    public function onBeforeWrite()
+    {
+        $dbContentSting = '';
+
+        foreach (self::$db as $fieldName => $fieldType) {
+            !empty($this->$fieldName) ? $dbContentSting .= ' ' . strip_tags($this->$fieldName) : $dbContentSting .= '';
+        }
+
+        $this->Content = $dbContentSting;
+
+        parent::onBeforeWrite();
     }
 }

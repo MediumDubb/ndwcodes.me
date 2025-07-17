@@ -1,6 +1,0 @@
----
-Name: fulltextsearchproxydb
----
-TractorCow\SilverStripeProxyDB\ProxyDBFactory:
-  extensions:
-    - SilverStripe\FullTextSearch\Search\Extensions\ProxyDBExtension

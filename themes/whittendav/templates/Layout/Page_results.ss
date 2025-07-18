@@ -1,6 +1,4 @@
 <div data-ajax-results="true" class="searchResults">
-    <p class="decorative">Search Results</p>
-
     <% if $Me.Count > 0 %>
     <ul id="SearchResults">
         <% loop $Me %>

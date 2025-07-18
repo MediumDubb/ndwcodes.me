@@ -47,7 +47,7 @@ class BlogPostExtension extends Extension
 
         if ($this->getOwner()->ContentSections()) {
             foreach($this->getOwner()->ContentSections() as $contentSection) {
-                !empty($contentSection->CopyBlock) ? $dbString .= ' ' . $contentSection->CopyBlock : $dbString .= '';
+                !empty($contentSection->CopyBlock) ? $dbString .= $contentSection->CopyBlock . '\r\n' : $dbString .= '';
             }
         }
 

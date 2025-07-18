@@ -2,6 +2,7 @@
 
 namespace SirNoah\Whittendav\Extensions\CustomSearch;
 
+use Page;
 use SilverStripe\CMS\Model\RedirectorPage;
 use SilverStripe\CMS\Model\SiteTree;
 use SilverStripe\CMS\Search\SearchForm;
@@ -111,7 +112,7 @@ class CustomSearchForm extends SearchForm
         }
 
         if ($this->getRequest()->isAjax())
-            return $this->customise($results)->renderWith(['Page_results.ss', 'Page']);
+            return $this->customise($results)->renderWith(['Layout/Page_results', Page::class]);
         else
             return $results;
     }

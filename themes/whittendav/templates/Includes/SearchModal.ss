@@ -8,6 +8,7 @@
             </div>
             <div class="modal-body">
                 {$SearchForm}
+                <div id="search-results-content"></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>

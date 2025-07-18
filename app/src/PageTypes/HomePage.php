@@ -65,7 +65,7 @@ class HomePage extends Page
         $dbContentSting = '';
 
         foreach (self::$db as $fieldName => $fieldType) {
-            !empty($this->$fieldName) ? $dbContentSting .= ' ' . strip_tags($this->$fieldName) : $dbContentSting .= '';
+            !empty($this->$fieldName) ? $dbContentSting .= strip_tags($this->$fieldName) . '\r\n' : $dbContentSting .= '';
         }
 
         $this->Content = $dbContentSting;

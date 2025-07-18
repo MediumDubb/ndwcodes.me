@@ -1,5 +1,5 @@
 <div id="Content" class="searchResults">
-    <h1>$Title</h1>
+    <p class="decorative">$Title</p>
 
     <% if $Query %>
         <p class="searchQuery">You searched for &quot;{$Query}&quot;</p>
@@ -9,15 +9,17 @@
     <ul id="SearchResults">
         <% loop $Results %>
         <li>
-            <h4>
-                <a href="$Link">
-                    <% if $MenuTitle %>
-                    $MenuTitle
-                    <% else %>
-                    $Title
-                    <% end_if %>
-                </a>
-            </h4>
+            <p>
+                <strong>
+                    <a href="$Link">
+                        <% if $MenuTitle %>
+                            $MenuTitle
+                        <% else %>
+                            $Title
+                        <% end_if %>
+                    </a>
+                </strong>
+            </p>
             <% if $Content %>
                 <p>$Content.LimitWordCountXML</p>
             <% end_if %>

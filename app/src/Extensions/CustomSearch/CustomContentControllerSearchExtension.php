@@ -16,6 +16,7 @@ class CustomContentControllerSearchExtension extends ContentControllerSearchExte
      */
     public function results($data, $form, $request)
     {
-        return $form->getResults();
+        $results = $form->getResults();
+        return $results->getValue();
     }
 }

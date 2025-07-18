@@ -62,13 +62,13 @@ class HomePage extends Page
 
     public function onBeforeWrite()
     {
-        $dbContentSting = '';
+        $dbContentSting = '<p>';
 
         foreach (self::$db as $fieldName => $fieldType) {
-            !empty($this->$fieldName) ? $dbContentSting .= strip_tags($this->$fieldName) . '\r\n' : $dbContentSting .= '';
+            !empty($this->$fieldName) ? $dbContentSting .= strip_tags($this->$fieldName) . ' ' : $dbContentSting .= '';
         }
 
-        $this->Content = $dbContentSting;
+        $this->Content = $dbContentSting . "</p>";
 
         parent::onBeforeWrite();
     }

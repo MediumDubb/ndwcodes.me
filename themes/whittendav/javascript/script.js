@@ -49,9 +49,11 @@ jQuery.noConflict();
                     const search = $('#CustomSearchForm_SearchForm_Search').val();
                     $.ajax({
                         type: 'GET',
+                        dataType: 'html',
                         url: '/home/SearchForm?q=' + search.trim(),
                         success: function(response) {
-                            console.log('Success:', response);
+                            console.log('Success:');
+                            $('#search-results-content').html(response);
                         },
                         error: function(xhr, status, error) {
                             console.error('Error:', error);

@@ -1,13 +1,9 @@
-<div id="Content" class="searchResults">
-    <p class="decorative">$Title</p>
+<div data-ajax-results="true" class="searchResults">
+    <p class="decorative">Search Results</p>
 
-    <% if $Query %>
-        <p class="searchQuery">You searched for &quot;{$Query}&quot;</p>
-    <% end_if %>
-
-    <% if $Results %>
+    <% if $Me.Count > 0 %>
     <ul id="SearchResults">
-        <% loop $Results %>
+        <% loop $Me %>
         <li>
             <p>
                 <strong>
@@ -31,14 +27,14 @@
     <p>Sorry, your search query did not return any results.</p>
     <% end_if %>
 
-    <% if $Results.MoreThanOnePage %>
+    <% if $Me.MoreThanOnePage %>
     <div id="PageNumbers">
         <div class="pagination">
-            <% if $Results.NotFirstPage %>
-            <a class="prev" href="$Results.PrevLink" title="View the previous page">&larr;</a>
+            <% if $Me.NotFirstPage %>
+            <a class="prev" href="$Me.PrevLink" title="View the previous page">&larr;</a>
             <% end_if %>
             <span>
-                <% loop $Results.Pages %>
+                <% loop $Me.Pages %>
                     <% if $CurrentBool %>
                     $PageNum
                     <% else %>
@@ -46,11 +42,11 @@
                     <% end_if %>
                 <% end_loop %>
             </span>
-            <% if $Results.NotLastPage %>
-            <a class="next" href="$Results.NextLink" title="View the next page">&rarr;</a>
+            <% if $Me.NotLastPage %>
+            <a class="next" href="$Me.NextLink" title="View the next page">&rarr;</a>
             <% end_if %>
         </div>
-        <p>Page $Results.CurrentPage of $Results.TotalPages</p>
+        <p>Page $Me.CurrentPage of $Me.TotalPages</p>
     </div>
     <% end_if %>
 </div>

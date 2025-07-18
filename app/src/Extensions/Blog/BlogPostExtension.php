@@ -43,15 +43,15 @@ class BlogPostExtension extends Extension
 
     public function onBeforeWrite()
     {
-        $dbString = '';
+        $dbString = '<p>';
 
         if ($this->getOwner()->ContentSections()) {
             foreach($this->getOwner()->ContentSections() as $contentSection) {
-                !empty($contentSection->CopyBlock) ? $dbString .= $contentSection->CopyBlock . '\r\n' : $dbString .= '';
+                !empty($contentSection->CopyBlock) ? $dbString .= strip_tags($contentSection->CopyBlock) . ' ' : $dbString .= '';
             }
         }
 
-        $this->getOwner()->Content = $dbString;
+        $this->getOwner()->Content = $dbString . "</p>";
 
         parent::getOwner()->onBeforeWrite();
     }

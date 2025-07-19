@@ -1,5 +1,28 @@
 .search-modal.modal {
     .modal-content {
         background-color: #5E4D5B;
+        form {
+            fieldset {
+                display: flex;
+                div.field.text {
+                    flex-grow:2;
+                    input[type=text] {
+                        width: 100%;
+                        color: #0d0d0d;
+                    }
+                }
+                input[type=submit] {
+                    flex-grow:1;
+                    color: #0d0d0d;
+                }
+            }
+        }
+        #SearchResults {
+            padding-left:16px;
+            margin-top:1rem;
+            p {
+                margin:0;
+            }
+        }
     }
 }

@@ -10,7 +10,10 @@ use SilverStripe\Control\RequestHandler;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\TextField;
+use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DB;
+use SilverStripe\ORM\PaginatedList;
+use SilverStripe\ORM\SS_List;
 
 class CustomSearchForm extends SearchForm
 {
@@ -72,6 +75,10 @@ class CustomSearchForm extends SearchForm
         $request = $this->getRequestHandler()->getRequest();
 
         $keywords = $request->requestVar('q');
+
+        if (empty($keywords)) {
+            $this->customise(PaginatedList::create(ArrayList::create([]), $request))->renderWith(['Layout/Page_results', Page::class]);
+        }
 
         $andProcessor = function ($matches) {
             return ' +' . $matches[2] . ' +' . $matches[4] . ' ';

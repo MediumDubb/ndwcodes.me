@@ -23,6 +23,7 @@ jQuery.noConflict();
 
         initPageFullScreen();
         overrideSearchForm();
+        openSearchModal();
 
         function initPageFullScreen() {
             // set on page load
@@ -38,8 +39,37 @@ jQuery.noConflict();
             $(".page.full-window .content-area").parent().height(documentHeight);
         }
 
+        function openSearchModal() {
+            if (window.location.hash.includes('#search-open')) {
+                const searchModalEl = document.getElementById('searchModal');
+                const searchModal = new bootstrap.Modal(searchModalEl);
+
+                if (window.location.search.includes('?q=')) {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const myParam = urlParams.get('q');
+                    $('#CustomSearchForm_SearchForm_Search').val(myParam)
+                    $.ajax({
+                        type: 'GET',
+                        dataType: 'html',
+                        url: '/home/SearchForm?q=' + myParam,
+                        success: function(response) {
+                            console.log('Success:');
+                            $('#search-results-content').html(response);
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Error:', error);
+                        }
+                    });
+                }
+
+                searchModal.show();
+            }
+        }
+
         function overrideSearchForm() {
             const searchForm = $('form#CustomSearchForm_SearchForm');
+            const searchModalEl = document.getElementById('searchModal');
+            const searchModal = new bootstrap.Modal(searchModalEl);
             let search = '';
 
             modalEvents();
@@ -72,9 +102,9 @@ jQuery.noConflict();
                 window.onpopstate = function(event) {
                     // Check if event.state exists to ensure it's a state pushed by pushState()
                     if (event.state) {
-                        console.log(event.state);
                         const query = event.state.search.includes('?q=') ? event.state.search : "?q=" ;
                         $('#CustomSearchForm_SearchForm_Search').val(event.state.term);
+                        event.state.url.includes('#search-open') ? searchModal.show() : null;
                         $.ajax({
                             type: 'GET',
                             dataType: 'html',
@@ -95,7 +125,6 @@ jQuery.noConflict();
             }
 
             function modalEvents() {
-                const searchModalEl = document.getElementById('searchModal');
                 searchModalEl.addEventListener('show.bs.modal', e => {
                     setURLQueryAnchor();
                 });
@@ -109,7 +138,7 @@ jQuery.noConflict();
                 const baseUrl = location.protocol + '//' + location.host + location.pathname;
                 const query = searchTerm !== '' ? '?q=' + searchTerm : '';
                 const newUrl = baseUrl + query;
-                const fullSearchURL = closed ? baseUrl : newUrl + '#site-search';
+                const fullSearchURL = closed ? baseUrl : newUrl + '#search-open';
 
                 console.log('query:', query);
                 console.log('newURL:', newUrl);
@@ -121,6 +150,8 @@ jQuery.noConflict();
                     term: searchTerm, // search query to call in ajax
                     url: fullSearchURL // The URL to display in the address bar
                 };
+
+                console.log('stateObj:', stateObj);
 
                 window.history.pushState(stateObj, stateObj.title, fullSearchURL);
             }

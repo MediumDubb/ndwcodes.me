@@ -73,8 +73,8 @@ jQuery.noConflict();
             let search = '';
 
             modalEvents();
-            overrideDefaultAction();
             updatePopState();
+            overrideDefaultAction();
 
             function overrideDefaultAction() {
                 searchForm.on('submit', (e) => {
@@ -95,11 +95,10 @@ jQuery.noConflict();
                         dataType: 'html',
                         url: '/home/SearchForm' + '?q=' + term,
                         success: function(response) {
-                            console.log('Success:');
                             $('#search-results-content').html(response);
                         },
                         error: function(xhr, status, error) {
-                            console.error('Error:', error);
+                            console.error('search error');
                         }
                     });
                 } else {
@@ -115,6 +114,9 @@ jQuery.noConflict();
                         $('#CustomSearchForm_SearchForm_Search').val(event.state.term);
                         event.state.url.includes('#search-open') ? searchModal.show() : null;
                         searchAJAX(event.state.term);
+                        if (!window.location.hash.includes('#search-open')) {
+                            searchModal.hide();
+                        }
                     } else {
                         // Handle cases where the state is null (e.g., initial page load or navigating to a non-pushState entry)
                         console.log("Back button pressed, but no associated state.");
@@ -124,10 +126,16 @@ jQuery.noConflict();
 
             function modalEvents() {
                 searchModalEl.addEventListener('show.bs.modal', e => {
-                    setURLQueryAnchor();
+                    if (!window.location.hash.includes('#search-open')) {
+                        setURLQueryAnchor();
+                        console.log('show search');
+                    }
                 });
                 searchModalEl.addEventListener('hide.bs.modal', e => {
-                    setURLQueryAnchor('', true);
+                    if (window.location.hash.includes('#search-open')) {
+                        setURLQueryAnchor('', true);
+                        console.log('hide search');
+                    }
                 });
             }
 
@@ -145,7 +153,7 @@ jQuery.noConflict();
                     url: fullSearchURL // The URL to display in the address bar
                 };
 
-                window.history.pushState(stateObj, stateObj.title, fullSearchURL);
+                window.history.pushState(stateObj, "", fullSearchURL);
             }
         }
     });

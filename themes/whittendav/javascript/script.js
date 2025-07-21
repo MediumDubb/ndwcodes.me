@@ -82,20 +82,29 @@ jQuery.noConflict();
                     search = $('#CustomSearchForm_SearchForm_Search').val();
                     if (search.length > 0) {
                         setURLQueryAnchor(search);
-                        $.ajax({
-                            type: 'GET',
-                            dataType: 'html',
-                            url: '/home/SearchForm?q=' + search.trim(),
-                            success: function(response) {
-                                console.log('Success:');
-                                $('#search-results-content').html(response);
-                            },
-                            error: function(xhr, status, error) {
-                                console.error('Error:', error);
-                            }
-                        });
+                        searchAJAX(search);
                     }
                 });
+            }
+
+            function searchAJAX(term)
+            {
+                if (term) {
+                    $.ajax({
+                        type: 'GET',
+                        dataType: 'html',
+                        url: '/home/SearchForm' + '?q=' + term,
+                        success: function(response) {
+                            console.log('Success:');
+                            $('#search-results-content').html(response);
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Error:', error);
+                        }
+                    });
+                } else {
+                    console.log('no term');
+                }
             }
 
             function updatePopState() {
@@ -105,18 +114,7 @@ jQuery.noConflict();
                         const query = event.state.search.includes('?q=') ? event.state.search : "?q=" ;
                         $('#CustomSearchForm_SearchForm_Search').val(event.state.term);
                         event.state.url.includes('#search-open') ? searchModal.show() : null;
-                        $.ajax({
-                            type: 'GET',
-                            dataType: 'html',
-                            url: '/home/SearchForm' + query,
-                            success: function(response) {
-                                console.log('Success:');
-                                $('#search-results-content').html(response);
-                            },
-                            error: function(xhr, status, error) {
-                                console.error('Error:', error);
-                            }
-                        });
+                        searchAJAX(event.state.term);
                     } else {
                         // Handle cases where the state is null (e.g., initial page load or navigating to a non-pushState entry)
                         console.log("Back button pressed, but no associated state.");
@@ -140,18 +138,12 @@ jQuery.noConflict();
                 const newUrl = baseUrl + query;
                 const fullSearchURL = closed ? baseUrl : newUrl + '#search-open';
 
-                console.log('query:', query);
-                console.log('newURL:', newUrl);
-                console.log('full:', fullSearchURL);
-
                 const stateObj = {
                     title: document.title, // A title for the new history entry
                     search: query,
                     term: searchTerm, // search query to call in ajax
                     url: fullSearchURL // The URL to display in the address bar
                 };
-
-                console.log('stateObj:', stateObj);
 
                 window.history.pushState(stateObj, stateObj.title, fullSearchURL);
             }

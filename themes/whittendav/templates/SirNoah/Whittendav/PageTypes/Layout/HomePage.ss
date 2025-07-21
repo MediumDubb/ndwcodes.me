@@ -20,7 +20,7 @@
                         <% end_if %>
                 </h1>
                 <% if $Sub %>
-                    <h2 class="sub" data-aos="fade" data-aos-delay="1600">
+                    <h2 class="sub" data-aos="fade" data-aos-delay="1900">
                         {$Sub}
                     </h2>
                 <% end_if %>
@@ -28,7 +28,7 @@
                     <div class="body"
                          data-aos="fade"
                          data-aos-easing="ease-in-back"
-                         data-aos-delay="2000">
+                         data-aos-delay="2200">
                         {$FrontEndCopy}
                     </div>
                 <% end_if %>

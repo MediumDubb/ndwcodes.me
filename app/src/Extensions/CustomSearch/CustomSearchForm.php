@@ -76,9 +76,8 @@ class CustomSearchForm extends SearchForm
 
         $keywords = $request->requestVar('q');
 
-        if (empty($keywords)) {
+        if (empty($keywords))
             return $this->customise(PaginatedList::create(ArrayList::create([]), $request))->renderWith(['Layout/Page_results', Page::class]);
-        }
 
         $andProcessor = function ($matches) {
             return ' +' . $matches[2] . ' +' . $matches[4] . ' ';

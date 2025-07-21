@@ -14,7 +14,7 @@
                             </span>
                         <% end_if %>
                         <%if $Last %>
-                            <span class="d-inline-block" data-aos="fade-down" data-aos-delay="1500">
+                            <span class="d-inline-block" data-aos="fade-down"<% if not $Middle %> data-aos-delay="1000"<% else %> data-aos-delay="1500"<% end_if %>>
                                 $Last
                             </span>
                         <% end_if %>

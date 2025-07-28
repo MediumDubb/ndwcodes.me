@@ -1,5 +1,0 @@
-SilverStripe\Admin\LeftAndMain:
-  extra_requirements_javascript:
-    - _resources/themes/whittendav/vendor/fontawesome-free/js/all.min.js
-  extra_requirements_css:
-    - _resources/themes/whittendav/vendor/fontawesome-free/css/all.min.css

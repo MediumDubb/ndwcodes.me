@@ -22,8 +22,7 @@ jQuery.noConflict();
         };
 
         initPageFullScreen();
-        overrideSearchForm();
-        openSearchModal();
+        siteSearchForm();
 
         function initPageFullScreen() {
             // set on page load
@@ -39,42 +38,32 @@ jQuery.noConflict();
             $(".page.full-window .content-area").parent().height(documentHeight);
         }
 
-        function openSearchModal() {
-            if (window.location.hash.includes('#search-open')) {
-                const searchModalEl = document.getElementById('searchModal');
-                const searchModal = new bootstrap.Modal(searchModalEl);
-
-                if (window.location.search.includes('?q=')) {
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const myParam = urlParams.get('q');
-                    $('#CustomSearchForm_SearchForm_Search').val(myParam)
-                    $.ajax({
-                        type: 'GET',
-                        dataType: 'html',
-                        url: '/home/SearchForm?q=' + myParam,
-                        success: function(response) {
-                            console.log('Success:');
-                            $('#search-results-content').html(response);
-                        },
-                        error: function(xhr, status, error) {
-                            console.error('Error:', error);
-                        }
-                    });
-                }
-
-                searchModal.show();
-            }
-        }
-
-        function overrideSearchForm() {
+        function siteSearchForm() {
             const searchForm = $('form#CustomSearchForm_SearchForm');
             const searchModalEl = document.getElementById('searchModal');
             const searchModal = new bootstrap.Modal(searchModalEl);
             let search = '';
 
+            openSearchModal();
             modalEvents();
             updatePopState();
             overrideDefaultAction();
+
+            function openSearchModal() {
+                if (window.location.hash.includes('#search-open')) {
+                    const searchModalEl = document.getElementById('searchModal');
+                    const searchModal = new bootstrap.Modal(searchModalEl);
+
+                    if (window.location.search.includes('?q=')) {
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const term = urlParams.get('q');
+                        $('#CustomSearchForm_SearchForm_Search').val(term)
+                        searchAJAX(term);
+                    }
+
+                    searchModal.show();
+                }
+            }
 
             function overrideDefaultAction() {
                 searchForm.on('submit', (e) => {
@@ -87,15 +76,32 @@ jQuery.noConflict();
                 });
             }
 
+            function pagination(links) {
+                console.log("links",links);
+                $(links).on('click', function(e) {
+                    e.preventDefault();
+                    const href = $(this).attr('data-href');
+                    const urlParams = new URLSearchParams(href.substring(href.indexOf("?"), (href.length)));
+                    const q = urlParams.get('q');
+                    const start = urlParams.get('start');
+                    const termString = start.length > 0 ? q + '&start=' + start : q;
+
+                    setURLQueryAnchor(q, start);
+                    searchAJAX(termString);
+                });
+            }
+
             function searchAJAX(term)
             {
                 if (term) {
                     $.ajax({
                         type: 'GET',
                         dataType: 'html',
-                        url: '/home/SearchForm' + '?q=' + term,
+                        url: '/home/SearchForm?q=' + term,
                         success: function(response) {
-                            $('#search-results-content').html(response);
+                            let searchResults = $('#search-results-content');
+                            searchResults.html(response);
+                            pagination(searchResults.find('.pagination a'));
                         },
                         error: function(xhr, status, error) {
                             console.error('search error');
@@ -110,10 +116,19 @@ jQuery.noConflict();
                 window.onpopstate = function(event) {
                     // Check if event.state exists to ensure it's a state pushed by pushState()
                     if (event.state) {
-                        const query = event.state.search.includes('?q=') ? event.state.search : "?q=" ;
-                        $('#CustomSearchForm_SearchForm_Search').val(event.state.term);
+                        let termString = '';
+                        const term = event.state.term;
+                        const offset = event.state.offset;
+
+                        if (offset.length > 0)
+                            termString = term + '&start=' + offset;
+                        else
+                            termString = term;
+
+                        $('#CustomSearchForm_SearchForm_Search').val(term);
                         event.state.url.includes('#search-open') ? searchModal.show() : null;
-                        searchAJAX(event.state.term);
+                        searchAJAX(termString);
+
                         if (!window.location.hash.includes('#search-open')) {
                             searchModal.hide();
                         }
@@ -133,22 +148,38 @@ jQuery.noConflict();
                 });
                 searchModalEl.addEventListener('hide.bs.modal', e => {
                     if (window.location.hash.includes('#search-open')) {
-                        setURLQueryAnchor('', true);
+                        setURLQueryAnchor('', '',true);
                         console.log('hide search');
                     }
                 });
             }
 
-            function setURLQueryAnchor(searchTerm = '', closed = false)
+            function setURLQueryAnchor(searchTerm = '', offset = '', closed = false)
             {
+                console.log("term",  searchTerm);
+                console.log('offset', offset);
+                let newUrl, query;
                 const baseUrl = location.protocol + '//' + location.host + location.pathname;
-                const query = searchTerm !== '' ? '?q=' + searchTerm : '';
-                const newUrl = baseUrl + query;
+
+                if ((searchTerm === '' && offset !== '') || (searchTerm !== '' && offset !== '')) {
+                    query = '?q=' + searchTerm + '&start=' + offset;
+                    newUrl = baseUrl + query;
+                } else if (searchTerm !== '' && offset === '') {
+                    query = '?q=' + searchTerm;
+                    newUrl = baseUrl + query;
+                } else {
+                    query = '';
+                    newUrl = baseUrl;
+                }
+
+                console.log(query);
+
                 const fullSearchURL = closed ? baseUrl : newUrl + '#search-open';
 
                 const stateObj = {
                     title: document.title, // A title for the new history entry
                     search: query,
+                    offset: offset,
                     term: searchTerm, // search query to call in ajax
                     url: fullSearchURL // The URL to display in the address bar
                 };

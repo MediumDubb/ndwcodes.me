@@ -13,7 +13,6 @@ use SilverStripe\Forms\TextField;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DB;
 use SilverStripe\ORM\PaginatedList;
-use SilverStripe\ORM\SS_List;
 
 class CustomSearchForm extends SearchForm
 {
@@ -93,7 +92,7 @@ class CustomSearchForm extends SearchForm
 
         $keywords = $this->addStarsToKeywords($keywords);
 
-        $pageLength = $this->getPageLength();
+        $pageLength = 1;
         $start = $request->requestVar('start') ?: 0;
 
         $booleanSearch =

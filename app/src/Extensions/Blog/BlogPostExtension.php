@@ -52,7 +52,5 @@ class BlogPostExtension extends Extension
         }
 
         $this->getOwner()->Content = $dbString . "</p>";
-
-        parent::getOwner()->onBeforeWrite();
     }
 }

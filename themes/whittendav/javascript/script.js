@@ -35,7 +35,7 @@ jQuery.noConflict();
             let documentHeight = $(window).height();
             let footerHeight = $('footer.footer').height();
             documentHeight -= Math.round(footerHeight);
-            $(".page.full-window .content-area").parent().height(documentHeight);
+            $(".page.full-window .content-area").parent().css('min-height', `${documentHeight}px`);
         }
 
         function siteSearchForm() {

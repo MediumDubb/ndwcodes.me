@@ -1,0 +1,14 @@
+.blog-entry {
+    #blog-posts {
+        h2 {
+            margin-bottom: .5rem;
+        }
+        p {
+            margin-bottom: .25rem;
+            &.blog-post-meta {
+                font-size: 12px;
+            }
+        }
+
+    }
+}

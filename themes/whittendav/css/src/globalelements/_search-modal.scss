@@ -25,5 +25,54 @@
                 margin:0;
             }
         }
+        #PageNumbers {
+            ul {
+                padding:0;
+                display:flex;
+                flex-direction: row;
+                list-style: none;
+                li {
+                    padding: 5px 10px;
+                    background-color: #7e687a;
+                    border-left: 1px solid #dadada;
+                    border-top: 2px solid #dadada;
+                    border-bottom: 2px solid #dadada;
+                    &:hover {
+                        cursor: pointer;
+                        background-color: #323232;
+                    }
+
+                    &.current {
+                        background-color: #0d0d0d;
+                    }
+
+                    &.go-to-page {
+
+                    }
+
+                    &.next {
+                        padding: 5px;
+                    }
+
+                    &.prev {
+                        padding: 5px;
+                    }
+                    &:first-child {
+                        border-left: 2px solid #dadada;
+                        &.prev {
+                            border-top-left-radius:10px;
+                            border-bottom-left-radius:10px;
+                        }
+                    }
+                    &:last-child {
+                        border-right: 2px solid #dadada;
+                        &.next {
+                            border-top-right-radius:10px;
+                            border-bottom-right-radius:10px;
+                        }
+                    }
+                }
+            }
+        }
     }
 }

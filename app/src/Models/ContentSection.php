@@ -8,6 +8,7 @@ use SilverStripe\Blog\Model\BlogPost;
 use SilverStripe\Forms\HTMLEditor\HTMLEditorField;
 use SilverStripe\Forms\Tab;
 use SilverStripe\Forms\TabSet;
+use SilverStripe\Forms\TextField;
 use SilverStripe\ORM\DataObject;
 
 class ContentSection extends DataObject
@@ -19,6 +20,7 @@ class ContentSection extends DataObject
 
     private static array $db = [
         'SortOrder'         => 'Int',
+        'SectionTitle'      => 'Varchar(150)',
         'CopyBlock'         => 'HTMLText',
     ];
 
@@ -28,6 +30,10 @@ class ContentSection extends DataObject
 
     private static array $has_many = [
         'Images'            => Image::class
+    ];
+
+    private static array $summary_fields = [
+        'SectionTitle'      => 'Section Title'
     ];
 
     private static array $owns = [
@@ -41,23 +47,24 @@ class ContentSection extends DataObject
         $fields->removeByName([
             'SortOrder',
             'BlogPostID',
+            'SectionTitle',
             'CopyBlock',
             'Images',
         ]);
 
         $fields->findOrMakeTab('Root.Main', 'Content Section');
 
-        $fields->addFieldToTab('Root.Main',
+        $fields->addFieldsToTab('Root.Main', [
+            TextField::create('SectionTitle', 'Section Title:'),
             TabSet::create('MainTabSet', 'Main Tab Set',
                 Tab::create('Copy', 'Copy Block',
                     HTMLEditorField::create('CopyBlock', 'Copy Block')
-
                 ),
                 Tab::create('Images', 'Images',
                     SortableUploadField::create('Images')
                         ->setFolderName('Content-Images')
                 ),
-            )
+            )]
         );
 
         return $fields;

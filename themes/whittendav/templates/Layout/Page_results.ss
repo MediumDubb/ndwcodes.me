@@ -3,17 +3,15 @@
     <ul id="SearchResults">
         <% loop $Me %>
         <li>
-            <p>
-                <strong>
-                    <a href="$Link">
-                        <% if $MenuTitle %>
-                            $MenuTitle
-                        <% else %>
-                            $Title
-                        <% end_if %>
-                    </a>
-                </strong>
-            </p>
+            <strong>
+                <a href="$Link">
+                    <% if $MenuTitle %>
+                        $MenuTitle
+                    <% else %>
+                        $Title
+                    <% end_if %>
+                </a>
+            </strong>
             <% if $Content %>
                 <p>$Content.LimitWordCountXML</p>
             <% end_if %>
@@ -28,21 +26,27 @@
     <% if $Me.MoreThanOnePage %>
     <div id="PageNumbers">
         <div class="pagination">
-            <% if $Me.NotFirstPage %>
-                <a class="prev" data-href="$Me.PrevLink" title="View the previous page">&larr;</a>
-            <% end_if %>
-            <span>
+            <ul>
+                <% if $Me.NotFirstPage %>
+                    <li class="prev" >
+                        <a data-href="$Me.PrevLink" title="View the previous page">&larr;</a>
+                    </li>
+                <% end_if %>
                 <% loop $Me.Pages %>
                     <% if $CurrentBool %>
-                    $PageNum
+                        <li class="current">{$PageNum}</li>
                     <% else %>
-                    <a data-href="$Link" title="View page number $PageNum" class="go-to-page">$PageNum</a>
+                        <li class="go-to-page">
+                            <a data-href="$Link" title="View page number $PageNum" >$PageNum</a>
+                        </li>
                     <% end_if %>
                 <% end_loop %>
-            </span>
-            <% if $Me.NotLastPage %>
-            <a class="next" data-href="$Me.NextLink" title="View the next page">&rarr;</a>
-            <% end_if %>
+                <% if $Me.NotLastPage %>
+                    <li class="next">
+                        <a data-href="$Me.NextLink" title="View the next page">&rarr;</a>
+                    </li>
+                <% end_if %>
+            </ul>
         </div>
         <p>Page $Me.CurrentPage of $Me.TotalPages</p>
     </div>

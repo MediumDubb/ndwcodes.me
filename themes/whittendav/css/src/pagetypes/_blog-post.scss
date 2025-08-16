@@ -1,0 +1,33 @@
+.blog-post {
+    .container {
+        max-width: 800px;
+        .content-area {
+            width: 100%;
+            section {
+                width: 100%;
+                margin-bottom: 50px;
+                #postImageCarousel {
+                    min-width: 50%;
+                    width: 100%;
+                    margin: 0 auto;
+                    padding:0;
+                    .carousel-item {
+                        padding-top: 56.25%;
+                        position: relative;
+                        img {
+                            position: absolute;
+                            top:50%;
+                            bottom:0;
+                            left:0;
+                            right:0;
+                            width: 100%;
+                            object-fit: cover;
+                            transform: translateY(-50%);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+}

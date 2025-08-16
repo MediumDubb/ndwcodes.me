@@ -34,7 +34,7 @@
                 <% end_if %>
                 <% loop $Me.Pages %>
                     <% if $CurrentBool %>
-                        <li class="current">{$PageNum}</li>
+                        <li class="current" title="current page number $PageNum">{$PageNum}</li>
                     <% else %>
                         <li class="go-to-page">
                             <a data-href="$Link" title="View page number $PageNum" >$PageNum</a>

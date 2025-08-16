@@ -44,6 +44,9 @@
 
                     &.current {
                         background-color: #0d0d0d;
+                        &:hover {
+                            cursor: text;
+                        }
                     }
 
                     &.go-to-page {

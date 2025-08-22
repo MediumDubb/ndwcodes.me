@@ -1,0 +1,31 @@
+.resume-page{
+    padding-top: 42px;
+    .container {
+        .inner {
+            .head {
+                background: #fff;
+                padding: 60px 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-wrap: wrap;
+                flex-direction: column;
+                .holder {
+                    max-width: 70%;
+                    span.first {
+                        font-weight: bold;
+                        font-size: clamp(42px, 6cqw, 120px);
+                        color: #212121FF;
+                        margin-right: 3cqw;
+                    }
+                    span.last {
+                        font-weight: normal;
+                        font-size: clamp(48px, 7cqw, 132px);
+                        color: #5E4D5BFF;
+                    }
+                }
+
+            }
+        }
+    }
+}

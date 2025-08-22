@@ -28,4 +28,16 @@ class Edu extends DataObject
     private static array $owns = [
         'ResumePage',
     ];
+
+    public function getCMSFields()
+    {
+        $fields = parent::getCMSFields();
+
+        $fields->removeByName([
+            'SortOrder',
+            'ResumePageID',
+        ]);
+
+        return $fields;
+    }
 }

@@ -71,7 +71,7 @@ class Member_GroupSet extends ManyManyList
         return parent::foreignIDFilter($id);
     }
 
-    public function add($item, $extraFields = null)
+    public function add(mixed $item, ?array $extraFields = null): void
     {
         // Get Group.ID
         $itemID = null;
@@ -85,7 +85,7 @@ class Member_GroupSet extends ManyManyList
 
         // Check if this group is allowed to be added
         if ($this->canAddGroups([$itemID])) {
-            parent::add($item, $extraFields);
+            parent::add($item, $extraFields ?? []);
         }
     }
 
@@ -143,7 +143,7 @@ class Member_GroupSet extends ManyManyList
     {
         $id = $this->getForeignID();
         if ($id) {
-            return DataObject::get_by_id(Member::class, $id);
+            return Member::get()->setUseCache(true)->byID($id);
         }
     }
 }

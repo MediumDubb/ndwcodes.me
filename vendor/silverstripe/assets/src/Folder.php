@@ -5,8 +5,12 @@ namespace SilverStripe\Assets;
 use SilverStripe\Core\Convert;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Core\Manifest\ModuleResourceLoader;
+use SilverStripe\Forms\FormField;
+use SilverStripe\Forms\TreeDropdownField;
+use SilverStripe\Forms\TreeMultiselectField;
 use SilverStripe\ORM\DataList;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\ORM\DataObject;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Versioned\Versioned;
 
 /**
@@ -36,7 +40,7 @@ class Folder extends File
 
     private static $table_name = 'Folder';
 
-    public function exists()
+    public function exists(): bool
     {
         return $this->isInDB();
     }
@@ -50,7 +54,7 @@ class Folder extends File
     public static function find_or_make($folderPath)
     {
         // Safely split all parts
-        $parts = array_filter(preg_split("#[/\\\\]+#", $folderPath ?? '') ?? []);
+        $parts = static::getFilePathParts($folderPath ?? '');
 
         $parentID = 0;
         $item = null;
@@ -94,7 +98,36 @@ class Folder extends File
         return $item;
     }
 
-    public function onBeforeDelete()
+    public function scaffoldFormFieldForHasOne(
+        string $fieldName,
+        ?string $fieldTitle,
+        string $relationName,
+        DataObject $ownerRecord
+    ): FormField {
+        return TreeDropdownField::create($fieldName, $fieldTitle, static::class);
+    }
+
+    public function scaffoldFormFieldForHasMany(
+        string $relationName,
+        ?string $fieldTitle,
+        DataObject $ownerRecord,
+        bool &$includeInOwnTab
+    ): FormField {
+        $includeInOwnTab = false;
+        return TreeMultiselectField::create($relationName, $fieldTitle, static::class);
+    }
+
+    public function scaffoldFormFieldForManyMany(
+        string $relationName,
+        ?string $fieldTitle,
+        DataObject $ownerRecord,
+        bool &$includeInOwnTab
+    ): FormField {
+        $includeInOwnTab = false;
+        return TreeMultiselectField::create($relationName, $fieldTitle, static::class);
+    }
+
+    protected function onBeforeDelete()
     {
         foreach ($this->AllChildren() as $child) {
             $child->delete();
@@ -103,7 +136,7 @@ class Folder extends File
         parent::onBeforeDelete();
     }
 
-    public function onBeforeWrite()
+    protected function onBeforeWrite()
     {
         parent::onBeforeWrite();
 
@@ -245,7 +278,7 @@ class Folder extends File
         return null;
     }
 
-    public function onAfterWrite()
+    protected function onAfterWrite()
     {
         parent::onAfterWrite();
 
@@ -258,7 +291,7 @@ class Folder extends File
         $this->updateChildFilesystem();
     }
 
-    public function onAfterDelete()
+    protected function onAfterDelete()
     {
         parent::onAfterDelete();
 
@@ -276,7 +309,7 @@ class Folder extends File
     /**
      * If a write is skipped due to no changes, ensure that nested records still get asked to update
      */
-    public function onAfterSkippedWrite()
+    protected function onAfterSkippedWrite()
     {
         $this->updateChildFilesystem();
     }
@@ -303,10 +336,10 @@ class Folder extends File
         return null;
     }
 
-    public function validate()
+    public function validate(): ValidationResult
     {
         $result = ValidationResult::create();
-        $this->extend('validate', $result);
+        $this->extend('updateValidate', $result);
         return $result;
     }
 

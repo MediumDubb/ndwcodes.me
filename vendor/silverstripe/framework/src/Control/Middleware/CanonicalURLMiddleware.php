@@ -81,6 +81,8 @@ class CanonicalURLMiddleware implements HTTPMiddleware
      * @var array|bool
      */
     protected $enabledEnvs = [
+        CoreKernel::DEV,
+        CoreKernel::TEST,
         CoreKernel::LIVE
     ];
 
@@ -308,7 +310,7 @@ class CanonicalURLMiddleware implements HTTPMiddleware
      * @param HTTPRequest|null $request Allow HTTPRequest to be used for the base comparison
      * @throws HTTPResponse_Exception
      */
-    public function throwRedirectIfNeeded(HTTPRequest $request = null)
+    public function throwRedirectIfNeeded(?HTTPRequest $request = null)
     {
         $request = $this->getOrValidateRequest($request);
         if (!$request) {
@@ -326,7 +328,7 @@ class CanonicalURLMiddleware implements HTTPMiddleware
      * @param HTTPRequest $request
      * @return HTTPRequest|null
      */
-    protected function getOrValidateRequest(HTTPRequest $request = null)
+    protected function getOrValidateRequest(?HTTPRequest $request = null)
     {
         if ($request instanceof HTTPRequest) {
             return $request;
@@ -524,7 +526,7 @@ class CanonicalURLMiddleware implements HTTPMiddleware
      * @param HTTPResponse $response
      * @return bool
      */
-    protected function hasBasicAuthPrompt(HTTPResponse $response = null)
+    protected function hasBasicAuthPrompt(?HTTPResponse $response = null)
     {
         if (!$response) {
             return false;

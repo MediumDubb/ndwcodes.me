@@ -7,12 +7,9 @@ use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Injector\Injector;
-use SilverStripe\Dev\Deprecation;
-use SilverStripe\ORM\Filterable;
 use SilverStripe\ORM\Filters\PartialMatchFilter;
 use SilverStripe\ORM\Filters\SearchFilter;
-use SilverStripe\ORM\Limitable;
-use SilverStripe\ORM\Sortable;
+use SilverStripe\Model\List\SS_List;
 
 /**
  * A SearchContext that can be used with non-ORM data.
@@ -35,26 +32,14 @@ class BasicSearchContext extends SearchContext
      *  If a filter is applied to a relationship in dot notation,
      *  the parameter name should have the dots replaced with double underscores,
      *  for example "Comments__Name" instead of the filter name "Comments.Name".
-     * @param array|bool|string $sort Field to sort on.
+     * @param array|false|string $sort Field to sort on.
      * @param int|array|null $limit
-     * @param Filterable&Sortable&Limitable $existingQuery
+     * @param SS_List $existingQuery
      */
-    public function getQuery($searchParams, $sort = false, $limit = false, $existingQuery = null): Filterable&Sortable&Limitable
+    public function getQuery($searchParams, $sort = false, int|array|null $limit = null, $existingQuery = null): SS_List
     {
-        if (!$existingQuery || !($existingQuery instanceof Filterable) || !($existingQuery instanceof Sortable) || !($existingQuery instanceof Limitable)) {
-            throw new InvalidArgumentException('getQuery requires a pre-existing filterable/sortable/limitable list to be passed as $existingQuery.');
-        }
-
-        if ((count(func_get_args()) >= 3) && (!in_array(gettype($limit), ['array', 'NULL', 'integer']))) {
-            Deprecation::notice(
-                '5.1.0',
-                '$limit should be type of int|array|null'
-            );
-            if (is_string($limit) && is_numeric($limit)) {
-                $limit = (int) $limit;
-            } else {
-                $limit = null;
-            }
+        if (!$existingQuery || !is_a($existingQuery, SS_List::class)) {
+            throw new InvalidArgumentException('getQuery requires a pre-existing SS_List list to be passed as $existingQuery.');
         }
 
         $searchParams = $this->applySearchFilters($this->normaliseSearchParams($searchParams));
@@ -96,6 +81,7 @@ class BasicSearchContext extends SearchContext
 
     private function applySearchFilters(array $searchParams): array
     {
+        $this->setSearchParams($searchParams);
         $applied = [];
         foreach ($searchParams as $fieldName => $searchTerm) {
             // Ignore the general search field - we'll deal with that in a special way.
@@ -109,7 +95,7 @@ class BasicSearchContext extends SearchContext
         return $applied;
     }
 
-    private function applyGeneralSearchField(array &$searchParams, Filterable $existingQuery): Filterable
+    private function applyGeneralSearchField(array &$searchParams, SS_List $existingQuery): SS_List
     {
         $generalFieldName = static::config()->get('general_search_field_name');
         if (array_key_exists($generalFieldName, $searchParams)) {

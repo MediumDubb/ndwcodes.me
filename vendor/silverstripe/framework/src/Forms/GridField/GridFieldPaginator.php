@@ -3,13 +3,11 @@
 namespace SilverStripe\Forms\GridField;
 
 use SilverStripe\Core\Config\Configurable;
-use SilverStripe\ORM\Limitable;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\UnsavedRelationList;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\SSViewer;
 use LogicException;
-use SilverStripe\Dev\Deprecation;
 
 /**
  * GridFieldPaginator paginates the {@link GridField} list and adds controls
@@ -33,12 +31,6 @@ class GridFieldPaginator extends AbstractGridFieldComponent implements GridField
     protected $itemsPerPage;
 
     /**
-     * See {@link setThrowExceptionOnBadDataType()}
-     * @deprecated 5.2.0 Will be removed without equivalent functionality in a future major release
-     */
-    protected $throwExceptionOnBadDataType = true;
-
-    /**
      *
      * @param int $itemsPerPage - How many items should be displayed per page
      */
@@ -46,38 +38,6 @@ class GridFieldPaginator extends AbstractGridFieldComponent implements GridField
     {
         $this->itemsPerPage = $itemsPerPage
             ?: GridFieldPaginator::config()->uninherited('default_items_per_page');
-    }
-
-    /**
-     * Determine what happens when this component is used with a list that isn't {@link SS_Filterable}.
-     *
-     *  - true: An exception is thrown
-     *  - false: This component will be ignored - it won't make any changes to the GridField.
-     *
-     * By default, this is set to true so that it's clearer what's happening, but the predefined
-     * {@link GridFieldConfig} subclasses set this to false for flexibility.
-     *
-     * @param bool $throwExceptionOnBadDataType
-     * @return $this
-     * @deprecated 5.2.0 Will be removed without equivalent functionality in a future major release
-     */
-    public function setThrowExceptionOnBadDataType($throwExceptionOnBadDataType)
-    {
-        Deprecation::notice('5.2.0', 'Will be removed without equivalent functionality in a future major release');
-        $this->throwExceptionOnBadDataType = $throwExceptionOnBadDataType;
-        return $this;
-    }
-
-    /**
-     * See {@link setThrowExceptionOnBadDataType()}
-     *
-     * @return bool
-     * @deprecated 5.2.0 Will be removed without equivalent functionality in a future major release
-     */
-    public function getThrowExceptionOnBadDataType()
-    {
-        Deprecation::notice('5.2.0', 'Will be removed without equivalent functionality in a future major release');
-        return $this->throwExceptionOnBadDataType;
     }
 
     /**
@@ -89,17 +49,13 @@ class GridFieldPaginator extends AbstractGridFieldComponent implements GridField
      */
     protected function checkDataType($dataList)
     {
-        if ($dataList instanceof Limitable) {
+        if ($dataList instanceof SS_List) {
             return true;
-        } else {
-            // This will be changed to always throw an exception in a future major release.
-            if ($this->throwExceptionOnBadDataType) {
-                throw new LogicException(
-                    static::class . " expects an SS_Limitable list to be passed to the GridField."
-                );
-            }
-            return false;
         }
+
+        throw new LogicException(
+            static::class . " expects an SS_List list to be passed to the GridField."
+        );
     }
 
     /**
@@ -188,7 +144,7 @@ class GridFieldPaginator extends AbstractGridFieldComponent implements GridField
             $startRow = 0;
         }
 
-        if (!($dataList instanceof Limitable) || ($dataList instanceof UnsavedRelationList)) {
+        if (!($dataList instanceof SS_List) || ($dataList instanceof UnsavedRelationList)) {
             return $dataList;
         }
 

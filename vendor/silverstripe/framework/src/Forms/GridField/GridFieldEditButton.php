@@ -3,9 +3,9 @@
 namespace SilverStripe\Forms\GridField;
 
 use SilverStripe\Control\Controller;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\SSViewer;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 
 /**
  * Provides the entry point to editing a single record presented by the
@@ -61,9 +61,8 @@ class GridFieldEditButton extends AbstractGridFieldComponent implements GridFiel
 
     /**
      * @inheritdoc
-     * @param bool $addState DEPRECATED: Should be removed in major release
      */
-    public function getUrl($gridField, $record, $columnName, $addState = true)
+    public function getUrl($gridField, $record, $columnName)
     {
         $link = Controller::join_links(
             $gridField->Link('item'),
@@ -71,7 +70,7 @@ class GridFieldEditButton extends AbstractGridFieldComponent implements GridFiel
             'edit'
         );
 
-        return $gridField->addAllStateToUrl($link, $addState);
+        return $gridField->addAllStateToUrl($link);
     }
 
     /**
@@ -91,7 +90,7 @@ class GridFieldEditButton extends AbstractGridFieldComponent implements GridFiel
      * Return any special attributes that will be used for FormField::create_tag()
      *
      * @param GridField $gridField
-     * @param ViewableData $record
+     * @param ModelData $record
      * @param string $columnName
      * @return array
      */
@@ -139,7 +138,7 @@ class GridFieldEditButton extends AbstractGridFieldComponent implements GridFiel
 
     /**
      * @param GridField $gridField
-     * @param ViewableData $record
+     * @param ModelData $record
      * @param string $columnName
      * @return string The HTML for the column
      */
@@ -149,7 +148,7 @@ class GridFieldEditButton extends AbstractGridFieldComponent implements GridFiel
         // which can make the form readonly if no edit permissions are available.
 
         $data = new ArrayData([
-            'Link' => $this->getURL($gridField, $record, $columnName, false),
+            'Link' => $this->getURL($gridField, $record, $columnName),
             'ExtraClass' => $this->getExtraClass()
         ]);
 

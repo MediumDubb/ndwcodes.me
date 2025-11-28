@@ -6,11 +6,12 @@ use SilverStripe\Control\Director;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\Debug;
 use SilverStripe\ORM\DB;
-use SilverStripe\ORM\PaginatedList;
+use SilverStripe\Model\List\PaginatedList;
 use SilverStripe\ORM\Queries\SQLUpdate;
 use SilverStripe\ORM\Queries\SQLInsert;
 use BadMethodCallException;
 use Exception;
+use SilverStripe\Core\Extensible;
 use SilverStripe\Dev\Backtrace;
 
 /**
@@ -19,6 +20,7 @@ use SilverStripe\Dev\Backtrace;
  */
 abstract class Database
 {
+    use Extensible;
 
     const PARTIAL_QUERY = 'partial_query';
     const FULL_QUERY = 'full_query';
@@ -386,6 +388,7 @@ abstract class Database
      */
     public function manipulate($manipulation)
     {
+        $this->extend('onBeforeManipulate', $manipulation);
         if (empty($manipulation)) {
             return;
         }
@@ -479,6 +482,17 @@ abstract class Database
             ? "%s IS NULL"
             : "%s IS NOT NULL";
         return sprintf($clause ?? '', $field);
+    }
+
+    /**
+     * Generates a WHERE clause checking if two columns are equal, which
+     * also returns `1` if both values are null.
+     */
+    public function nullSafeEqualsClause(string $field1, string $field2): string
+    {
+        $nullField1 = $this->nullCheckClause($field1, true);
+        $nullField2 = $this->nullCheckClause($field2, true);
+        return "($field1 = $field2 OR ($nullField1 AND $nullField2))";
     }
 
     /**
@@ -970,7 +984,7 @@ abstract class Database
         $caseStatements = [];
         foreach ($values as $index => $value) {
             $escaped = is_int($value) ? $value : "'" . addslashes($value) . "'";
-            $caseStatements[] = "CASE {$field} = {$escaped} THEN {$index}";
+            $caseStatements[] = "WHEN \"{$field}\" = {$escaped} THEN {$index}";
         }
         $count = count($caseStatements);
         $sqlCase = implode(' ', $caseStatements);

@@ -2,7 +2,7 @@
 
 namespace SilverStripe\Versioned;
 
-use SilverStripe\Admin\LeftAndMain;
+use SilverStripe\Admin\AdminController;
 use SilverStripe\Control\Controller;
 use SilverStripe\Control\RequestHandler;
 use SilverStripe\Core\Extension;
@@ -30,7 +30,7 @@ class VersionedStateExtension extends Extension
      *
      * @param string $link
      */
-    public function updateLink(&$link)
+    protected function updateLink(&$link)
     {
         // Skip if link already contains reading mode
         if ($this->hasVersionedQuery($link)) {
@@ -51,7 +51,7 @@ class VersionedStateExtension extends Extension
         }
 
         // Don't touch Admin/CMS links
-        if (class_exists(LeftAndMain::class) && $this->getOwner() instanceof LeftAndMain) {
+        if (class_exists(AdminController::class) && $this->getOwner() instanceof AdminController) {
             return;
         }
 

@@ -4,6 +4,7 @@ namespace SilverStripe\Dev;
 
 use Exception;
 use InvalidArgumentException;
+use LogicException;
 use SilverStripe\Control\Controller;
 use SilverStripe\Control\Cookie_Backend;
 use SilverStripe\Control\Director;
@@ -70,11 +71,11 @@ class TestSession
     {
         // Shift off anything else that's on the stack.  This can happen if something throws
         // an exception that causes a premature TestSession::__destruct() call
-        while (Controller::has_curr() && Controller::curr() !== $this->controller) {
+        while (Controller::curr() && Controller::curr() !== $this->controller) {
             Controller::curr()->popCurrent();
         }
 
-        if (Controller::has_curr()) {
+        if (Controller::curr()) {
             $this->controller->popCurrent();
         }
     }
@@ -206,7 +207,7 @@ class TestSession
      * @param array $data Map of GET/POST data.
      * @param bool $withSecurityToken Submit with the form's security token if there is one.
      */
-    public function submitForm(string $formID, string $button = null, array $data = [], bool $withSecurityToken = true): HTTPResponse
+    public function submitForm(string $formID, ?string $button = null, array $data = [], bool $withSecurityToken = true): HTTPResponse
     {
         $page = $this->lastPage();
         if ($page) {
@@ -214,7 +215,7 @@ class TestSession
                 $formCrawler = $page->filterXPath("//form[@id='$formID']");
                 $form = $formCrawler->form();
             } catch (InvalidArgumentException $e) {
-                user_error("TestSession::submitForm failed to find the form {$formID}");
+                throw new LogicException("TestSession::submitForm failed to find the form '{$formID}'");
             }
 
             foreach ($data as $fieldName => $value) {
@@ -235,7 +236,7 @@ class TestSession
             if ($button) {
                 $btnXpath = "//button[@name='$button'] | //input[@name='$button'][@type='button' or @type='submit']";
                 if (!$formCrawler->children()->filterXPath($btnXpath)->count()) {
-                    throw new Exception("Can't find button '$button' to submit as part of test.");
+                    throw new LogicException("Can't find button '$button' to submit as part of test.");
                 }
                 $values[$button] = true;
             }

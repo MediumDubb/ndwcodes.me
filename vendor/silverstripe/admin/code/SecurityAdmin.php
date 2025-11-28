@@ -58,10 +58,7 @@ class SecurityAdmin extends ModelAdmin implements PermissionProvider
 
     private static $menu_priority = 0;
 
-    /**
-     * @deprecated 2.4.0 Will be renamed to model_class
-     */
-    private static $tree_class = Group::class;
+    private static $model_class = Group::class;
 
     private static $required_permission_codes = 'CMS_ACCESS_SecurityAdmin';
 
@@ -144,11 +141,11 @@ class SecurityAdmin extends ModelAdmin implements PermissionProvider
         return [
             "CMS_ACCESS_SecurityAdmin" => [
                 'name' => _t(
-                    CMSMain::class . '.ACCESS',
+                    LeftAndMain::class . '.ACCESS',
                     "Access to '{title}' section",
                     ['title' => $title]
                 ),
-                'category' => _t(Permission::class . '.CMS_ACCESS_CATEGORY', 'CMS Access'),
+                'category' => _t(LeftAndMain::class . '.CMS_ACCESS_CATEGORY', 'CMS Access'),
                 'help' => _t(
                     __CLASS__ . '.ACCESS_HELP',
                     'Allow viewing, adding and editing users, as well as assigning permissions and roles to them.'

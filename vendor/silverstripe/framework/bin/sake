@@ -1,0 +1,19 @@
+#!/usr/bin/env php
+<?php
+
+use SilverStripe\Cli\Sake;
+use SilverStripe\ORM\DB;
+
+// Ensure that people can't access this from a web-server
+if (!in_array(PHP_SAPI, ['cli', 'cgi', 'cgi-fcgi'])) {
+    echo 'sake cannot be run from a web request, you have to run it on the command-line.';
+    die();
+}
+
+require_once __DIR__ . '/../src/includes/autoload.php';
+
+// CLI scripts must only use the primary database connection and not replicas
+DB::setMustUsePrimary();
+
+$sake = new Sake();
+$sake->run();

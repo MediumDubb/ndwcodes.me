@@ -12,6 +12,7 @@ use Behat\Mink\Session;
 use PHPUnit\Framework\Assert;
 use SilverStripe\BehatExtension\Context\MainContextAwareTrait;
 use SilverStripe\BehatExtension\Utility\StepHelper;
+use Facebook\WebDriver\Exception\ElementNotInteractableException;
 
 /**
  * CmsUiContext

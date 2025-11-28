@@ -17,12 +17,14 @@ class ReorderElements
      */
     protected $element;
 
+    private bool $elementIsNew;
+
     /**
      * Create reordering service for specified Element
      *
      * @param BaseElement $element
      */
-    public function __construct(BaseElement $element)
+    public function __construct(BaseElement $element, bool $elementIsNew = false)
     {
         if (!($element instanceof BaseElement)) {
             throw new InvalidArgumentException(sprintf(
@@ -33,6 +35,7 @@ class ReorderElements
             ));
         }
 
+        $this->elementIsNew = $elementIsNew;
         $this->setElement($element);
     }
 
@@ -116,7 +119,7 @@ class ReorderElements
 
         // Now use the ORM to write a new version of the record that we are directly reordering
         $element->Sort = $newBlockPosition;
-        $element->write();
+        $element->write(skipValidation: $this->elementIsNew);
 
         return $element;
     }

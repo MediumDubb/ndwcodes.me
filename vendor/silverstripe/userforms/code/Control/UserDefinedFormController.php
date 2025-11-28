@@ -16,10 +16,10 @@ use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Core\Manifest\ModuleLoader;
 use SilverStripe\Forms\Form;
 use SilverStripe\i18n\i18n;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\FieldType\DBField;
-use SilverStripe\ORM\ValidationException;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationException;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Security;
 use SilverStripe\UserForms\Extension\UserFormFileExtension;
 use SilverStripe\UserForms\Form\UserForm;
@@ -29,10 +29,11 @@ use SilverStripe\UserForms\Model\Submission\SubmittedForm;
 use SilverStripe\UserForms\Model\Submission\SubmittedFileField;
 use SilverStripe\UserForms\Model\UserDefinedForm;
 use SilverStripe\Versioned\Versioned;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\Requirements;
-use SilverStripe\View\SSViewer;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
+use SilverStripe\View\TemplateEngine;
+use SilverStripe\View\ViewLayerData;
 use Symfony\Component\Mime\Exception\RfcComplianceException;
 
 /**
@@ -133,7 +134,7 @@ class UserDefinedFormController extends PageController
      *
      * @return array
      */
-    public function index(HTTPRequest $request = null)
+    public function index(?HTTPRequest $request = null)
     {
         $form = $this->Form();
         if ($this->Content && $form && !$this->config()->disable_form_content_shortcode) {
@@ -421,7 +422,8 @@ JS
                 // Include any parsed merge field references from the CMS editor - this is already escaped
                 // This string substitution works for both HTML and plain text emails.
                 // $recipient->getEmailBodyContent() will retrieve the relevant version of the email
-                $emailData['Body'] = SSViewer::execute_string($recipient->getEmailBodyContent(), $mergeFields);
+                $engine = Injector::inst()->create(TemplateEngine::class);
+                $emailData['Body'] = $engine->renderString($recipient->getEmailBodyContent(), ViewLayerData::create($mergeFields));
                 // only include visible fields if recipient visibility flag is set
                 if ((bool) $recipient->HideInvisibleFields) {
                     $emailData['Fields'] = $visibleSubmittedFields;
@@ -487,10 +489,10 @@ JS
                     if ($submittedFormField && trim($submittedFormField->Value ?? '')) {
                         $email->setSubject($submittedFormField->Value);
                     } else {
-                        $email->setSubject(SSViewer::execute_string($recipient->EmailSubject, $mergeFields));
+                        $email->setSubject($engine->renderString($recipient->EmailSubject, ViewLayerData::create($mergeFields)));
                     }
                 } else {
-                    $email->setSubject(SSViewer::execute_string($recipient->EmailSubject, $mergeFields));
+                    $email->setSubject($engine->renderString($recipient->EmailSubject, ViewLayerData::create($mergeFields)));
                 }
 
                 $this->extend('updateEmail', $email, $recipient, $emailData);
@@ -578,7 +580,7 @@ JS
      * This action handles rendering the "finished" message, which is
      * customizable by editing the ReceivedFormSubmission template.
      *
-     * @return ViewableData
+     * @return ModelData
      */
     public function finished()
     {
@@ -660,7 +662,7 @@ EOS;
                 // Hide the step jump button if the FormStep has is initially hidden.
                 // This is particularly important beacause the next/prev page buttons logic is controlled by
                 // the visibility of the FormStep buttons
-                // The HTML for the FormStep buttons is defined in UserFormProgress.ss
+                // The HTML for the FormStep buttons is defined in the UserFormProgress template
                 $id = str_replace('#', '', $target ?? '');
                 $result .= <<<EOS
     $('.step-button-wrapper[data-for="{$id}"]').addClass('hide');

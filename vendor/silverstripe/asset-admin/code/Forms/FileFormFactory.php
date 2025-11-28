@@ -13,7 +13,7 @@ use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\HeaderField;
 use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\LiteralField;
-use SilverStripe\Forms\RequiredFields;
+use SilverStripe\Forms\Validation\RequiredFieldsValidator;
 use SilverStripe\Forms\Tab;
 use SilverStripe\Forms\TabSet;
 use SilverStripe\Forms\TextField;
@@ -198,7 +198,7 @@ class FileFormFactory extends AssetFormFactory
      * @param array $context
      * @return FieldList
      */
-    protected function getFormFields(RequestHandler $controller = null, $formName, $context = [])
+    protected function getFormFields(?RequestHandler $controller, $formName, $context = [])
     {
         /** @var File $record */
         $record = $context['Record'];
@@ -266,7 +266,7 @@ class FileFormFactory extends AssetFormFactory
      * @param array $context
      * @return FieldList
      */
-    protected function getFormActions(RequestHandler $controller = null, $formName, $context = [])
+    protected function getFormActions(?RequestHandler $controller, $formName, $context = [])
     {
         $record = $context['Record'];
         $fileSelected = $context['FileSelected'] ?? false;
@@ -503,9 +503,9 @@ class FileFormFactory extends AssetFormFactory
      * @param RequestHandler $controller
      * @param $formName
      * @param $context
-     * @return RequiredFields
+     * @return RequiredFieldsValidator
      */
-    protected function getValidator(RequestHandler $controller = null, $formName, $context = [])
+    protected function getValidator(?RequestHandler $controller, $formName, $context = [])
     {
         $validator = parent::getValidator($controller, $formName, $context);
 

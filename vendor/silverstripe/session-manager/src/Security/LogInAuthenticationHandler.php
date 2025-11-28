@@ -75,17 +75,18 @@ class LogInAuthenticationHandler implements AuthenticationHandler
      * @param HTTPRequest|null $request
      * @throws InvalidArgumentException
      */
-    public function logIn(Member $member, $persistent = false, HTTPRequest $request = null)
+    public function logIn(Member $member, $persistent = false, ?HTTPRequest $request = null)
     {
         // Fall back to retrieving request from current Controller if available
         if ($request === null) {
-            if (!Controller::has_curr()) {
+            $controller = Controller::curr();
+            if (!$controller) {
                 throw new InvalidArgumentException(
                     "Authentication with SessionManager enabled requires an active HTTPRequest."
                 );
             }
 
-            $request = Controller::curr()->getRequest();
+            $request = $controller->getRequest();
         }
 
         $loginSession = LoginSession::find($member, $request);
@@ -100,6 +101,8 @@ class LogInAuthenticationHandler implements AuthenticationHandler
             $rememberLoginHash->write();
         }
 
+        // Overwrite the session identifier, storing the LoginSession ID instead of the RememberLoginHash ID.
+        // This is read by LoginSessionMiddleware, and avoids an extra query to fetch the related model.
         if ($request) {
             $request->getSession()->set($this->getSessionVariable(), $loginSession->ID);
         }
@@ -108,7 +111,7 @@ class LogInAuthenticationHandler implements AuthenticationHandler
     /**
      * @param HTTPRequest $request|null
      */
-    public function logOut(HTTPRequest $request = null)
+    public function logOut(?HTTPRequest $request = null)
     {
         // noop
     }

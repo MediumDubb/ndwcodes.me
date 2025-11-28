@@ -1,7 +1,7 @@
-export type IconFamily = "classic" | "duotone" | "sharp" | "sharp-duotone";
-export type IconPrefix = "fas" | "fass" | "far" | "fasr" | "fal" | "fasl" | "fat" | "fast" | "fad" | "fadr" | "fadl" | "fadt" | "fasds" | "fasdr" | "fasdl" | "fasdt" | "fab" | "fak" | "fakd";
-export type CssStyleClass = "fa-solid" | "fa-regular" | "fa-light" | "fa-thin" | "fa-duotone" | "fa-brands";
-export type IconStyle = "solid" | "regular" | "light" | "thin" | "duotone" | "brands";
+export type IconFamily = "classic" | "duotone" | "sharp" | "sharp-duotone" | "chisel" | "etch" | "jelly" | "jelly-duo" | "jelly-fill" | "notdog" | "notdog-duo" | "slab" | "slab-press" | "thumbprint" | "utility" | "utility-duo" | "utility-fill" | "whiteboard";
+export type IconPrefix = "fas" | "fass" | "far" | "fasr" | "fal" | "fasl" | "fat" | "fast" | "fad" | "fadr" | "fadl" | "fadt" | "fasds" | "fasdr" | "fasdl" | "fasdt" | "fab" | "faslr" | "faslpr" | "fawsb" | "fatl" | "fans" | "fands" | "faes" | "fajr" | "fajfr" | "fajdr" | "facr" | "fausb" | "faudsb" | "faufsb" | "fak" | "fakd";
+export type CssStyleClass = "fa-solid" | "fa-regular" | "fa-light" | "fa-thin" | "fa-duotone" | "fa-brands" | "fa-semibold";
+export type IconStyle = "solid" | "regular" | "light" | "thin" | "duotone" | "brands" | "semibold";
 export type IconPathData = string | string[]
 
 export interface IconLookup {
@@ -26,6 +26,7 @@ export interface IconPack {
 
 export type IconName = '0' | 
   '1' | 
+  '11ty' | 
   '2' | 
   '3' | 
   '4' | 
@@ -49,6 +50,7 @@ export type IconName = '0' |
   'affiliatetheme' | 
   'air-freshener' | 
   'airbnb' | 
+  'alarm-clock' | 
   'algolia' | 
   'align-center' | 
   'align-justify' | 
@@ -355,6 +357,7 @@ export type IconName = '0' |
   'burst' | 
   'bus' | 
   'bus-alt' | 
+  'bus-side' | 
   'bus-simple' | 
   'business-time' | 
   'buy-n-large' | 
@@ -410,6 +413,7 @@ export type IconName = '0' |
   'cart-flatbed-suitcase' | 
   'cart-plus' | 
   'cart-shopping' | 
+  'cash-app' | 
   'cash-register' | 
   'cat' | 
   'cc-amazon-pay' | 
@@ -677,6 +681,7 @@ export type IconName = '0' |
   'discourse' | 
   'disease' | 
   'display' | 
+  'disqus' | 
   'divide' | 
   'dizzy' | 
   'dna' | 
@@ -715,6 +720,7 @@ export type IconName = '0' |
   'dumpster' | 
   'dumpster-fire' | 
   'dungeon' | 
+  'duolingo' | 
   'dyalog' | 
   'e' | 
   'ear-deaf' | 
@@ -735,6 +741,7 @@ export type IconName = '0' |
   'eject' | 
   'elementor' | 
   'elevator' | 
+  'eleventy' | 
   'ellipsis' | 
   'ellipsis-h' | 
   'ellipsis-v' | 
@@ -882,6 +889,8 @@ export type IconName = '0' |
   'fill' | 
   'fill-drip' | 
   'film' | 
+  'film-alt' | 
+  'film-simple' | 
   'filter' | 
   'filter-circle-dollar' | 
   'filter-circle-xmark' | 
@@ -1015,6 +1024,8 @@ export type IconName = '0' |
   'grav' | 
   'greater-than' | 
   'greater-than-equal' | 
+  'grid-horizontal' | 
+  'grid-vertical' | 
   'grimace' | 
   'grin' | 
   'grin-alt' | 
@@ -1133,6 +1144,8 @@ export type IconName = '0' |
   'helicopter-symbol' | 
   'helmet-safety' | 
   'helmet-un' | 
+  'heptagon' | 
+  'hexagon' | 
   'hexagon-nodes' | 
   'hexagon-nodes-bolt' | 
   'highlighter' | 
@@ -1265,6 +1278,7 @@ export type IconName = '0' |
   'k' | 
   'kaaba' | 
   'kaggle' | 
+  'kakao-talk' | 
   'key' | 
   'keybase' | 
   'keyboard' | 
@@ -1326,6 +1340,7 @@ export type IconName = '0' |
   'link-slash' | 
   'linkedin' | 
   'linkedin-in' | 
+  'linktree' | 
   'linode' | 
   'linux' | 
   'lira-sign' | 
@@ -1358,6 +1373,8 @@ export type IconName = '0' |
   'long-arrow-up' | 
   'low-vision' | 
   'luggage-cart' | 
+  'lumon' | 
+  'lumon-drop' | 
   'lungs' | 
   'lungs-virus' | 
   'lyft' | 
@@ -1461,6 +1478,7 @@ export type IconName = '0' |
   'mobile-retro' | 
   'mobile-screen' | 
   'mobile-screen-button' | 
+  'mobile-vibrate' | 
   'modx' | 
   'monero' | 
   'money-bill' | 
@@ -1508,16 +1526,19 @@ export type IconName = '0' |
   'nimblr' | 
   'node' | 
   'node-js' | 
+  'non-binary' | 
   'not-equal' | 
   'notdef' | 
   'note-sticky' | 
   'notes-medical' | 
+  'notion' | 
   'npm' | 
   'ns8' | 
   'nutritionix' | 
   'o' | 
   'object-group' | 
   'object-ungroup' | 
+  'octagon' | 
   'octopus-deploy' | 
   'odnoklassniki' | 
   'odnoklassniki-square' | 
@@ -1526,6 +1547,7 @@ export type IconName = '0' |
   'oil-well' | 
   'old-republic' | 
   'om' | 
+  'openai' | 
   'opencart' | 
   'openid' | 
   'opensuse' | 
@@ -1546,6 +1568,7 @@ export type IconName = '0' |
   'palette' | 
   'palfed' | 
   'pallet' | 
+  'pandora' | 
   'panorama' | 
   'paper-plane' | 
   'paperclip' | 
@@ -1573,6 +1596,7 @@ export type IconName = '0' |
   'pencil-alt' | 
   'pencil-ruler' | 
   'pencil-square' | 
+  'pentagon' | 
   'people-arrows' | 
   'people-arrows-left-right' | 
   'people-carry' | 
@@ -1661,6 +1685,7 @@ export type IconName = '0' |
   'pinterest-p' | 
   'pinterest-square' | 
   'pix' | 
+  'pixelfed' | 
   'pixiv' | 
   'pizza-slice' | 
   'place-of-worship' | 
@@ -1857,6 +1882,7 @@ export type IconName = '0' |
   'seedling' | 
   'sellcast' | 
   'sellsy' | 
+  'septagon' | 
   'server' | 
   'servicestack' | 
   'shapes' | 
@@ -1914,6 +1940,8 @@ export type IconName = '0' |
   'signs-post' | 
   'sim-card' | 
   'simplybuilt' | 
+  'single-quote-left' | 
+  'single-quote-right' | 
   'sink' | 
   'sistrix' | 
   'sitemap' | 
@@ -1986,6 +2014,7 @@ export type IconName = '0' |
   'spell-check' | 
   'spider' | 
   'spinner' | 
+  'spiral' | 
   'splotch' | 
   'spoon' | 
   'spotify' | 
@@ -2005,6 +2034,7 @@ export type IconName = '0' |
   'square-dribbble' | 
   'square-envelope' | 
   'square-facebook' | 
+  'square-figma' | 
   'square-font-awesome' | 
   'square-font-awesome-stroke' | 
   'square-full' | 
@@ -2019,6 +2049,7 @@ export type IconName = '0' |
   'square-kickstarter' | 
   'square-lastfm' | 
   'square-letterboxd' | 
+  'square-linkedin' | 
   'square-minus' | 
   'square-nfi' | 
   'square-odnoklassniki' | 
@@ -2188,6 +2219,7 @@ export type IconName = '0' |
   'tent-arrows-down' | 
   'tents' | 
   'terminal' | 
+  'tex' | 
   'text-height' | 
   'text-slash' | 
   'text-width' | 
@@ -2221,6 +2253,7 @@ export type IconName = '0' |
   'ticket' | 
   'ticket-alt' | 
   'ticket-simple' | 
+  'tidal' | 
   'tiktok' | 
   'timeline' | 
   'times' | 
@@ -2234,6 +2267,8 @@ export type IconName = '0' |
   'toggle-on' | 
   'toilet' | 
   'toilet-paper' | 
+  'toilet-paper-alt' | 
+  'toilet-paper-blank' | 
   'toilet-paper-slash' | 
   'toilet-portable' | 
   'toilets-portable' | 
@@ -2382,7 +2417,7 @@ export type IconName = '0' |
   'van-shuttle' | 
   'vault' | 
   'vcard' | 
-  'vector-square' | 
+  'vector-polygon' | 
   'venus' | 
   'venus-double' | 
   'venus-mars' | 
@@ -2426,8 +2461,10 @@ export type IconName = '0' |
   'volume-xmark' | 
   'vote-yea' | 
   'vr-cardboard' | 
+  'vsco' | 
   'vuejs' | 
   'w' | 
+  'w3c' | 
   'walkie-talkie' | 
   'walking' | 
   'wallet' | 

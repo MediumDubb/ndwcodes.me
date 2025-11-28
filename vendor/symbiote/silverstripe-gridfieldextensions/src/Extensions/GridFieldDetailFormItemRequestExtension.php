@@ -8,7 +8,7 @@ use SilverStripe\Core\Extension;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridFieldDetailForm_ItemRequest as CoreGridFieldDetailForm_ItemRequest;
 use SilverStripe\Forms\LiteralField;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\HTML;
 use Symbiote\GridFieldExtensions\GridFieldAddNewMultiClass;
 use Symbiote\GridFieldExtensions\GridFieldExtensions;
@@ -21,7 +21,7 @@ class GridFieldDetailFormItemRequestExtension extends Extension
     /**
      * @param FieldList $actions
      */
-    public function updateFormActions(FieldList &$actions)
+    protected function updateFormActions(FieldList &$actions)
     {
         $grid = $this->owner->getGridField();
         $gridFieldConfig = $grid->getConfig();

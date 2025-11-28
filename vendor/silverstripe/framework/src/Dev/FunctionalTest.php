@@ -134,7 +134,6 @@ abstract class FunctionalTest extends SapphireTest implements TestOnly
 
     /**
      * Submit a get request
-     * @uses Director::test()
      *
      * @param string $url
      * @param Session $session
@@ -155,7 +154,6 @@ abstract class FunctionalTest extends SapphireTest implements TestOnly
     /**
      * Submit a post request
      *
-     * @uses Director::test()
      * @param string $url
      * @param array $data
      * @param array $headers
@@ -193,7 +191,7 @@ abstract class FunctionalTest extends SapphireTest implements TestOnly
      * @param array $data Map of GET/POST data.
      * @param bool $withSecurityToken Submit with the form's security token if there is one.
      */
-    public function submitForm(string $formID, string $button = null, array $data = [], bool $withSecurityToken = true): HTTPResponse
+    public function submitForm(string $formID, ?string $button = null, array $data = [], bool $withSecurityToken = true): HTTPResponse
     {
         $this->cssParser = null;
         $response = $this->mainSession->submitForm($formID, $button, $data, $withSecurityToken);

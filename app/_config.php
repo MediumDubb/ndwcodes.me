@@ -1,7 +1,7 @@
 <?php
 
-use SilverStripe\Forms\HTMLEditor\TinyMCEConfig;
 use SilverStripe\ORM\Search\FulltextSearchable;
+use SilverStripe\TinyMCE\TinyMCEConfig;
 
 FulltextSearchable::enable();
 

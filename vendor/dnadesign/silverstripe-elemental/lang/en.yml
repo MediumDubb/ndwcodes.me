@@ -66,10 +66,6 @@ en:
     Summary: Summary
     Title: Title
     Type: Type
-  DNADesign\Elemental\TopPage\DataExtension:
-    has_one_TopPage: 'Top page'
-  DNADesign\Elemental\TopPage\FluentExtension:
-    db_TopPageLocale: 'Top page locale'
   SilverStripe\CMS\Controllers\CMSPageHistoryController:
     PREVIEW: 'Website preview'
   SilverStripe\Versioned\VersionedGridFieldState\VersionedGridFieldState:

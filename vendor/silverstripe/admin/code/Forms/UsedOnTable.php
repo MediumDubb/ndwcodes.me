@@ -5,7 +5,7 @@ namespace SilverStripe\Admin\Forms;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Forms\FormField;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Versioned\RecursivePublishable;
 use SilverStripe\Versioned\Versioned;
@@ -77,15 +77,7 @@ class UsedOnTable extends FormField
             // Exclude classes from being queried and showing in the results via an extension hook
             $excludedClasses = [];
             $this->extend('updateUsageExcludedClasses', $excludedClasses);
-
             $usage = $record->findAllRelatedData($excludedClasses);
-
-            // Legacy extension hook kept for backwards compatibility
-            // Use 'updateUsageExcludedClasses' extension hook instead which prevents database from being queried
-            //
-            // Example: public function updateUsage(ArrayList &$usage, DataObject &$record)
-            //     $dataObjects = $usage->exclude('ClassName', MyDataObject::class);
-            $this->extend('updateUsage', $usage, $record);
         }
 
         $usageData = [];
@@ -102,7 +94,7 @@ class UsedOnTable extends FormField
                 'id' => $dataObject->ID,
                 'title' => $dataObject->getTitle() ?: _t(__CLASS__ . '.UNTITLED', 'Untitled'),
                 'type' => ucfirst($dataObject->i18n_singular_name() ?? ''),
-                'link' => $dataObject->hasMethod('CMSEditLink') ? $dataObject->CMSEditLink() : null,
+                'link' => $dataObject->getCMSEditLink(),
                 'ancestors' => []
             ];
 
@@ -115,7 +107,7 @@ class UsedOnTable extends FormField
             foreach ($ancestorDataObjects as $ancestorDataObject) {
                 $tableRowData['ancestors'][] = [
                     'title' => $ancestorDataObject->getTitle() ?: _t(__CLASS__ . '.UNTITLED', 'Untitled'),
-                    'link' => $ancestorDataObject->hasMethod('CMSEditLink') ? $ancestorDataObject->CMSEditLink() : null,
+                    'link' => $ancestorDataObject->getCMSEditLink(),
                 ];
             }
             $usageData[] = $tableRowData;
@@ -187,8 +179,6 @@ class UsedOnTable extends FormField
         $attributes = [
             'class' => $this->extraClass(),
             'id' => $this->ID(),
-            'data-schema' => json_encode($this->getSchemaData()),
-            'data-state' => json_encode($this->getSchemaState()),
         ];
 
         $attributes = array_merge($attributes, $this->attributes);

@@ -3,13 +3,11 @@
 namespace SilverStripe\CMS\Model;
 
 use Page;
-use SilverStripe\AssetAdmin\Forms\UploadField;
 use SilverStripe\Assets\File;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\HeaderField;
 use SilverStripe\Forms\OptionsetField;
-use SilverStripe\Forms\TextField;
-use SilverStripe\Forms\TreeDropdownField;
+use SilverStripe\Forms\UrlField;
 use SilverStripe\Versioned\Versioned;
 
 /**
@@ -23,17 +21,9 @@ use SilverStripe\Versioned\Versioned;
  */
 class RedirectorPage extends Page
 {
-    /**
-     * @deprecated 5.4.0 use class_description instead.
-     */
-    private static $description = 'Redirects requests to another location';
-
     private static string $class_description = 'Redirects requests to another location';
 
-    /**
-     * @deprecated 5.4.0 Will be renamed to cms_icon_class
-     */
-    private static $icon_class = 'font-icon-p-redirect';
+    private static $cms_icon_class = 'font-icon-p-redirect';
 
     private static $show_stage_link = false;
 
@@ -51,6 +41,16 @@ class RedirectorPage extends Page
     private static $has_one = [
         "LinkTo" => SiteTree::class,
         "LinkToFile" => File::class,
+    ];
+
+    private static array $scaffold_cms_fields_settings = [
+        'ignoreFields' => [
+            'RedirectionType',
+            'Content',
+        ],
+        'fieldClasses' => [
+            'ExternalURL' => UrlField::class,
+        ],
     ];
 
     private static $table_name = 'RedirectorPage';
@@ -175,45 +175,23 @@ class RedirectorPage extends Page
         }
     }
 
-    protected function onBeforeWrite()
-    {
-        parent::onBeforeWrite();
-
-        if ($this->ExternalURL && substr($this->ExternalURL ?? '', 0, 2) !== '//') {
-            $urlParts = parse_url($this->ExternalURL ?? '');
-            if ($urlParts) {
-                if (empty($urlParts['scheme'])) {
-                    // no scheme, assume http
-                    $this->ExternalURL = 'http://' . $this->ExternalURL;
-                } elseif (!in_array($urlParts['scheme'], [
-                    'http',
-                    'https',
-                ])) {
-                    // we only allow http(s) urls
-                    $this->ExternalURL = '';
-                }
-            } else {
-                // malformed URL to reject
-                $this->ExternalURL = '';
-            }
-        }
-    }
-
     public function getCMSFields()
     {
         $this->beforeUpdateCMSFields(function (FieldList $fields) {
-            $fields->removeByName('Content', true);
-
             // Remove all metadata fields, does not apply for redirector pages
             $fields->removeByName('Metadata');
+            $fields->dataFieldByName('ExternalURL')?->setAllowRelativeProtocol(true);
 
             $fields->addFieldsToTab(
                 'Root.Main',
                 [
-                    new HeaderField('RedirectorDescHeader', _t(__CLASS__.'.HEADER', "This page will redirect users to another page")),
-                    new OptionsetField(
-                        "RedirectionType",
-                        _t(__CLASS__.'.REDIRECTTO', "Redirect to"),
+                    HeaderField::create(
+                        'RedirectorDescHeader',
+                        _t(__CLASS__.'.HEADER', "This page will redirect users to another page")
+                    ),
+                    OptionsetField::create(
+                        'RedirectionType',
+                        $this->fieldLabel('RedirectionType'),
                         [
                             "Internal" => _t(__CLASS__.'.REDIRECTTOPAGE', "A page on your website"),
                             "External" => _t(__CLASS__.'.REDIRECTTOEXTERNAL', "Another website"),
@@ -221,14 +199,8 @@ class RedirectorPage extends Page
                         ],
                         "Internal"
                     ),
-                    new TreeDropdownField(
-                        "LinkToID",
-                        _t(__CLASS__.'.YOURPAGE', "Page on your website"),
-                        SiteTree::class
-                    ),
-                    new UploadField('LinkToFile', _t(__CLASS__.'.FILE', "File")),
-                    new TextField("ExternalURL", _t(__CLASS__.'.OTHERURL', "Other website URL"))
-                ]
+                ],
+                'ExternalURL'
             );
         });
 

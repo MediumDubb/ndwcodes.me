@@ -5,18 +5,17 @@ namespace SilverStripe\Forms\GridField;
 use SilverStripe\Core\Convert;
 use InvalidArgumentException;
 use LogicException;
-use SilverStripe\Dev\Deprecation;
+use SilverStripe\Model\ModelData;
 use SilverStripe\ORM\FieldType\DBField;
+use SilverStripe\ORM\FieldType\DBGenerated;
 use SilverStripe\ORM\FieldType\DBHTMLText;
 use SilverStripe\ORM\FieldType\DBHTMLVarchar;
-use SilverStripe\View\ViewableData;
 
 /**
  * @see GridField
  */
 class GridFieldDataColumns extends AbstractGridFieldComponent implements GridField_ColumnProvider
 {
-
     /**
      * @var array
      */
@@ -34,6 +33,15 @@ class GridFieldDataColumns extends AbstractGridFieldComponent implements GridFie
      */
     protected $displayFields = [];
 
+    private bool $displayStatusFlags = true;
+
+    private array $columnsForStatusFlag = [
+        'Title',
+        'Name',
+    ];
+
+    private ?string $statusFlagColumn = null;
+
     private bool $doEscapeFields = true;
 
     /**
@@ -49,6 +57,10 @@ class GridFieldDataColumns extends AbstractGridFieldComponent implements GridFie
 
         foreach ($baseColumns as $col) {
             $columns[] = $col;
+            // Find the column to add status flags to
+            if ($this->statusFlagColumn === null && in_array($col, $this->getColumnsForStatusFlag())) {
+                $this->statusFlagColumn = $col;
+            }
         }
 
         $columns = array_unique($columns ?? []);
@@ -63,6 +75,45 @@ class GridFieldDataColumns extends AbstractGridFieldComponent implements GridFie
     public function getColumnsHandled($gridField)
     {
         return array_keys($this->getDisplayFields($gridField) ?? []);
+    }
+
+    /**
+     * Set whether status flags are displayed in this gridfield
+     */
+    public function setDisplayStatusFlags(bool $display): static
+    {
+        $this->displayStatusFlags = $display;
+        return $this;
+    }
+
+    /**
+     * Get whether status flags are displayed in this gridfield
+     */
+    public function getDisplayStatusFlags(): bool
+    {
+        return $this->displayStatusFlags;
+    }
+
+    /**
+     * Set which columns can be used to display the status flags.
+     * The first column from this list found in the gridfield will be used.
+     */
+    public function setColumnsForStatusFlag(array $columns): static
+    {
+        if (empty($columns)) {
+            throw new InvalidArgumentException('Columns array must not be empty');
+        }
+        $this->columnsForStatusFlag = $columns;
+        return $this;
+    }
+
+    /**
+     * Get which columns can be used to display the status flags.
+     * The first column from this list found in the gridfield will be used.
+     */
+    public function getColumnsForStatusFlag(): array
+    {
+        return $this->columnsForStatusFlag;
     }
 
     /**
@@ -183,7 +234,7 @@ class GridFieldDataColumns extends AbstractGridFieldComponent implements GridFie
      * HTML for the column, content of the <td> element.
      *
      * @param GridField $gridField
-     * @param ViewableData $record Record displayed in this row
+     * @param ModelData $record Record displayed in this row
      * @param string $columnName
      * @return string HTML for the column. Return NULL to skip.
      */
@@ -210,6 +261,11 @@ class GridFieldDataColumns extends AbstractGridFieldComponent implements GridFie
         // Do any final escaping
         $value = $this->escapeValue($gridField, $value);
 
+        // Add on status flags
+        if ($this->getDisplayStatusFlags() && $columnName === $this->statusFlagColumn) {
+            $value .= $record->getStatusFlagMarkup('ss-gridfield-badge');
+        }
+
         return $value;
     }
 
@@ -217,7 +273,7 @@ class GridFieldDataColumns extends AbstractGridFieldComponent implements GridFie
      * Attributes for the element containing the content returned by {@link getColumnContent()}.
      *
      * @param  GridField $gridField
-     * @param  ViewableData $record displayed in this row
+     * @param  ModelData $record displayed in this row
      * @param  string $columnName
      * @return array
      */
@@ -251,31 +307,6 @@ class GridFieldDataColumns extends AbstractGridFieldComponent implements GridFie
     }
 
     /**
-     * Translate a Object.RelationName.ColumnName $columnName into the value that ColumnName returns
-     *
-     * @param ViewableData $record
-     * @param string $columnName
-     * @return string|null - returns null if it could not found a value
-     * @deprecated 5.4.0 Will be removed without equivalent functionality to replace it in a future major release.
-     */
-    protected function getValueFromRelation($record, $columnName)
-    {
-        Deprecation::notice('5.4.0', 'Will be removed without equivalent functionality to replace it in a future major release.');
-        $fieldNameParts = explode('.', $columnName ?? '');
-        $tmpItem = clone($record);
-        for ($idx = 0; $idx < sizeof($fieldNameParts ?? []); $idx++) {
-            $methodName = $fieldNameParts[$idx];
-            // Last mmethod call from $columnName return what that method is returning
-            if ($idx == sizeof($fieldNameParts ?? []) - 1) {
-                return $tmpItem->XML_val($methodName);
-            }
-            // else get the object from this $methodName
-            $tmpItem = $tmpItem->$methodName();
-        }
-        return null;
-    }
-
-    /**
      * Casts a field to a string which is safe to insert into HTML
      *
      * @param GridField $gridField
@@ -299,8 +330,7 @@ class GridFieldDataColumns extends AbstractGridFieldComponent implements GridFie
             } else {
                 if (!$this->getDoEscapeFields()
                     && is_a($value, DBField::class, false)
-                    && !is_a($value, DBHTMLText::class, false)
-                    && !is_a($value, DBHTMLVarchar::class, false)
+                    && !$this->fieldIsHtml($value)
                 ) {
                     // For DBFields other than HTML variants, if we're not escaping values, get the raw value.
                     $value = $value->RAW();
@@ -320,7 +350,7 @@ class GridFieldDataColumns extends AbstractGridFieldComponent implements GridFie
     /**
      *
      * @param GridField $gridField
-     * @param ViewableData $item
+     * @param ModelData $item
      * @param string $fieldName
      * @param string $value
      * @return string
@@ -360,5 +390,13 @@ class GridFieldDataColumns extends AbstractGridFieldComponent implements GridFie
             $value = str_replace($search ?? '', $replace ?? '', $value ?? '');
         }
         return $value;
+    }
+
+    private function fieldIsHtml(DBField $field): bool
+    {
+        if ($field instanceof DBGenerated) {
+            $field = $field->getChildField();
+        }
+        return is_a($field, DBHTMLText::class) || is_a($field, DBHTMLVarchar::class);
     }
 }

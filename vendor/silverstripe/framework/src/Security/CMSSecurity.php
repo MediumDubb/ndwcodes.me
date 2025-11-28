@@ -133,7 +133,7 @@ class CMSSecurity extends Security
 <!DOCTYPE html>
 <html><body>
 $message
-<script type="application/javascript">
+<script>
 setTimeout(function(){top.location.href = "$loginURLJS";}, 0);
 </script>
 </body></html>

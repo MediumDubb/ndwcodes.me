@@ -5,27 +5,10 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Component as Header } from '../Header';
 
-// Fixes issue when rendering reactstrap tooltip
-// Warning: `NaN` is an invalid value for the `left` css style property.
-// https://stackoverflow.com/a/70157330
-// Have refactored to not use an anonymous class with a static property being assigned
-// so that it passed eslint
-jest.mock('popper.js', () => {
-  const PopperJS = jest.requireActual('popper.js');
-  return {
-    __esModule: true,
-    default: jest.fn(() => ({
-      placements: PopperJS.placements,
-      destroy: () => {},
-      scheduleUpdate: () => {},
-    })),
-  };
-});
-
 function makeProps(obj = {}) {
   return {
     element: {
-      id: '0',
+      id: 0,
       title: 'Sample File Block',
     },
     areaId: 1,
@@ -56,7 +39,7 @@ test('Header should render the title', () => {
   const { container } = render(
     <Header {...makeProps({
       element: {
-        id: '12',
+        id: 12,
         title: 'Sample File Block'
       }
     })}
@@ -82,7 +65,7 @@ test('Header should contain a Tooltip', async () => {
   const { container } = render(
     <Header {...makeProps({
       element: {
-        id: '13',
+        id: 13,
         title: 'Sample File Block',
       }
     })}
@@ -97,7 +80,7 @@ test('Header should not contain a Tooltip for a broken element', async () => {
   const { container } = render(
     <Header {...makeProps({
       element: {
-        id: '13',
+        id: 13,
         title: 'Sample File Block',
       },
       type: {
@@ -187,7 +170,7 @@ test('Header should render an ElementActions component even when the element is 
 test('Header should render a versioned state message when the element is not published', () => {
   const { container } = render(<Header {...makeProps({
     element: {
-      id: '14',
+      id: 14,
       isPublished: false,
       liveVersion: false
     }
@@ -199,7 +182,7 @@ test('Header should render a versioned state message when the element is not pub
 test('Header should render a versioned state message when the element is modified', () => {
   const { container } = render(<Header {...makeProps({
     element: {
-      id: '14',
+      id: 14,
       isPublished: true,
       isLiveVersion: false
     }
@@ -211,7 +194,7 @@ test('Header should render a versioned state message when the element is modifie
 test('Header should not render a versioned state message when the element is published', () => {
   const { container } = render(<Header {...makeProps({
     element: {
-      id: '14',
+      id: 14,
       isPublished: true,
       isLiveVersion: true
     }
@@ -223,9 +206,15 @@ test('Header should not render a versioned state message when the element is pub
 test('Header should render a versioned draft badge when the element is not published', () => {
   const { container } = render(<Header {...makeProps({
     element: {
-      id: '14',
+      id: 14,
       isPublished: false,
-      liveVersion: false
+      liveVersion: false,
+      statusFlags: {
+        addedtodraft: {
+          text: 'Draft',
+          title: 'Item has not been published yet'
+        }
+      }
     }
   })}
   />);
@@ -240,9 +229,15 @@ test('Header should render a versioned draft badge when the element is not publi
 test('Header should render a versioned modified badge when the element is modified and not published', () => {
   const { container } = render(<Header {...makeProps({
     element: {
-      id: '14',
+      id: 14,
       isPublished: true,
-      isLiveVersion: false
+      isLiveVersion: false,
+      statusFlags: {
+        modified: {
+          text: 'Modified',
+          title: 'Item has unpublished changes'
+        }
+      }
     }
   })}
   />);

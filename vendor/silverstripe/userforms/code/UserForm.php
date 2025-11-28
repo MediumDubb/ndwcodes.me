@@ -3,15 +3,12 @@
 namespace SilverStripe\UserForms;
 
 use Colymba\BulkManager\BulkManager;
-use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Forms\CheckboxField;
 use SilverStripe\Forms\CompositeField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
-use SilverStripe\Forms\GridField\GridFieldAddNewButton;
 use SilverStripe\Forms\GridField\GridFieldButtonRow;
 use SilverStripe\Forms\GridField\GridFieldConfig;
-use SilverStripe\Forms\GridField\GridFieldConfig_RecordEditor;
 use SilverStripe\Forms\GridField\GridFieldDataColumns;
 use SilverStripe\Forms\GridField\GridFieldDeleteAction;
 use SilverStripe\Forms\GridField\GridFieldDetailForm;
@@ -26,18 +23,17 @@ use SilverStripe\Forms\HTMLEditor\HTMLEditorField;
 use SilverStripe\Forms\LabelField;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\TextField;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Forms\Validation\CompositeValidator;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DB;
 use SilverStripe\UserForms\Extension\UserFormFieldEditorExtension;
 use SilverStripe\UserForms\Extension\UserFormValidator;
 use SilverStripe\UserForms\Form\UserFormsGridFieldFilterHeader;
 use SilverStripe\UserForms\Model\Recipient\EmailRecipient;
-use SilverStripe\UserForms\Model\Recipient\UserFormRecipientItemRequest;
 use SilverStripe\UserForms\Model\Submission\SubmittedForm;
 use SilverStripe\UserForms\Model\EditableFormField;
 use SilverStripe\View\Requirements;
 use SilverStripe\Core\Config\Configurable;
-use SilverStripe\Dev\Deprecation;
 
 /**
  * Defines the user defined functionality to be applied to any {@link DataObject}
@@ -69,7 +65,7 @@ trait UserForm
     private static $email_template_directory = 'silverstripe/userforms:templates/email/';
 
     /**
-     * Should this module automatically upgrade on dev/build?
+     * Should this module automatically upgrade on db build?
      *
      * @config
      * @var bool
@@ -117,8 +113,8 @@ trait UserForm
      * @var array
      */
     private static $has_many = [
+        'EmailRecipients' => EmailRecipient::class,
         'Submissions' => SubmittedForm::class,
-        'EmailRecipients' => EmailRecipient::class
     ];
 
     private static $cascade_deletes = [
@@ -135,6 +131,17 @@ trait UserForm
      */
     private static $casting = [
         'ErrorContainerID' => 'Text'
+    ];
+
+    private static array $scaffold_cms_fields_settings = [
+        'ignoreFields' => [
+            'OnCompleteMessageLabel',
+            'OnCompleteMessage',
+            'DisableSaveSubmissions',
+        ],
+        'ignoreRelations' => [
+            'Submissions',
+        ],
     ];
 
     /**
@@ -163,12 +170,6 @@ trait UserForm
     private static $non_live_permissions = ['SITETREE_VIEW_ALL'];
 
     /**
-     * Unused property
-     * @deprecated 5.3.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    protected $fieldsFromTo = [];
-
-    /**
     * @var array
     */
     public function populateDefaults()
@@ -184,72 +185,42 @@ trait UserForm
     {
         Requirements::css('silverstripe/userforms:client/dist/styles/userforms-cms.css');
 
-        $this->beforeUpdateCMSFields(function ($fields) {
+        $this->beforeUpdateCMSFields(function (FieldList $fields) {
+            $fields->findTab('Root.EmailRecipients')
+                ?->setName('Recipients')
+                ?->setTitle(_t('SilverStripe\\UserForms\\Model\\UserDefinedForm.RECIPIENTS', 'Recipients'));
+            $fields->dataFieldByName('EmailRecipients')?->setTitle('');
 
-            // remove
-            $fields->removeByName([
-                'OnCompleteMessageLabel',
-                'OnCompleteMessage',
-                'Fields',
-                'EmailRecipients'
-            ]);
-
-            // define tabs
+            // Configuration options
             $fields->findOrMakeTab('Root.FormOptions')->setTitle(_t('SilverStripe\\UserForms\\Model\\UserDefinedForm.CONFIGURATION', 'Configuration'));
-            $fields->findOrMakeTab('Root.Recipients')->setTitle(_t('SilverStripe\\UserForms\\Model\\UserDefinedForm.RECIPIENTS', 'Recipients'));
-
-
-            // text to show on complete
-            $onCompleteFieldSet = CompositeField::create(
-                $label = LabelField::create(
-                    'OnCompleteMessageLabel',
-                    _t('SilverStripe\\UserForms\\Model\\UserDefinedForm.ONCOMPLETELABEL', 'Show on completion')
-                ),
-                $editor = HTMLEditorField::create(
-                    'OnCompleteMessage',
-                    '',
-                    $this->OnCompleteMessage
-                )
-            );
-
-            $onCompleteFieldSet->addExtraClass('field');
-
-            $editor->setRows(3);
-            $label->addExtraClass('left');
-
-            // Define config for email recipients
-            $emailRecipientsConfig = GridFieldConfig_RecordEditor::create(10);
-            $emailRecipientsConfig->getComponentByType(GridFieldAddNewButton::class)
-                ->setButtonName(
-                    _t('SilverStripe\\UserForms\\Model\\UserDefinedForm.ADDEMAILRECIPIENT', 'Add Email Recipient')
-                );
-
-            // who do we email on submission
-            $emailRecipients = GridField::create(
-                'EmailRecipients',
-                '',
-                $this->EmailRecipients(),
-                $emailRecipientsConfig
-            );
-            $emailRecipients
-                ->getConfig()
-                ->getComponentByType(GridFieldDetailForm::class)
-                ->setItemRequestClass(UserFormRecipientItemRequest::class);
-
-            $fields->addFieldsToTab('Root.FormOptions', $onCompleteFieldSet);
-            $fields->addFieldToTab('Root.Recipients', $emailRecipients);
-            $fields->addFieldsToTab('Root.FormOptions', $this->getFormOptions());
-
-            $submissions = $this->getSubmissionsGridField();
-            $fields->findOrMakeTab('Root.Submissions')->setTitle(_t('SilverStripe\\UserForms\\Model\\UserDefinedForm.SUBMISSIONS', 'Submissions'));
-            $fields->addFieldToTab('Root.Submissions', $submissions);
-            $fields->addFieldToTab(
-                'Root.FormOptions',
+            $fields->addFieldsToTab('Root.FormOptions', [
+                // text to show on complete
+                CompositeField::create(
+                    $label = LabelField::create(
+                        'OnCompleteMessageLabel',
+                        _t('SilverStripe\\UserForms\\Model\\UserDefinedForm.ONCOMPLETELABEL', 'Show on completion')
+                    ),
+                    $editor = HTMLEditorField::create(
+                        'OnCompleteMessage',
+                        '',
+                        $this->OnCompleteMessage
+                    )
+                )->addExtraClass('field'),
+                ...$this->getFormOptions()->toArray(),
                 CheckboxField::create(
                     'DisableSaveSubmissions',
                     _t('SilverStripe\\UserForms\\Model\\UserDefinedForm.SAVESUBMISSIONS', 'Disable Saving Submissions to Server')
                 )
-            );
+            ]);
+            $editor->setRows(3);
+            $label->addExtraClass('left');
+
+            $submissions = $this->getSubmissionsGridField();
+            $fields->findOrMakeTab('Root.Submissions')->setTitle(_t('SilverStripe\\UserForms\\Model\\UserDefinedForm.SUBMISSIONS', 'Submissions'));
+            $fields->addFieldToTab('Root.Submissions', $submissions);
+
+            // Fix tab order - otherwise recipients comes too early due to being scaffolded
+            $fields->findTab('Root')->changeTabOrder(['Main', 'FormOptions', 'Recipients', 'Submissions']);
         });
 
         $fields = parent::getCMSFields();
@@ -292,13 +263,13 @@ SQL;
 
         $config = GridFieldConfig::create();
         $config->addComponent(new GridFieldToolbarHeader());
-        $config->addComponent($sort = new GridFieldSortableHeader());
+        $config->addComponent(new GridFieldSortableHeader());
         $config->addComponent($filter = new UserFormsGridFieldFilterHeader());
         $config->addComponent(new GridFieldDataColumns());
         $config->addComponent(new GridFieldEditButton());
         $config->addComponent(new GridFieldDeleteAction());
         $config->addComponent(new GridFieldPageCount('toolbar-header-right'));
-        $config->addComponent($pagination = new GridFieldPaginator(25));
+        $config->addComponent(new GridFieldPaginator(25));
         $config->addComponent(new GridFieldDetailForm(null, true, false));
         $config->addComponent(new GridFieldButtonRow('after'));
         $config->addComponent($export = new GridFieldExportButton('buttons-after-left'));
@@ -319,12 +290,6 @@ SQL;
         if (class_exists(BulkManager::class)) {
             $config->addComponent(new BulkManager);
         }
-
-        Deprecation::withSuppressedNotice(function () use ($sort, $filter, $pagination) {
-            $sort->setThrowExceptionOnBadDataType(false);
-            $filter->setThrowExceptionOnBadDataType(false);
-            $pagination->setThrowExceptionOnBadDataType(false);
-        });
 
         // attach every column to the print view form
         $columns['Created'] = 'Created';
@@ -352,7 +317,7 @@ SQL;
     }
 
     /**
-     * Allow overriding the EmailRecipients on a {@link DataExtension}
+     * Allow overriding the EmailRecipients on a {@link Extension}
      * so you can customise who receives an email.
      * Converts the RelationList to an ArrayList so that manipulation
      * of the original source data isn't possible.
@@ -410,13 +375,10 @@ SQL;
         return $this->config()->get('error_container_id');
     }
 
-    /**
-     * Validate formfields
-     * @deprecated 6.4.0 Will be replaced with getCMSCompositeValidator() in a future major release
-     */
-    public function getCMSValidator()
+    public function getCMSCompositeValidator(): CompositeValidator
     {
-        Deprecation::noticeWithNoReplacment('6.4.0', 'Will be replaced with getCMSCompositeValidator() in a future major release');
-        return UserFormValidator::create();
+        $validator = parent::getCMSCompositeValidator();
+        $validator->addValidator(UserFormValidator::create());
+        return $validator;
     }
 }

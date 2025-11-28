@@ -3,10 +3,12 @@
 namespace SilverStripe\ORM\FieldType;
 
 use SilverStripe\Core\Config\Config;
+use SilverStripe\Forms\FormField;
 use SilverStripe\Forms\NullableField;
 use SilverStripe\Forms\TextField;
 use SilverStripe\ORM\Connect\MySQLDatabase;
 use SilverStripe\ORM\DB;
+use SilverStripe\Core\Validation\FieldValidation\StringFieldValidator;
 
 /**
  * Class Varchar represents a variable-length string of up to 255 characters, designed to store raw text
@@ -17,18 +19,22 @@ use SilverStripe\ORM\DB;
  */
 class DBVarchar extends DBString
 {
+    private static array $field_validators = [
+        StringFieldValidator::class => [
+            'minLength' => null,
+            'maxLength' => 'getSize',
+        ],
+    ];
 
-    private static $casting = [
+    private static array $casting = [
         'Initial' => 'Text',
         'URL' => 'Text',
     ];
 
     /**
      * Max size of this field
-     *
-     * @var int
      */
-    protected $size;
+    protected int $size;
 
     /**
      * Construct a new short text field
@@ -38,7 +44,7 @@ class DBVarchar extends DBString
      * @param array $options Optional parameters, e.g. array("nullifyEmpty"=>false).
      *                       See {@link StringField::setOptions()} for information on the available options
      */
-    public function __construct($name = null, $size = 255, $options = [])
+    public function __construct(?string $name = null, int $size = 255, array $options = [])
     {
         $this->size = $size ? $size : 255;
         parent::__construct($name, $options);
@@ -49,20 +55,24 @@ class DBVarchar extends DBString
      * can be useful if you want to have text fields with a length limit that
      * is dictated by the DB field.
      *
-     * TextField::create('Title')->setMaxLength(singleton('SiteTree')->dbObject('Title')->getSize())
+     * TextField::create('Title')->setMaxLength(singleton('SiteTree')->dbObject('Title')?->getSize())
      *
      * @return int The size of the field
      */
-    public function getSize()
+    public function getSize(): int
     {
         return $this->size;
     }
 
+    public function requireField(): void
+    {
+        DB::require_field($this->tableName, $this->name, $this->getFieldSpec());
+    }
+
     /**
-     * (non-PHPdoc)
-     * @see DBField::requireField()
+     * Get the specifications which will be used to generate this column in the database.
      */
-    public function requireField()
+    public function getFieldSpec(): string|array
     {
         $charset = Config::inst()->get(MySQLDatabase::class, 'charset');
         $collation = Config::inst()->get(MySQLDatabase::class, 'collation');
@@ -75,34 +85,28 @@ class DBVarchar extends DBString
             'arrayValue' => $this->arrayValue
         ];
 
-        $values = [
+        return [
             'type' => 'varchar',
             'parts' => $parts
         ];
-
-        DB::require_field($this->tableName, $this->name, $values);
     }
 
     /**
      * Return the first letter of the string followed by a .
-     *
-     * @return string
      */
-    public function Initial()
+    public function Initial(): string
     {
         if ($this->exists()) {
             $value = $this->RAW();
             return $value[0] . '.';
         }
-        return null;
+        return '';
     }
 
     /**
      * Ensure that the given value is an absolute URL.
-     *
-     * @return string
      */
-    public function URL()
+    public function URL(): string
     {
         $value = $this->RAW();
         if (preg_match('#^[a-zA-Z]+://#', $value ?? '')) {
@@ -113,14 +117,13 @@ class DBVarchar extends DBString
 
     /**
      * Return the value of the field in rich text format
-     * @return string
      */
-    public function RTF()
+    public function RTF(): string
     {
         return str_replace("\n", '\par ', $this->RAW() ?? '');
     }
 
-    public function scaffoldFormField($title = null, $params = null)
+    public function scaffoldFormField(?string $title = null, array $params = []): ?FormField
     {
         // Set field with appropriate size
         $field = TextField::create($this->name, $title);

@@ -13,7 +13,7 @@ use SilverStripe\Forms\FileField;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\NumericField;
 use SilverStripe\Forms\TreeDropdownField;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\InheritedPermissions;
 use SilverStripe\UserForms\Control\UserDefinedFormAdmin;
@@ -62,7 +62,7 @@ class EditableFileField extends EditableFormField
      * @param Folder|null $folder
      * @return string
      */
-    public static function getFolderPermissionString(Folder $folder = null)
+    public static function getFolderPermissionString(?Folder $folder = null)
     {
         $folderPermissions = static::getFolderPermissionTuple($folder);
 
@@ -84,7 +84,7 @@ class EditableFileField extends EditableFormField
      * @param Folder|null $folder
      * @return array
      */
-    private static function getFolderPermissionTuple(Folder $folder = null)
+    private static function getFolderPermissionTuple(?Folder $folder = null)
     {
         $viewersOptionsField = [
             InheritedPermissions::INHERIT => _t(__CLASS__.'.INHERIT', 'Visibility for this folder is inherited from the parent folder'),
@@ -179,10 +179,7 @@ class EditableFileField extends EditableFormField
         return parent::getCMSFields();
     }
 
-    /**
-     * @return ValidationResult
-     */
-    public function validate()
+    public function validate(): ValidationResult
     {
         $result = parent::validate();
 
@@ -275,7 +272,7 @@ class EditableFileField extends EditableFormField
         return round(static::get_php_max_file_size() / 1024 / 1024, 1);
     }
 
-    public function onBeforeWrite()
+    protected function onBeforeWrite()
     {
         parent::onBeforeWrite();
 

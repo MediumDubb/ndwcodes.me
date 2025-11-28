@@ -6,6 +6,7 @@ use SilverStripe\Control\Controller;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Injector\Injector;
+use SilverStripe\Core\Validation\ValidationException;
 use SilverStripe\Forms\GridField\AbstractGridFieldComponent;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridField_ActionProvider;
@@ -15,17 +16,16 @@ use SilverStripe\Forms\GridField\GridField_HTMLProvider;
 use SilverStripe\Forms\GridField\GridFieldFilterHeader;
 use SilverStripe\Forms\GridField\GridFieldPaginator;
 use SilverStripe\Forms\GridField\GridFieldSortableHeader;
+use SilverStripe\Model\ArrayData;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DataObjectSchema;
 use SilverStripe\ORM\DB;
 use SilverStripe\ORM\ManyManyList;
 use SilverStripe\ORM\ManyManyThroughList;
 use SilverStripe\ORM\RelationList;
-use SilverStripe\ORM\SS_List;
 use SilverStripe\ORM\UnsavedRelationList;
-use SilverStripe\ORM\ValidationException;
 use SilverStripe\Versioned\Versioned;
-use SilverStripe\View\ArrayData;
 use SilverStripe\View\Requirements;
 
 /**
@@ -253,6 +253,10 @@ class GridFieldSortableRows extends AbstractGridFieldComponent implements GridFi
             if ($many_many) {
                 $schema = Injector::inst()->get(DataObjectSchema::class);
                 $componentDetails = $schema->manyManyComponent(get_class($owner), (!empty($this->custom_relation_name) ? $this->custom_relation_name : $gridField->getName()));
+                if (empty($componentDetails)) {
+                    user_error('Could not find the relationship "' . (!empty($this->custom_relation_name) ? $this->custom_relation_name : $gridField->getName()) . '" on "' . get_class($owner) . '"', E_USER_ERROR);
+                }
+
                 $parentField = $componentDetails['parentField'];
                 $componentField = $componentDetails['childField'];
                 $table = $componentDetails['join'];
@@ -331,7 +335,7 @@ class GridFieldSortableRows extends AbstractGridFieldComponent implements GridFi
                 } else if ($this->append_to_top) {
                     if ($hasVersioned) {
                         // For versioned objects, modify them with the ORM so that the *_versions table is updated
-                        $itemsToUpdate = $modelClass::get()->where(($list instanceof RelationList ? '"' . $list->foreignKey . '" = ' . $owner->ID : $idCondition) . (!empty($topIncremented) ? ' AND "ID" NOT IN(\'' . implode('\',\'', $topIncremented) . '\')' : ''));
+                        $itemsToUpdate = $modelClass::get()->where(($list instanceof RelationList ? '"' . $list->foreignKey . '" = ' . $owner->ID : '"' . $table . '".' . $idCondition) . (!empty($topIncremented) ? ' AND "' . $table . '"."ID" NOT IN(\'' . implode('\',\'', $topIncremented) . '\')' : ''));
                         if ($itemsToUpdate->exists()) {
                             foreach ($itemsToUpdate as $item) {
                                 $item->$sortColumn = $item->$sortColumn + 1;
@@ -342,13 +346,13 @@ class GridFieldSortableRows extends AbstractGridFieldComponent implements GridFi
                         //Upgrade all the records (including the last inserted from 0 to 1)
                         DB::query('UPDATE "' . $table
                             . '" SET "' . $sortColumn . '" = "' . $sortColumn . '"+1'
-                            . ' WHERE ' . ($list instanceof RelationList ? '"' . $list->foreignKey . '" = ' . $owner->ID : $idCondition) . (!empty($topIncremented) ? ' AND "ID" NOT IN(\'' . implode('\',\'', $topIncremented) . '\')' : ''));
+                            . ' WHERE ' . ($list instanceof RelationList ? '"' . $list->foreignKey . '" = ' . $owner->ID : '"' . $table . '".' . $idCondition) . (!empty($topIncremented) ? ' AND "ID" NOT IN(\'' . implode('\',\'', $topIncremented) . '\')' : ''));
                     }
 
                     if ($this->update_versioned_stage && $this->hasVersionedExtension($gridField->getModelClass())) {
                         DB::query('UPDATE "' . $table . '_' . $this->update_versioned_stage
                             . '" SET "' . $sortColumn . '" = "' . $sortColumn . '"+1'
-                            . ' WHERE ' . ($list instanceof RelationList ? '"' . $list->foreignKey . '" = ' . $owner->ID : $idCondition) . (!empty($topIncremented) ? ' AND "ID" NOT IN(\'' . implode('\',\'', $topIncremented) . '\')' : ''));
+                            . ' WHERE ' . ($list instanceof RelationList ? '"' . $list->foreignKey . '" = ' . $owner->ID : '"' . $table . '_' . $this->update_versioned_stage . '".' . $idCondition) . (!empty($topIncremented) ? ' AND "ID" NOT IN(\'' . implode('\',\'', $topIncremented) . '\')' : ''));
                     }
 
                     $topIncremented[] = $obj->ID;
@@ -483,6 +487,10 @@ class GridFieldSortableRows extends AbstractGridFieldComponent implements GridFi
         if ($many_many) {
             $schema = Injector::inst()->get(DataObjectSchema::class);
             $componentDetails = $schema->manyManyComponent(get_class($owner), (!empty($this->custom_relation_name) ? $this->custom_relation_name : $gridField->getName()));
+            if (empty($componentDetails)) {
+                user_error('Could not find the relationship "' . (!empty($this->custom_relation_name) ? $this->custom_relation_name : $gridField->getName()) . '" on "' . get_class($owner) . '"', E_USER_ERROR);
+            }
+
             $parentField = $componentDetails['parentField'];
             $componentField = $componentDetails['childField'];
             $table = $componentDetails['join'];
@@ -522,7 +530,7 @@ class GridFieldSortableRows extends AbstractGridFieldComponent implements GridFi
         //Event to notify the Controller or owner DataObject before list sort
         if ($owner && $owner instanceof DataObject && method_exists($owner, 'onBeforeGridFieldRowSort')) {
             $owner->onBeforeGridFieldRowSort(clone $items);
-        } else if (Controller::has_curr() && Controller::curr() instanceof ModelAdmin && method_exists(Controller::curr(), 'onBeforeGridFieldRowSort')) {
+        } else if (Controller::curr() instanceof ModelAdmin && method_exists(Controller::curr(), 'onBeforeGridFieldRowSort')) {
             Controller::curr()->onBeforeGridFieldRowSort(clone $items);
         }
 
@@ -583,7 +591,7 @@ class GridFieldSortableRows extends AbstractGridFieldComponent implements GridFi
         //Event to notify the Controller or owner DataObject after list sort
         if ($owner && $owner instanceof DataObject && method_exists($owner, 'onAfterGridFieldRowSort')) {
             $owner->onAfterGridFieldRowSort(clone $items);
-        } else if (Controller::has_curr() && Controller::curr() instanceof ModelAdmin && method_exists(Controller::curr(), 'onAfterGridFieldRowSort')) {
+        } else if (Controller::curr() instanceof ModelAdmin && method_exists(Controller::curr(), 'onAfterGridFieldRowSort')) {
             Controller::curr()->onAfterGridFieldRowSort(clone $items);
         }
     }
@@ -655,7 +663,7 @@ class GridFieldSortableRows extends AbstractGridFieldComponent implements GridFi
         //Event to notify the Controller or owner DataObject before list sort
         if ($owner && $owner instanceof DataObject && method_exists($owner, 'onBeforeGridFieldPageSort')) {
             $owner->onBeforeGridFieldPageSort(clone $items);
-        } else if (Controller::has_curr() && Controller::curr() instanceof ModelAdmin && method_exists(Controller::curr(), 'onBeforeGridFieldPageSort')) {
+        } else if (Controller::curr() instanceof ModelAdmin && method_exists(Controller::curr(), 'onBeforeGridFieldPageSort')) {
             Controller::curr()->onBeforeGridFieldPageSort(clone $items);
         }
 
@@ -772,7 +780,7 @@ class GridFieldSortableRows extends AbstractGridFieldComponent implements GridFi
         //Event to notify the Controller or owner DataObject after list sort
         if ($owner && $owner instanceof DataObject && method_exists($owner, 'onAfterGridFieldPageSort')) {
             $owner->onAfterGridFieldPageSort(clone $items);
-        } else if (Controller::has_curr() && Controller::curr() instanceof ModelAdmin && method_exists(Controller::curr(), 'onAfterGridFieldPageSort')) {
+        } else if (Controller::curr() instanceof ModelAdmin && method_exists(Controller::curr(), 'onAfterGridFieldPageSort')) {
             Controller::curr()->onAfterGridFieldPageSort(clone $items);
         }
     }

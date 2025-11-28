@@ -7,6 +7,7 @@ use InvalidArgumentException;
 use SilverStripe\Assets\Folder;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBDatetime;
@@ -148,11 +149,12 @@ class TreeDropdownField extends FormField implements HasOneRelationFieldInterfac
     protected $baseID = 0;
 
     /**
-     * Default child method in Hierarchy->getChildrenAsUL
+     * Child method to use for Hierarchy->getChildrenAsUL
+     * If null will use config Hierarchy.tree_children_method
      *
      * @var string
      */
-    protected $childrenMethod = 'AllChildrenIncludingDeleted';
+    protected $childrenMethod = null;
 
     /**
      * Default child counting method in Hierarchy->getChildrenAsUL
@@ -391,7 +393,14 @@ class TreeDropdownField extends FormField implements HasOneRelationFieldInterfac
      */
     public function getChildrenMethod()
     {
-        return $this->childrenMethod;
+        if ($this->childrenMethod) {
+            return $this->childrenMethod;
+        }
+        $sourceClass = $this->getSourceObject();
+        /* @var DataObject&Hierarchy $obj */
+        $obj = DataObject::singleton($sourceClass);
+        $baseClass = $obj->getHierarchyBaseClass();
+        return $baseClass::config()->get('tree_children_method');
     }
 
     /**
@@ -469,7 +478,7 @@ class TreeDropdownField extends FormField implements HasOneRelationFieldInterfac
         }
 
         if ($id && !$request->requestVar('forceFullTree')) {
-            $obj = DataObject::get_by_id($sourceObject, $id);
+            $obj = DataObject::get($sourceObject)->setUseCache(true)->byID($id);
             $isSubTree = true;
             if (!$obj) {
                 throw new Exception(
@@ -478,7 +487,7 @@ class TreeDropdownField extends FormField implements HasOneRelationFieldInterfac
             }
         } else {
             if ($this->getTreeBaseID()) {
-                $obj = DataObject::get_by_id($sourceObject, $this->getTreeBaseID());
+                $obj = DataObject::get($sourceObject)->setUseCache(true)->byID($this->getTreeBaseID());
             }
 
             if (!$this->getTreeBaseID() || !$obj) {
@@ -519,13 +528,20 @@ class TreeDropdownField extends FormField implements HasOneRelationFieldInterfac
 
         // Allow to pass values to be selected within the ajax request
         $value = $request->requestVar('forceValue') ?: $this->value;
-        if ($value && ($values = preg_split('/,\s*/', $value ?? ''))) {
+        if ($value instanceof SS_List) {
+            $values = $value;
+        } elseif ($value) {
+            $values = preg_split('/,\s*/', $value ?? '');
+        } else {
+            $values = [];
+        }
+        if (!empty($values)) {
             foreach ($values as $value) {
                 if (!$value || $value == 'unchanged') {
                     continue;
                 }
 
-                $object = $this->objectForKey($value);
+                $object = is_object($value) ? $value : $this->objectForKey($value);
                 if (!$object) {
                     continue;
                 }
@@ -612,8 +628,6 @@ class TreeDropdownField extends FormField implements HasOneRelationFieldInterfac
         $attributes = [
             'class' => $this->extraClass(),
             'id' => $this->ID(),
-            'data-schema' => json_encode($this->getSchemaData()),
-            'data-state' => json_encode($this->getSchemaState()),
         ];
 
         $attributes = array_merge($attributes, $this->attributes);
@@ -859,7 +873,7 @@ class TreeDropdownField extends FormField implements HasOneRelationFieldInterfac
     {
         $data = parent::getSchemaStateDefaults();
         /** @var Hierarchy|DataObject $record */
-        $record = $this->Value() ? $this->objectForKey($this->Value()) : null;
+        $record = $this->getValue() ? $this->objectForKey($this->getValue()) : null;
 
         $data['data']['cacheKey'] = $this->getCacheKey();
         $data['data']['showSelectedPath'] = $this->getShowSelectedPath();
@@ -870,14 +884,14 @@ class TreeDropdownField extends FormField implements HasOneRelationFieldInterfac
                 $ancestors = $record->getAncestors(true)->reverse();
 
                 foreach ($ancestors as $parent) {
-                    $title = $parent->obj($this->getTitleField())->getValue();
+                    $title = $parent->obj($this->getTitleField())?->getValue();
                     $titlePath .= $title . '/';
                 }
             }
             $data['data']['valueObject'] = [
-                'id' => $record->obj($this->getKeyField())->getValue(),
-                'title' => $record->obj($this->getTitleField())->getValue(),
-                'treetitle' => $record->obj($this->getLabelField())->getSchemaValue(),
+                'id' => $record->obj($this->getKeyField())?->getValue(),
+                'title' => $record->obj($this->getTitleField())?->getValue(),
+                'treetitle' => $record->obj($this->getLabelField())?->getSchemaValue(),
                 'titlePath' => $titlePath,
             ];
         }

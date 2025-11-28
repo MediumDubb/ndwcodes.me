@@ -4,13 +4,12 @@ namespace SilverStripe\Versioned;
 
 use SilverStripe\Assets\Image;
 use SilverStripe\Core\Convert;
-use SilverStripe\Dev\Deprecation;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\FieldType\DBField;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\Parsers\HtmlDiff;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 
 /**
  * Utility class to render views of the differences between two data objects (or two versions of the
@@ -45,7 +44,7 @@ use SilverStripe\View\ViewableData;
  * $diff->ignoreFields('AuthorID', 'Status');
  * </code>
  */
-class DataDifferencer extends ViewableData
+class DataDifferencer extends ModelData
 {
     protected $fromRecord;
     protected $toRecord;
@@ -59,7 +58,7 @@ class DataDifferencer extends ViewableData
      * @param DataObject $fromRecord
      * @param DataObject $toRecord
      */
-    public function __construct(DataObject $fromRecord = null, DataObject $toRecord = null)
+    public function __construct(?DataObject $fromRecord = null, ?DataObject $toRecord = null)
     {
         $this->fromRecord = $fromRecord;
         $this->toRecord = $toRecord;
@@ -112,7 +111,7 @@ class DataDifferencer extends ViewableData
             if (!($toField instanceof DBField)) {
                 continue;
             }
-            $toValue = $toField->forTemplate();
+            $toValue = $toField?->forTemplate();
 
             // Show only to value
             if (!$this->fromRecord) {
@@ -125,7 +124,7 @@ class DataDifferencer extends ViewableData
             if (!($fromField instanceof DBField)) {
                 continue;
             }
-            $fromValue = $fromField->forTemplate();
+            $fromValue = $fromField?->forTemplate();
 
             // Show changes between the two, if any exist
             if ($fromValue != $toValue) {
@@ -193,7 +192,7 @@ class DataDifferencer extends ViewableData
         }
 
         // Format title
-        return $object->obj('Title')->forTemplate();
+        return $object->obj('Title')?->forTemplate();
     }
 
     /**

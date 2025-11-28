@@ -6,10 +6,13 @@ use IntlDateFormatter;
 use InvalidArgumentException;
 use NumberFormatter;
 use SilverStripe\Forms\DateField;
+use SilverStripe\Forms\FormField;
 use SilverStripe\i18n\i18n;
 use SilverStripe\ORM\DB;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Security;
+use SilverStripe\Model\ModelData;
+use SilverStripe\Core\Validation\FieldValidation\DateFieldValidator;
 
 /**
  * Represents a date field.
@@ -31,16 +34,21 @@ class DBDate extends DBField
 {
     /**
      * Standard ISO format string for date in CLDR standard format
+     * This is equivalent to php date format "Y-m-d" e.g. 2024-08-31
      */
-    const ISO_DATE = 'y-MM-dd';
+    public const ISO_DATE = 'y-MM-dd';
 
     /**
      * Fixed locale to use for ISO date formatting. This is necessary to prevent
      * locale-specific numeric localisation breaking internal date strings.
      */
-    const ISO_LOCALE = 'en_US';
+    public const ISO_LOCALE = 'en_US';
 
-    public function setValue($value, $record = null, $markChanged = true)
+    private static array $field_validators = [
+        DateFieldValidator::class,
+    ];
+
+    public function setValue(mixed $value, null|array|ModelData $record = null, bool $markChanged = true): static
     {
         $value = $this->parseDate($value);
         if ($value === false) {
@@ -58,7 +66,7 @@ class DBDate extends DBField
      * @param mixed $value
      * @return string|null|false Formatted date, null if empty but valid, or false if invalid
      */
-    protected function parseDate($value)
+    protected function parseDate(mixed $value): string|null|false
     {
         // Skip empty values
         if (empty($value) && !is_numeric($value)) {
@@ -89,13 +97,11 @@ class DBDate extends DBField
 
     /**
      * Returns the standard localised medium date
-     *
-     * @return ?string
      */
-    public function Nice()
+    public function Nice(): string
     {
         if (!$this->value) {
-            return null;
+            return '';
         }
         $formatter = $this->getFormatter();
         return $formatter->format($this->getTimestamp());
@@ -103,40 +109,32 @@ class DBDate extends DBField
 
     /**
      * Returns the year from the given date
-     *
-     * @return string
      */
-    public function Year()
+    public function Year(): string
     {
         return $this->Format('y');
     }
 
     /**
      * Returns the day of the week
-     *
-     * @return string
      */
-    public function DayOfWeek()
+    public function DayOfWeek(): string
     {
         return $this->Format('cccc');
     }
 
     /**
      * Returns a full textual representation of a month, such as January.
-     *
-     * @return string
      */
-    public function Month()
+    public function Month(): string
     {
         return $this->Format('LLLL');
     }
 
     /**
      * Returns the short version of the month such as Jan
-     *
-     * @return string
      */
-    public function ShortMonth()
+    public function ShortMonth(): string
     {
         return $this->Format('LLL');
     }
@@ -145,9 +143,8 @@ class DBDate extends DBField
      * Returns the day of the month.
      *
      * @param bool $includeOrdinal Include ordinal suffix to day, e.g. "th" or "rd"
-     * @return string
      */
-    public function DayOfMonth($includeOrdinal = false)
+    public function DayOfMonth(bool $includeOrdinal = false): string
     {
         $number = $this->Format('d');
         if ($includeOrdinal && $number) {
@@ -159,13 +156,11 @@ class DBDate extends DBField
 
     /**
      * Returns the date in the localised short format
-     *
-     * @return string
      */
-    public function Short()
+    public function Short(): string
     {
         if (!$this->value) {
-            return null;
+            return '';
         }
         $formatter = $this->getFormatter(IntlDateFormatter::SHORT);
         return $formatter->format($this->getTimestamp());
@@ -173,13 +168,11 @@ class DBDate extends DBField
 
     /**
      * Returns the date in the localised long format
-     *
-     * @return string
      */
-    public function Long()
+    public function Long(): string
     {
         if (!$this->value) {
-            return null;
+            return '';
         }
         $formatter = $this->getFormatter(IntlDateFormatter::LONG);
         return $formatter->format($this->getTimestamp());
@@ -187,13 +180,11 @@ class DBDate extends DBField
 
     /**
      * Returns the date in the localised full format
-     *
-     * @return string
      */
-    public function Full()
+    public function Full(): string
     {
         if (!$this->value) {
-            return null;
+            return '';
         }
         $formatter = $this->getFormatter(IntlDateFormatter::FULL);
         return $formatter->format($this->getTimestamp());
@@ -201,12 +192,8 @@ class DBDate extends DBField
 
     /**
      * Get date formatter
-     *
-     * @param int $dateLength
-     * @param int $timeLength
-     * @return IntlDateFormatter
      */
-    public function getFormatter($dateLength = IntlDateFormatter::MEDIUM, $timeLength = IntlDateFormatter::NONE)
+    public function getFormatter(int $dateLength = IntlDateFormatter::MEDIUM, int $timeLength = IntlDateFormatter::NONE): IntlDateFormatter
     {
         return $this->getCustomFormatter(null, null, $dateLength, $timeLength);
     }
@@ -216,16 +203,13 @@ class DBDate extends DBField
      *
      * @param string|null $locale The current locale, or null to use default
      * @param string|null $pattern Custom pattern to use for this, if required
-     * @param int $dateLength
-     * @param int $timeLength
-     * @return IntlDateFormatter
      */
     public function getCustomFormatter(
-        $locale = null,
-        $pattern = null,
-        $dateLength = IntlDateFormatter::MEDIUM,
-        $timeLength = IntlDateFormatter::NONE
-    ) {
+        ?string $locale = null,
+        ?string $pattern = null,
+        int $dateLength = IntlDateFormatter::MEDIUM,
+        int $timeLength = IntlDateFormatter::NONE
+    ): IntlDateFormatter {
         $locale = $locale ?: i18n::get_locale();
         $formatter = IntlDateFormatter::create($locale, $dateLength, $timeLength);
         if ($pattern) {
@@ -238,9 +222,8 @@ class DBDate extends DBField
      * Formatter used internally
      *
      * @internal
-     * @return IntlDateFormatter
      */
-    protected function getInternalFormatter()
+    protected function getInternalFormatter(): IntlDateFormatter
     {
         $formatter = $this->getCustomFormatter(DBDate::ISO_LOCALE, DBDate::ISO_DATE);
         $formatter->setLenient(false);
@@ -249,10 +232,8 @@ class DBDate extends DBField
 
     /**
      * Get standard ISO date format string
-     *
-     * @return string
      */
-    public function getISOFormat()
+    public function getISOFormat(): string
     {
         return DBDate::ISO_DATE;
     }
@@ -262,16 +243,13 @@ class DBDate extends DBField
      * for the day of the month ("1st", "2nd", "3rd" etc)
      *
      * @param string $format Format code string. See https://unicode-org.github.io/icu/userguide/format_parse/datetime
-     * @param string $locale Custom locale to use (add to signature in 5.0)
-     * @return ?string The date in the requested format
+     * @param string|null $locale Custom locale to use
+     * @return string The date in the requested format
      */
-    public function Format($format)
+    public function Format(string $format, ?string $locale = null): string
     {
-        // Note: soft-arg uses func_get_args() to respect semver. Add to signature in 5.0
-        $locale = func_num_args() > 1 ? func_get_arg(1) : null;
-
         if (!$this->value) {
-            return null;
+            return '';
         }
 
         // Replace {o} with ordinal representation of day of the month
@@ -285,10 +263,8 @@ class DBDate extends DBField
 
     /**
      * Get unix timestamp for this date
-     *
-     * @return int
      */
-    public function getTimestamp()
+    public function getTimestamp(): int
     {
         if ($this->value) {
             return strtotime($this->value ?? '');
@@ -299,10 +275,9 @@ class DBDate extends DBField
     /**
      * Return a date formatted as per a CMS user's settings.
      *
-     * @param Member $member
-     * @return boolean | string A date formatted as per user-defined settings.
+     * @return string A date formatted as per user-defined settings.
      */
-    public function FormatFromSettings($member = null)
+    public function FormatFromSettings(?Member $member = null): string
     {
         if (!$member) {
             $member = Security::getCurrentUser();
@@ -512,11 +487,18 @@ class DBDate extends DBField
         }
     }
 
-    public function requireField()
+    public function requireField(): void
+    {
+        DB::require_field($this->tableName, $this->name, $this->getFieldSpec());
+    }
+
+    /**
+     * Get the specifications which will be used to generate this column in the database.
+     */
+    public function getFieldSpec(): string|array
     {
         $parts = ['datatype' => 'date', 'arrayValue' => $this->arrayValue];
-        $values = ['type' => 'date', 'parts' => $parts];
-        DB::require_field($this->tableName, $this->name, $values);
+        return ['type' => 'date', 'parts' => $parts];
     }
 
     /**
@@ -575,7 +557,7 @@ class DBDate extends DBField
         return rawurlencode($this->Format(DBDate::ISO_DATE, DBDate::ISO_LOCALE) ?? '');
     }
 
-    public function scaffoldFormField($title = null, $params = null)
+    public function scaffoldFormField(?string $title = null, array $params = []): ?FormField
     {
         $field = DateField::create($this->name, $title);
         $field->setHTML5(true);
@@ -643,5 +625,15 @@ class DBDate extends DBField
         }
         $parts[] = $matches['time'];
         return $parts;
+    }
+
+    public static function getMinValue(): string
+    {
+        return '0000-00-00';
+    }
+
+    public static function getMaxValue(): string
+    {
+        return '9999-12-31';
     }
 }

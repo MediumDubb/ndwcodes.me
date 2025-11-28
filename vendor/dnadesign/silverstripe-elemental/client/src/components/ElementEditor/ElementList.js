@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { elementType } from 'types/elementType';
 import { elementTypeType } from 'types/elementTypeType';
@@ -6,188 +6,201 @@ import { compose } from 'redux';
 import { inject } from 'lib/Injector';
 import classNames from 'classnames';
 import i18n from 'i18n';
-import { DropTarget } from 'react-dnd';
-import { getDragIndicatorIndex } from 'lib/dragHelpers';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers';
 import { getElementTypeConfig } from 'state/editor/elementConfig';
 
-class ElementList extends Component {
-  constructor(props) {
-    super(props);
-    this.resetState = this.resetState.bind(this);
-    this.handleBeforeSubmitForm = this.handleBeforeSubmitForm.bind(this);
-    this.handleAfterSubmitResponse = this.handleAfterSubmitResponse.bind(this);
-    this.state = {
-      // saveAllElements will be set to true in entwine.js in the 'onbeforesubmitform' "hook"
-      // which is triggered by LeftAndMain submitForm()
-      saveAllElements: false,
-      // increment is also set in entwine.js in the 'onbeforesubmitform' "hook"
-      increment: 0,
-      hasUnsavedChangesBlockIDs: {},
-      validBlockIDs: {},
-    };
-    // Update the sharedObject so that setState() can be called from entwine.js
-    this.props.sharedObject.setState = this.setState.bind(this);
-  }
+function ElementList({
+  elements = [],
+  sharedObject = {
+    entwineResolve: () => {},
+    setState: null,
+  },
+  ElementComponent,
+  HoverBarComponent,
+  allowedElementTypes,
+  elementTypes,
+  areaId,
+  onDragEnd,
+  onDragStart,
+  dragging,
+  isLoading = false,
+  LoadingComponent,
+}) {
+  // saveAllElements will be set to true in entwine.js in the 'onbeforesubmitform' "hook"
+  // which is triggered by LeftAndMain submitForm()
+  const [saveAllElements, setSaveAllElements] = useState(false);
+  // increment is also set in entwine.js in the 'onbeforesubmitform' "hook"
+  const [increment, setIncrement] = useState(0);
+  const [hasUnsavedChangesBlockIDs, setHasUnsavedChangesBlockIDs] = useState({});
+  const [validBlockIDs, setValidBlockIDs] = useState({});
 
-  componentDidUpdate(prevProps, prevState) {
-    // Scenario: save/publish buttons clicked before the elemental area is rendered
-    if (!this.props.blocks && !prevProps.blocks) {
-      return;
-    }
-    // Scenario: blocks props just changed after a graphql query response updated it
-    if (this.props.blocks !== prevProps.blocks) {
-      this.resetState(prevState, false);
-      return;
-    }
-    // Scenario we've just clicked "save" or "submit" on the form
-    if (this.state.saveAllElements && !prevState.saveAllElements) {
-      // Reset the validation state of all blocks.
-      // This mirrors handleBeforeSubmitForm() for individual blocks.
-      this.resetState(prevState, false);
-      return;
-    }
-    // Scenario Saving all elements and state has just updated because of a formSchema response from
-    // an inline save - see Element.js handleFormSchemaSubmitResponse()
-    if (this.state.saveAllElements) {
-      const unsavedChangesBlockIDs = this.props.blocks
-        .map(block => parseInt(block.id, 10))
-        .filter(blockID => this.state.hasUnsavedChangesBlockIDs[blockID]);
-      const allValidated = unsavedChangesBlockIDs.every(blockID => this.state.validBlockIDs[blockID] !== null);
-      if (allValidated) {
-        const allValid = unsavedChangesBlockIDs.every(blockID => this.state.validBlockIDs[blockID]);
-        // entwineResolve is bound in entwine.js
-        const result = {
-          success: allValid,
-          reason: allValid ? '' : 'invalid',
-        };
-        this.props.sharedObject.entwineResolve(result);
-        this.resetState(prevState, allValid);
-        this.setState({ saveAllElements: false });
-      }
-    }
-  }
+  // Update the sharedObject so state can be set from entwine.js
+  sharedObject.setIncrement = setIncrement;
+  sharedObject.setSaveAllElements = setSaveAllElements;
 
-  resetState(prevState, resetHasUnsavedChangesBlockIDs) {
+  const resetState = (oldHasUnsavedChangesBlockIDs, resetHasUnsavedChangesBlockIDs) => {
     // hasUnsavedChangesBlockIDs is the block dirty state and uses a boolean
-    const hasUnsavedChangesBlockIDs = {};
+    const newHasUnsavedChangesBlockIDs = {};
     // validBlockIDs is the block validation state and uses a tri-state
     // - null: not saved
     // - true: saved, valid
     // - false: attempted save, invalid
-    const validBlockIDs = {};
-    const blocks = this.props.blocks || [];
-    blocks.forEach(block => {
-      const blockID = parseInt(block.id, 10);
+    const newValidBlockIDs = {};
+    const allElements = elements || [];
+    allElements.forEach(element => {
+      const blockID = parseInt(element.id, 10);
       if (resetHasUnsavedChangesBlockIDs) {
-        hasUnsavedChangesBlockIDs[blockID] = false;
-      } else if (prevState.hasUnsavedChangesBlockIDs.hasOwnProperty(blockID)) {
-        hasUnsavedChangesBlockIDs[blockID] = prevState.hasUnsavedChangesBlockIDs[blockID];
+        newHasUnsavedChangesBlockIDs[blockID] = false;
+      } else if (oldHasUnsavedChangesBlockIDs.hasOwnProperty(blockID)) {
+        newHasUnsavedChangesBlockIDs[blockID] = oldHasUnsavedChangesBlockIDs[blockID];
       } else {
-        hasUnsavedChangesBlockIDs[blockID] = false;
+        newHasUnsavedChangesBlockIDs[blockID] = false;
       }
-      validBlockIDs[blockID] = null;
+      newValidBlockIDs[blockID] = null;
     });
-    this.setState({ hasUnsavedChangesBlockIDs, validBlockIDs });
-  }
+    setHasUnsavedChangesBlockIDs(newHasUnsavedChangesBlockIDs);
+    setValidBlockIDs(newValidBlockIDs);
+  };
 
-  handleChangeHasUnsavedChanges(elementID, hasUnsavedChanges) {
-    this.setState(prevState => ({
-      hasUnsavedChangesBlockIDs: {
-        ...prevState.hasUnsavedChangesBlockIDs,
-        [elementID]: hasUnsavedChanges,
-      },
-    }));
-  }
+  // Replaces componentDidMount
+  useEffect(() => {
+    resetState({}, true);
+  }, []);
 
-  handleBeforeSubmitForm(elementID) {
-    this.setState(prevState => ({
-      validBlockIDs: {
-        ...prevState.validBlockIDs,
-        [elementID]: null,
-      },
-    }));
-  }
+  // Replaces componentDidUpdate for changed elements
+  useEffect(() => {
+    // Scenario: elements props just changed after an xhr response updated it
+    resetState(hasUnsavedChangesBlockIDs, false);
+  }, [elements]);
 
-  handleAfterSubmitResponse(elementID, valid) {
-    this.setState(prevState => ({
-      hasUnsavedChangesBlockIDs: {
-        ...prevState.hasUnsavedChangesBlockIDs,
-        [elementID]: !valid,
-      },
-      validBlockIDs: {
-        ...prevState.validBlockIDs,
-        [elementID]: valid,
-      },
-    }));
-  }
+  let skipRemainingEffects = false;
+  useEffect(() => {
+    // Scenario we've just clicked "save" or "submit" on the form
+    if (saveAllElements) {
+      // Reset the validation state of all blocks.
+      // This mirrors handleBeforeSubmitForm() for individual blocks.
+      resetState(hasUnsavedChangesBlockIDs, false);
+      // We need the state change to take effect before continuing,
+      // so skip remaining effects until the next event cycle.
+      skipRemainingEffects = true;
+    }
+  }, [saveAllElements]);
 
-  getDragIndicatorIndex() {
-    const { dragTargetElementId, draggedItem, blocks, dragSpot } = this.props;
-    return getDragIndicatorIndex(
-      blocks.map(element => element.id),
-      dragTargetElementId,
-      draggedItem && draggedItem.id,
-      dragSpot
-    );
-  }
+  // Replaces componentDidUpdate for everything else
+  useEffect(() => {
+    if (skipRemainingEffects) {
+      return;
+    }
+
+    // Don't do anything if elements have not yet been recieved from xhr request
+    if (!elements) {
+      return;
+    }
+    // Scenario Saving all elements and state has just updated because of a formSchema response from
+    // an inline save - see Element.js handleFormSchemaSubmitResponse()
+    if (!saveAllElements) {
+      return;
+    }
+
+    const unsavedChangesBlockIDs = elements
+      .map(block => parseInt(block.id, 10))
+      .filter(blockID => hasUnsavedChangesBlockIDs[blockID]);
+    let allValidated = true;
+    for (let i = 0; i < unsavedChangesBlockIDs.length; i++) {
+      const blockID = unsavedChangesBlockIDs[i];
+      if (validBlockIDs[blockID] === null) {
+        allValidated = false;
+        break;
+      }
+    }
+
+    if (!allValidated) {
+      return;
+    }
+
+    const allValid = unsavedChangesBlockIDs.every(blockID => validBlockIDs[blockID]);
+    // entwineResolve is bound in entwine.js
+    const result = {
+      success: allValid,
+      reason: allValid ? '' : 'invalid',
+    };
+    sharedObject.entwineResolve(result);
+    resetState(hasUnsavedChangesBlockIDs, allValid);
+    setSaveAllElements(false);
+  }, [saveAllElements, hasUnsavedChangesBlockIDs]);
+
+  const sensors = useSensors(
+    // Pointer sensor is for touch and mouse.
+    // The activation constraint allows clicking and small twitches without starting a "drag".
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 10
+      }
+    }),
+  );
+
+  const handleChangeHasUnsavedChanges = (elementID, hasUnsavedChanges) => {
+    setHasUnsavedChangesBlockIDs({
+      ...hasUnsavedChangesBlockIDs,
+      [elementID]: hasUnsavedChanges,
+    });
+  };
+
+  const handleBeforeSubmitForm = (elementID) => {
+    setValidBlockIDs({
+      ...validBlockIDs,
+      [elementID]: null,
+    });
+  };
+
+  const handleAfterSubmitResponse = (elementID, valid) => {
+    setHasUnsavedChangesBlockIDs({
+      ...hasUnsavedChangesBlockIDs,
+      [elementID]: !valid,
+    });
+    setValidBlockIDs({
+      ...validBlockIDs,
+      [elementID]: valid,
+    });
+  };
 
   /**
    * Renders a list of Element components, each with an elementType object
-   * of data mapped into it. The data is provided by a GraphQL HOC registered
-   * in registerTransforms.js.
+   * of data mapped into it.
    */
-  renderBlocks() {
-    const {
-      ElementComponent,
-      HoverBarComponent,
-      DragIndicatorComponent,
-      blocks,
-      allowedElementTypes,
-      elementTypes,
-      areaId,
-      onDragEnd,
-      onDragOver,
-      onDragStart,
-      isDraggingOver,
-    } = this.props;
-
-    // Blocks can be either null or an empty array
-    if (!blocks) {
-      return null;
-    }
-
-    if (blocks && !blocks.length) {
+  const renderBlocks = () => {
+    if (elements.length === 0) {
       return <div>{i18n._t('ElementList.ADD_BLOCKS', 'Add blocks to place your content')}</div>;
     }
 
-    let output = blocks.map(element => {
-      const saveElement = this.state.saveAllElements && this.state.hasUnsavedChangesBlockIDs[element.id];
-      return <div key={element.id}>
+    let output = elements.map(element => {
+      const saveElement = saveAllElements && hasUnsavedChangesBlockIDs[element.id];
+      return <>
         <ElementComponent
+          key={element.id}
           element={element}
           areaId={areaId}
           type={getElementTypeConfig(element, elementTypes)}
           link={element.blockSchema.actions.edit}
-          onDragOver={onDragOver}
-          onDragEnd={onDragEnd}
-          onDragStart={onDragStart}
           saveElement={saveElement}
-          onChangeHasUnsavedChanges={(hasUnsavedChanges) => this.handleChangeHasUnsavedChanges(element.id, hasUnsavedChanges)}
-          onBeforeSubmitForm={() => this.handleBeforeSubmitForm(element.id)}
-          onAfterSubmitResponse={(valid) => this.handleAfterSubmitResponse(element.id, valid)}
-          increment={this.state.increment}
+          onChangeHasUnsavedChanges={(hasUnsavedChanges) => handleChangeHasUnsavedChanges(element.id, hasUnsavedChanges)}
+          onBeforeSubmitForm={() => handleBeforeSubmitForm(element.id)}
+          onAfterSubmitResponse={(valid) => handleAfterSubmitResponse(element.id, valid)}
+          increment={increment}
         />
-        {isDraggingOver || <HoverBarComponent
+        {dragging === false && <HoverBarComponent
           key={`create-after-${element.id}`}
           areaId={areaId}
           elementId={element.id}
           elementTypes={allowedElementTypes}
         />}
-      </div>;
+      </>;
     });
 
     // Add a insert point above the first block for consistency
-    if (!isDraggingOver) {
+    if (dragging === false) {
       output = [
         <HoverBarComponent
           key={0}
@@ -198,97 +211,59 @@ class ElementList extends Component {
       ].concat(output);
     }
 
-    const dragIndicatorIndex = this.getDragIndicatorIndex();
-    if (isDraggingOver && dragIndicatorIndex !== null) {
-      output.splice(dragIndicatorIndex, 0, <DragIndicatorComponent key="DropIndicator" />);
-    }
-
-    return output;
-  }
+    return <DndContext
+      modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+    >
+      <SortableContext
+        items={elements.map(element => element.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        {output}
+      </SortableContext>
+    </DndContext>;
+  };
 
   /**
    * Renders a loading component
    *
    * @returns {LoadingComponent|null}
    */
-  renderLoading() {
-    const { loading, LoadingComponent } = this.props;
-
-    if (loading) {
+  const renderLoading = () => {
+    if (isLoading) {
       return <LoadingComponent />;
     }
     return null;
-  }
+  };
 
-  render() {
-    const { blocks } = this.props;
-    const listClassNames = classNames(
-      'elemental-editor-list',
-      { 'elemental-editor-list--empty': !blocks || !blocks.length }
-    );
+  const listClassNames = classNames(
+    'elemental-editor-list',
+    { 'elemental-editor-list--empty': !elements || !elements.length }
+  );
 
-    return this.props.connectDropTarget(
-      <div className={listClassNames}>
-        {this.renderLoading()}
-        {this.renderBlocks()}
-      </div>
-    );
-  }
+  return <div className={listClassNames}>
+    {renderLoading()}
+    {renderBlocks()}
+  </div>;
 }
 
 ElementList.propTypes = {
-  blocks: PropTypes.arrayOf(elementType),
+  elements: PropTypes.arrayOf(elementType).isRequired,
   elementTypes: PropTypes.arrayOf(elementTypeType).isRequired,
   allowedElementTypes: PropTypes.arrayOf(elementTypeType).isRequired,
-  loading: PropTypes.bool,
   areaId: PropTypes.number.isRequired,
-  dragTargetElementId: PropTypes.oneOfType([PropTypes.string, PropTypes.bool]),
-  onDragOver: PropTypes.func,
   onDragStart: PropTypes.func,
   onDragEnd: PropTypes.func,
+  dragging: PropTypes.oneOf([PropTypes.bool, PropTypes.number]),
   sharedObject: PropTypes.object.isRequired,
-};
-
-ElementList.defaultProps = {
-  blocks: [],
-  loading: false,
-  sharedObject: {
-    entwineResolve: () => {},
-    setState: null,
-  },
 };
 
 export { ElementList as Component };
 
-const elementListTarget = {
-  drop(props, monitor) {
-    const { blocks } = props;
-    const elementTargetDropResult = monitor.getDropResult();
-
-    if (!elementTargetDropResult) {
-      return {};
-    }
-
-    const dropIndex = getDragIndicatorIndex(
-      blocks.map(element => element.id),
-      elementTargetDropResult.target,
-      monitor.getItem(),
-      elementTargetDropResult.dropSpot,
-    );
-    const dropAfterID = blocks[dropIndex - 1] ? blocks[dropIndex - 1].id : '0';
-
-    return {
-      ...elementTargetDropResult,
-      dropAfterID,
-    };
-  },
-};
-
 export default compose(
-  DropTarget('element', elementListTarget, (connector, monitor) => ({
-    connectDropTarget: connector.dropTarget(),
-    draggedItem: monitor.getItem(),
-  })),
   inject(
     ['Element', 'Loading', 'HoverBar', 'DragPositionIndicator'],
     (ElementComponent, LoadingComponent, HoverBarComponent, DragIndicatorComponent) => ({

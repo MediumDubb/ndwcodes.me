@@ -3,13 +3,13 @@
 namespace SilverStripe\Security;
 
 use SilverStripe\Forms\GridField\GridFieldDetailForm_ItemRequest;
-use SilverStripe\Forms\RequiredFields;
+use SilverStripe\Forms\Validation\RequiredFieldsValidator;
 
 /**
  * Member Validator
  *
  * Custom validation for the Member object can be achieved either through an
- * {@link DataExtension} on the Member_Validator object or, by specifying a subclass of
+ * {@link Extension} on the Member_Validator object or, by specifying a subclass of
  * {@link Member_Validator} through the {@link Injector} API.
  * The Validator can also be modified by adding an Extension to Member and implement the
  * <code>updateValidator</code> hook.
@@ -22,7 +22,7 @@ use SilverStripe\Forms\RequiredFields;
  *     - Surname
  * </code>
  */
-class Member_Validator extends RequiredFields
+class Member_Validator extends RequiredFieldsValidator
 {
     /**
      * Fields that are required by this validator
@@ -147,12 +147,8 @@ class Member_Validator extends RequiredFields
             if (!isset($data['DirectGroups'])) {
                 $stillAdmin = false;
             } else {
-                $adminGroups = array_intersect(
-                    $data['DirectGroups'] ?? [],
-                    Permission::get_groups_by_permission('ADMIN')->column()
-                );
-
-                if (count($adminGroups ?? []) === 0) {
+                $adminGroups = Permission::get_groups_by_permission('ADMIN')->filter(['ID' => $data['DirectGroups']]);
+                if (!$adminGroups->exists()) {
                     $stillAdmin = false;
                 }
             }
@@ -166,6 +162,7 @@ class Member_Validator extends RequiredFields
                     ),
                     'required'
                 );
+                $valid = false;
             }
         }
 

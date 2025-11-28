@@ -5,7 +5,7 @@ namespace SilverStripe\Security\MemberAuthenticator;
 use InvalidArgumentException;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Core\Extensible;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Authenticator;
 use SilverStripe\Security\DefaultAdminService;
 use SilverStripe\Security\LoginAttempt;
@@ -31,7 +31,7 @@ class MemberAuthenticator implements Authenticator
             | Authenticator::RESET_PASSWORD | Authenticator::CHECK_PASSWORD;
     }
 
-    public function authenticate(array $data, HTTPRequest $request, ValidationResult &$result = null)
+    public function authenticate(array $data, HTTPRequest $request, ?ValidationResult &$result = null)
     {
         return Security::withMinimumExecutionTime(function () use ($data, $request, &$result) {
             // Find authenticated member
@@ -64,7 +64,7 @@ class MemberAuthenticator implements Authenticator
      * @param Member $member This third parameter is used in the CMSAuthenticator(s)
      * @return Member Found member, regardless of successful login
      */
-    protected function authenticateMember($data, ValidationResult &$result = null, Member $member = null)
+    protected function authenticateMember($data, ?ValidationResult &$result = null, ?Member $member = null)
     {
         $email = !empty($data['Email']) ? $data['Email'] : null;
         $result = $result ?: ValidationResult::create();
@@ -137,7 +137,7 @@ class MemberAuthenticator implements Authenticator
      * @param ValidationResult $result
      * @return ValidationResult
      */
-    public function checkPassword(Member $member, $password, ValidationResult &$result = null)
+    public function checkPassword(Member $member, $password, ?ValidationResult &$result = null)
     {
         // Check if allowed to login
         $result = $member->validateCanLogin($result);
@@ -197,18 +197,18 @@ class MemberAuthenticator implements Authenticator
             $attempt->Status = LoginAttempt::SUCCESS;
 
             // Audit logging hook
-            $member->extend('authenticationSucceeded');
+            $member->extend('onAuthenticationSucceeded');
         } else {
             // Failed login - we're trying to see if a user exists with this email (disregarding wrong passwords)
             $attempt->Status = LoginAttempt::FAILURE;
             if ($member) {
                 // Audit logging hook
                 $attempt->MemberID = $member->ID;
-                $member->extend('authenticationFailed', $data, $request);
+                $member->extend('onAuthenticationFailed', $data, $request);
             } else {
                 // Audit logging hook
                 Member::singleton()
-                   ->extend('authenticationFailedUnknownUser', $data, $request);
+                   ->extend('onAuthenticationFailedUnknownUser', $data, $request);
             }
         }
 

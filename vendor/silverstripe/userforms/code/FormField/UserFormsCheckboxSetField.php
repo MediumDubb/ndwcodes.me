@@ -2,8 +2,8 @@
 
 namespace SilverStripe\UserForms\FormField;
 
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Forms\CheckboxSetField;
-use SilverStripe\UserForms\Model\EditableFormField;
 
 /**
  * @package userforms
@@ -12,10 +12,10 @@ class UserFormsCheckboxSetField extends CheckboxSetField
 {
 
     /**
-     * If your project uses a custom UserFormsCheckboxSetField.ss, ensure that it includes
+     * If your project uses a custom UserFormsCheckboxSetField template, ensure that it includes
      * `$Top.getValidationAttributesHTML().RAW` so that custom validation messages work
      * For further details see
-     * templates/SilverStripe/UserForms/FormField/UserFormsCheckboxSetField.ss
+     * templates/SilverStripe/UserForms/FormField/UserFormsCheckboxSetField template
      *
      * Use on a template with .RAW - single and double quoted strings will be safely escaped
      *
@@ -45,33 +45,16 @@ class UserFormsCheckboxSetField extends CheckboxSetField
         return $options;
     }
 
-    /**
-     * @inheritdoc
-     *
-     * @param Validator $validator
-     *
-     * @return bool
-     */
-    public function validate($validator)
+    public function getValueForValidation(): mixed
     {
-        // get the previous values (could contain comma-delimited list)
-
-        $previous = $value = $this->Value();
-
-        if (is_string($value) && strstr($value ?? '', ",")) {
-            $value = explode(",", $value ?? '');
+        $value = $this->getValue();
+        if (is_iterable($value) || is_null($value)) {
+            return $value;
         }
-
-        // set the value as an array for parent validation
-
-        $this->setValue($value);
-
-        $validated = parent::validate($validator);
-
-        // restore previous value after validation
-
-        $this->setValue($previous);
-
-        return $validated;
+        // Value may contain a comma-delimited list of values
+        if (is_string($value) && strstr($value, ',')) {
+            return explode(',', $value);
+        }
+        return [$value];
     }
 }

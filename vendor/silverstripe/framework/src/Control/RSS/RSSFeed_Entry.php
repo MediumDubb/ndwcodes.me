@@ -5,7 +5,7 @@ namespace SilverStripe\Control\RSS;
 use SilverStripe\Control\Director;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBHTMLText;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 use BadMethodCallException;
 
 /**
@@ -15,15 +15,8 @@ use BadMethodCallException;
  *
  * @see RSSFeed
  */
-class RSSFeed_Entry extends ViewableData
+class RSSFeed_Entry extends ModelData
 {
-    /**
-     * The object that represents the item, it contains all the data.
-     *
-     * @var mixed
-     */
-    protected $failover;
-
     /**
      * Name of the title field of feed entries
      *
@@ -47,14 +40,14 @@ class RSSFeed_Entry extends ViewableData
 
     /**
      * Create a new RSSFeed entry.
-     * @param ViewableData $entry
+     * @param ModelData $entry
      * @param string $titleField
      * @param string $descriptionField
      * @param string $authorField
      */
     public function __construct($entry, $titleField, $descriptionField, $authorField)
     {
-        $this->failover = $entry;
+        $this->setFailover($entry);
         $this->titleField = $titleField;
         $this->descriptionField = $descriptionField;
         $this->authorField = $authorField;
@@ -65,7 +58,7 @@ class RSSFeed_Entry extends ViewableData
     /**
      * Get the description of this entry
      *
-     * @return DBField Returns the description of the entry.
+     * @return DBField|null Returns the description of the entry.
      */
     public function Title()
     {
@@ -75,7 +68,7 @@ class RSSFeed_Entry extends ViewableData
     /**
      * Get the description of this entry
      *
-     * @return DBField Returns the description of the entry.
+     * @return DBField|null Returns the description of the entry.
      */
     public function Description()
     {
@@ -92,7 +85,7 @@ class RSSFeed_Entry extends ViewableData
     /**
      * Get the author of this entry
      *
-     * @return DBField Returns the author of the entry.
+     * @return DBField|null Returns the author of the entry.
      */
     public function Author()
     {
@@ -103,7 +96,7 @@ class RSSFeed_Entry extends ViewableData
      * Return the safely casted field
      *
      * @param string $fieldName Name of field
-     * @return DBField
+     * @return DBField|null
      */
     public function rssField($fieldName)
     {

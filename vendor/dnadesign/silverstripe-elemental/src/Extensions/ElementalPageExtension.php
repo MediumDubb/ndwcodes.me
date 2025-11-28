@@ -6,7 +6,6 @@ use DNADesign\Elemental\Models\BaseElement;
 use DNADesign\Elemental\Models\ElementalArea;
 use SilverStripe\CMS\Model\SiteTree;
 use SilverStripe\Control\Controller;
-use SilverStripe\Dev\Deprecation;
 use SilverStripe\View\Parsers\HTMLValue;
 use SilverStripe\View\SSViewer;
 
@@ -28,6 +27,12 @@ class ElementalPageExtension extends ElementalAreasExtension
 
     private static $cascade_duplicates = [
         'ElementalArea',
+    ];
+
+    private static array $scaffold_cms_fields_settings = [
+        'ignoreFields' => [
+            'ElementalArea',
+        ],
     ];
 
     /**
@@ -104,7 +109,7 @@ class ElementalPageExtension extends ElementalAreasExtension
     /**
      * @see SiteTree::getAnchorsOnPage()
      */
-    public function updateAnchorsOnPage(array &$anchors): void
+    protected function updateAnchorsOnPage(array &$anchors): void
     {
         if (!($this->owner instanceof SiteTree)) {
             return;
@@ -114,16 +119,12 @@ class ElementalPageExtension extends ElementalAreasExtension
         });
     }
 
-    /**
-     * @deprecated 5.4.0 Will be renamed to updateMetaTags()
-     */
-    public function MetaTags(&$tags)
+    protected function updateMetaTags(&$tags)
     {
-        Deprecation::noticeWithNoReplacment('5.4.0', 'Will be renamed to updateMetaTags()');
-        if (!Controller::has_curr()) {
+        $controller = Controller::curr();
+        if ($controller === null) {
             return;
         }
-        $controller = Controller::curr();
         $request = $controller->getRequest();
         if ($request->getVar('ElementalPreview') !== null) {
             $html = HTMLValue::create($tags);

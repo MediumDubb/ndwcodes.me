@@ -10,28 +10,23 @@ use SilverStripe\Security\IdentityStore;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\RememberLoginHash;
 use SilverStripe\Security\Security;
-use SilverStripe\Dev\Deprecation;
 
 /**
  * Authenticate a member passed on a session cookie
  */
 class CookieAuthenticationHandler implements AuthenticationHandler
 {
+    private string $deviceCookieName = '';
+
+    private string $tokenCookieName = '';
+
+    private bool $tokenCookieSecure = true;
 
     /**
-     * @var string
+     * The SameSite value to use for authentication cookies.
+     * If set to an empty string, the default value from Cookie.default_samesite will be used.
      */
-    private $deviceCookieName;
-
-    /**
-     * @var string
-     */
-    private $tokenCookieName;
-
-    /**
-     * @var boolean
-     */
-    private $tokenCookieSecure = false;
+    private string $tokenCookieSameSite = Cookie::SAMESITE_STRICT;
 
     /**
      * @var IdentityStore
@@ -40,21 +35,16 @@ class CookieAuthenticationHandler implements AuthenticationHandler
 
     /**
      * Get the name of the cookie used to track this device
-     *
-     * @return string
      */
-    public function getDeviceCookieName()
+    public function getDeviceCookieName(): string
     {
         return $this->deviceCookieName;
     }
 
     /**
      * Set the name of the cookie used to track this device
-     *
-     * @param string $deviceCookieName
-     * @return $this
      */
-    public function setDeviceCookieName($deviceCookieName)
+    public function setDeviceCookieName(string $deviceCookieName): static
     {
         $this->deviceCookieName = $deviceCookieName;
         return $this;
@@ -62,45 +52,57 @@ class CookieAuthenticationHandler implements AuthenticationHandler
 
     /**
      * Get the name of the cookie used to store an login token
-     *
-     * @return string
      */
-    public function getTokenCookieName()
+    public function getTokenCookieName(): string
     {
         return $this->tokenCookieName;
     }
 
     /**
      * Set the name of the cookie used to store an login token
-     *
-     * @param string $tokenCookieName
-     * @return $this
      */
-    public function setTokenCookieName($tokenCookieName)
+    public function setTokenCookieName(string $tokenCookieName): static
     {
         $this->tokenCookieName = $tokenCookieName;
         return $this;
     }
 
     /**
-     * Get the name of the cookie used to store an login token
-     *
-     * @return string
+     * Get whether the cookie used to store an login token is "secure" or not
      */
-    public function getTokenCookieSecure()
+    public function getTokenCookieSecure(): bool
     {
+        if ($this->getTokenCookieSameSite() === Cookie::SAMESITE_NONE) {
+            return true;
+        }
         return $this->tokenCookieSecure;
     }
 
     /**
-     * Set cookie with HTTPS only flag
-     *
-     * @param string $tokenCookieSecure
-     * @return $this
+     * Set whether the cookie used to store an login token is "secure" or not
      */
-    public function setTokenCookieSecure($tokenCookieSecure)
+    public function setTokenCookieSecure(bool $tokenCookieSecure): static
     {
         $this->tokenCookieSecure = $tokenCookieSecure;
+        return $this;
+    }
+
+    /**
+     * Get the "SameSite" attribute of authentication token cookies.
+     * Empty string means the value from Cookie.default_samesite will be used.
+     */
+    public function getTokenCookieSameSite(): string
+    {
+        return $this->tokenCookieSameSite;
+    }
+
+    /**
+     * Set the "SameSite" attribute of authentication token cookies.
+     * Setting to an empty string means the value from Cookie.default_samesite will be used.
+     */
+    public function setTokenCookieSameSite(string $tokenCookieSameSite): static
+    {
+        $this->tokenCookieSameSite = $tokenCookieSameSite;
         return $this;
     }
 
@@ -175,22 +177,8 @@ class CookieAuthenticationHandler implements AuthenticationHandler
             $this->cascadeInTo->logIn($member, false, $request);
         }
 
-        // Renew the token
-        Deprecation::withSuppressedNotice(fn() => $rememberLoginHash->renew());
-
-        // Send the new token to the client if it was changed
-        if ($rememberLoginHash->getToken()) {
-            $tokenExpiryDays = RememberLoginHash::config()->uninherited('token_expiry_days');
-            Cookie::set(
-                $this->getTokenCookieName(),
-                $member->ID . ':' . $rememberLoginHash->getToken(),
-                $tokenExpiryDays,
-                null,
-                null,
-                false,
-                true
-            );
-        }
+        // Session renewal hook
+        $rememberLoginHash->extend('onAfterRenewSession');
 
         // Audit logging hook
         $member->extend('memberAutoLoggedIn');
@@ -203,7 +191,7 @@ class CookieAuthenticationHandler implements AuthenticationHandler
      * @param bool $persistent
      * @param HTTPRequest $request
      */
-    public function logIn(Member $member, $persistent = false, HTTPRequest $request = null)
+    public function logIn(Member $member, $persistent = false, ?HTTPRequest $request = null)
     {
         // Cleans up any potential previous hash for this member on this device
         if ($alcDevice = Cookie::get($this->getDeviceCookieName())) {
@@ -216,6 +204,7 @@ class CookieAuthenticationHandler implements AuthenticationHandler
             $tokenExpiryDays = RememberLoginHash::config()->uninherited('token_expiry_days');
             $deviceExpiryDays = RememberLoginHash::config()->uninherited('device_expiry_days');
             $secure = $this->getTokenCookieSecure();
+            $sameSite = $this->getTokenCookieSameSite();
             Cookie::set(
                 $this->getTokenCookieName(),
                 $member->ID . ':' . $rememberLoginHash->getToken(),
@@ -223,7 +212,8 @@ class CookieAuthenticationHandler implements AuthenticationHandler
                 null,
                 null,
                 $secure,
-                true
+                true,
+                $sameSite
             );
             Cookie::set(
                 $this->getDeviceCookieName(),
@@ -232,7 +222,8 @@ class CookieAuthenticationHandler implements AuthenticationHandler
                 null,
                 null,
                 $secure,
-                true
+                true,
+                $sameSite
             );
         } else {
             // Clear a cookie for non-persistent log-ins
@@ -243,7 +234,7 @@ class CookieAuthenticationHandler implements AuthenticationHandler
     /**
      * @param HTTPRequest $request
      */
-    public function logOut(HTTPRequest $request = null)
+    public function logOut(?HTTPRequest $request = null)
     {
         $member = Security::getCurrentUser();
         if ($member) {
@@ -264,9 +255,10 @@ class CookieAuthenticationHandler implements AuthenticationHandler
     protected function clearCookies()
     {
         $secure = $this->getTokenCookieSecure();
-        Cookie::set($this->getTokenCookieName(), null, null, null, null, $secure);
-        Cookie::set($this->getDeviceCookieName(), null, null, null, null, $secure);
-        Cookie::force_expiry($this->getTokenCookieName(), null, null, null, null, $secure);
-        Cookie::force_expiry($this->getDeviceCookieName(), null, null, null, null, $secure);
+        $sameSite = $this->getTokenCookieSameSite();
+        Cookie::set($this->getTokenCookieName(), false, 0, secure: $secure, sameSite: $sameSite);
+        Cookie::set($this->getDeviceCookieName(), false, 0, secure: $secure, sameSite: $sameSite);
+        Cookie::force_expiry($this->getTokenCookieName(), secure: $secure, sameSite: $sameSite);
+        Cookie::force_expiry($this->getDeviceCookieName(), secure: $secure, sameSite: $sameSite);
     }
 }

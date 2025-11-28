@@ -4,10 +4,11 @@ namespace SilverStripe\Security;
 
 use SilverStripe\Admin\SecurityAdmin;
 use SilverStripe\Core\Convert;
-use SilverStripe\Forms\CompositeValidator;
+use SilverStripe\Forms\Validation\CompositeValidator;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\Form;
+use SilverStripe\Forms\FormField;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridFieldAddExistingAutocompleter;
 use SilverStripe\Forms\GridField\GridFieldButtonRow;
@@ -22,18 +23,21 @@ use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\HTMLEditor\HTMLEditorConfig;
 use SilverStripe\Forms\ListboxField;
 use SilverStripe\Forms\LiteralField;
-use SilverStripe\Forms\RequiredFields;
+use SilverStripe\Forms\Validation\RequiredFieldsValidator;
 use SilverStripe\Forms\Tab;
 use SilverStripe\Forms\TabSet;
 use SilverStripe\Forms\TextareaField;
 use SilverStripe\Forms\TextField;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Forms\TreeDropdownField;
+use SilverStripe\Forms\TreeMultiselectField;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DataQuery;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\Hierarchy\Hierarchy;
 use SilverStripe\ORM\ManyManyList;
 use SilverStripe\ORM\UnsavedRelationList;
+use SilverStripe\Core\Validation\ValidationResult;
 
 /**
  * A security group.
@@ -85,12 +89,14 @@ class Group extends DataObject
 
     private static $table_name = "Group";
 
+    private static bool $must_use_primary_db = true;
+
     private static $indexes = [
         'Title' => true,
         'Code' => true,
         'Sort' => true,
     ];
-    
+
     private static bool $require_sudo_mode = true;
 
     public function getAllChildren()
@@ -299,6 +305,35 @@ class Group extends DataObject
         return $labels;
     }
 
+    public function scaffoldFormFieldForHasOne(
+        string $fieldName,
+        ?string $fieldTitle,
+        string $relationName,
+        DataObject $ownerRecord
+    ): FormField {
+        return TreeDropdownField::create($fieldName, $fieldTitle, static::class);
+    }
+
+    public function scaffoldFormFieldForHasMany(
+        string $relationName,
+        ?string $fieldTitle,
+        DataObject $ownerRecord,
+        bool &$includeInOwnTab
+    ): FormField {
+        $includeInOwnTab = false;
+        return TreeMultiselectField::create($relationName, $fieldTitle, static::class);
+    }
+
+    public function scaffoldFormFieldForManyMany(
+        string $relationName,
+        ?string $fieldTitle,
+        DataObject $ownerRecord,
+        bool &$includeInOwnTab
+    ): FormField {
+        $includeInOwnTab = false;
+        return TreeMultiselectField::create($relationName, $fieldTitle, static::class);
+    }
+
     /**
      * Get many-many relation to {@link Member},
      * including all members which are "inherited" from children groups of this record.
@@ -433,7 +468,7 @@ class Group extends DataObject
      */
     protected function identifierToGroupID($groupID)
     {
-        if (is_numeric($groupID) && Group::get()->byID($groupID)) {
+        if (is_numeric($groupID) && Group::get()->filter('ID', $groupID)->exists()) {
             return $groupID;
         } elseif (is_string($groupID) && $groupByCode = Group::get()->filter(['Code' => $groupID])->first()) {
             return $groupByCode->ID;
@@ -463,16 +498,6 @@ class Group extends DataObject
     }
 
     /**
-     * @return string
-     */
-    public function getTreeTitle()
-    {
-        $title = htmlspecialchars($this->Title ?? '', ENT_QUOTES);
-        $this->extend('updateTreeTitle', $title);
-        return $title;
-    }
-
-    /**
      * Overloaded to ensure the code is always descent.
      *
      * @param string $val
@@ -482,7 +507,7 @@ class Group extends DataObject
         $this->setField('Code', Convert::raw2url($val));
     }
 
-    public function validate()
+    public function validate(): ValidationResult
     {
         $result = parent::validate();
 
@@ -490,18 +515,21 @@ class Group extends DataObject
         // and require an admin to perform this change in case it does.
         // This prevents "sub-admin" users with group editing permissions to increase their privileges.
         if ($this->Parent()->exists() && !Permission::check('ADMIN')) {
-            $inheritedCodes = Permission::get()
-                ->filter('GroupID', $this->Parent()->collateAncestorIDs())
-                ->column('Code');
             $privilegedCodes = Permission::config()->get('privileged_permissions');
-            if (array_intersect($inheritedCodes ?? [], $privilegedCodes)) {
-                $result->addError(
-                    _t(
-                        'SilverStripe\\Security\\Group.HierarchyPermsError',
-                        'Can\'t assign parent group "{group}" with privileged permissions (requires ADMIN access)',
-                        ['group' => $this->Parent()->Title]
-                    )
-                );
+            if (!empty($privilegedCodes)) {
+                $inheritedCodes = Permission::get()->filter([
+                    'GroupID' => $this->Parent()->collateAncestorIDs(),
+                    'Code' => $privilegedCodes,
+                ]);
+                if ($inheritedCodes->exists()) {
+                    $result->addError(
+                        _t(
+                            'SilverStripe\\Security\\Group.HierarchyPermsError',
+                            'Can\'t assign parent group "{group}" with privileged permissions (requires ADMIN access)',
+                            ['group' => $this->Parent()->Title]
+                        )
+                    );
+                }
             }
         }
 
@@ -527,14 +555,14 @@ class Group extends DataObject
     {
         $validator = parent::getCMSCompositeValidator();
 
-        $validator->addValidator(RequiredFields::create([
+        $validator->addValidator(RequiredFieldsValidator::create([
             'Title'
         ]));
 
         return $validator;
     }
 
-    public function onBeforeWrite()
+    protected function onBeforeWrite()
     {
         parent::onBeforeWrite();
 
@@ -549,7 +577,7 @@ class Group extends DataObject
         $this->dedupeCode();
     }
 
-    public function onBeforeDelete()
+    protected function onBeforeDelete()
     {
         parent::onBeforeDelete();
 

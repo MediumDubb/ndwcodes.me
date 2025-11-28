@@ -17,7 +17,7 @@ use SilverStripe\Core\Environment;
  */
 class ManifestCacheFactory extends DefaultCacheFactory
 {
-    public function __construct(array $args = [], LoggerInterface $logger = null)
+    public function __construct(array $args = [], ?LoggerInterface $logger = null)
     {
         // Build default manifest logger
         if (!$logger) {
@@ -33,14 +33,9 @@ class ManifestCacheFactory extends DefaultCacheFactory
     }
 
     /**
-     * Note: While the returned object is used as a singleton (by the originating Injector->get() call),
-     * this cache object shouldn't be a singleton itself - it has varying constructor args for the same service name.
-     *
-     * @param string $service The class name of the service.
-     * @param array $params The constructor parameters.
-     * @return CacheInterface
+     * @inheritDoc
      */
-    public function create($service, array $params = [])
+    public function create(string $service, array $params = []): CacheInterface
     {
         // Override default cache generation with SS_MANIFESTCACHE
         $cacheClass = Environment::getEnv('SS_MANIFESTCACHE');

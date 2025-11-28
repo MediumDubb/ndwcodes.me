@@ -21,17 +21,16 @@ use SilverStripe\Forms\GridField\GridFieldPaginator;
 use SilverStripe\Forms\GridField\GridFieldPrintButton;
 use SilverStripe\Forms\GridField\GridFieldSortableHeader;
 use SilverStripe\Forms\LiteralField;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\CMSPreviewable;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataQuery;
-use SilverStripe\ORM\Limitable;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Permission;
 use SilverStripe\Security\Security;
-use SilverStripe\View\ArrayData;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ArrayData;
+use SilverStripe\Model\ModelData;
 
 /**
  * Base "abstract" class creating reports on your data.
@@ -64,7 +63,7 @@ use SilverStripe\View\ViewableData;
  * @method SS_List|DataList sourceRecords($params = [], $sort = null, $limit = null)
  *      List of records to show for this report
  */
-class Report extends ViewableData
+class Report extends ModelData
 {
     /**
      * This is the title of the report,
@@ -239,7 +238,7 @@ class Report extends ViewableData
         }
         // Some reports may not use the $limit parameter in sourceRecords since it isn't actually
         // used anywhere else - so make sure we limit record counts if possible.
-        if ($sourceRecords instanceof Limitable) {
+        if ($sourceRecords instanceof SS_List) {
             $sourceRecords = $sourceRecords->limit($limit);
         }
         return $sourceRecords->count();
@@ -431,7 +430,7 @@ class Report extends ViewableData
                         if ($item instanceof CMSPreviewable) {
                             return sprintf(
                                 '<a class="grid-field__link-block" href="%s" title="%s">%s</a>',
-                                Convert::raw2att($item->CMSEditLink()),
+                                Convert::raw2att($item->getCMSEditLink()),
                                 Convert::raw2att($value),
                                 Convert::raw2xml($value)
                             );

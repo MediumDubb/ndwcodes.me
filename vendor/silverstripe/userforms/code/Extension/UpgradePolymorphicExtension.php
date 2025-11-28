@@ -4,11 +4,10 @@ namespace SilverStripe\UserForms\Extension;
 
 use SilverStripe\Control\Director;
 use SilverStripe\Core\Injector\Injector;
-use SilverStripe\Dev\Deprecation;
-use SilverStripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\ValidationException;
+use SilverStripe\Core\Validation\ValidationException;
 use SilverStripe\UserForms\Model\EditableFormField;
 use SilverStripe\UserForms\Model\Recipient\EmailRecipient;
 use SilverStripe\UserForms\Model\Submission\SubmittedForm;
@@ -16,16 +15,16 @@ use SilverStripe\UserForms\Model\UserDefinedForm;
 use SilverStripe\UserForms\UserForm;
 
 /**
- * This extension provides a hook that runs during a dev/build which will check for existing data in various
+ * This extension provides a hook that runs when building the db which will check for existing data in various
  * polymorphic relationship fields for userforms models, and ensure that the data is correct.
  *
  * Various `Parent` relationships in silverstripe/userforms for SilverStripe 3 were mapped directly to UserDefinedForm
  * instances, and were made polymorphic in SilverStripe 4 (which also requires a class name). This means that a
  * certain amount of manual checking is required to ensure that upgrades are performed smoothly.
  *
- * @extends DataExtension<UserDefinedForm>
+ * @extends Extension<UserDefinedForm>
  */
-class UpgradePolymorphicExtension extends DataExtension
+class UpgradePolymorphicExtension extends Extension
 {
     /**
      * A list of userforms classes that have had polymorphic relationships added in SilverStripe 4, and the fields
@@ -46,12 +45,8 @@ class UpgradePolymorphicExtension extends DataExtension
      */
     protected $defaultReplacement = UserDefinedForm::class;
 
-    /**
-     * @deprecated 6.4.0 Will be renamed to onRequireDefaultRecords()
-     */
-    public function requireDefaultRecords()
+    protected function onRequireDefaultRecords()
     {
-        Deprecation::noticeWithNoReplacment('6.4.0', 'Will be renamed to onRequireDefaultRecords()');
         if (!UserDefinedForm::config()->get('upgrade_on_build')) {
             return;
         }
@@ -86,9 +81,9 @@ class UpgradePolymorphicExtension extends DataExtension
                         $entry->write();
                         $updated++;
                     } catch (ValidationException $ex) {
-                        // no-op, allow the rest of dev/build to continue. There may be an error indicating that the
+                        // no-op, allow the rest of the db build to continue. There may be an error indicating that the
                         // object's class doesn't exist, which can be fixed by {@link DatabaseAdmin::doBuild} and this
-                        // logic will work the next time dev/build is run.
+                        // logic will work the next time the db is built.
                     }
                 }
             }

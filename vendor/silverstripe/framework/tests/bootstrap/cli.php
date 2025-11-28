@@ -25,10 +25,8 @@ $_SERVER = array_merge([
 $frameworkPath = dirname(dirname(__FILE__));
 $frameworkDir = basename($frameworkPath ?? '');
 
-$_SERVER['SCRIPT_FILENAME'] = $frameworkPath . DIRECTORY_SEPARATOR . 'cli-script.php';
-$_SERVER['SCRIPT_NAME'] = '.' . DIRECTORY_SEPARATOR . $frameworkDir . DIRECTORY_SEPARATOR . 'cli-script.php';
-
 // Copied from cli-script.php, to enable same behaviour through phpunit runner.
+// This is all legacy and should be removed in a future major release.
 if (isset($_SERVER['argv'][2])) {
     $args = array_slice($_SERVER['argv'] ?? [], 2);
     if (!isset($_GET)) {

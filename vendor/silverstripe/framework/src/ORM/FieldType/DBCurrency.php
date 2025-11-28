@@ -3,6 +3,9 @@
 namespace SilverStripe\ORM\FieldType;
 
 use SilverStripe\Forms\CurrencyField;
+use SilverStripe\Forms\FormField;
+use SilverStripe\Forms\NumericField;
+use SilverStripe\Model\ModelData;
 
 /**
  * Represents a decimal field containing a currency amount.
@@ -20,22 +23,16 @@ use SilverStripe\Forms\CurrencyField;
 class DBCurrency extends DBDecimal
 {
     /**
-     * @config
-     * @var string
+     * The symbol that represents the currency
      */
-    private static $currency_symbol = '$';
-
-    public function __construct($name = null, $wholeSize = 9, $decimalSize = 2, $defaultValue = 0)
-    {
-        parent::__construct($name, $wholeSize, $decimalSize, $defaultValue);
-    }
+    private static string $currency_symbol = '$';
 
     /**
      * Returns the number as a currency, eg “$1,000.00”.
      */
-    public function Nice()
+    public function Nice(): string
     {
-        $val = $this->config()->currency_symbol . number_format(abs($this->value ?? 0.0) ?? 0.0, 2);
+        $val = static::config()->get('currency_symbol') . number_format(abs($this->value ?? 0.0) ?? 0.0, 2);
         if ($this->value < 0) {
             return "($val)";
         }
@@ -46,37 +43,35 @@ class DBCurrency extends DBDecimal
     /**
      * Returns the number as a whole-number currency, eg “$1,000”.
      */
-    public function Whole()
+    public function Whole(): string
     {
-        $val = $this->config()->currency_symbol . number_format(abs($this->value ?? 0.0) ?? 0.0, 0);
+        $val = static::config()->get('currency_symbol') . number_format(abs($this->value ?? 0.0) ?? 0.0, 0);
         if ($this->value < 0) {
             return "($val)";
         }
         return $val;
     }
 
-    public function setValue($value, $record = null, $markChanged = true)
+    public function setValue(mixed $value, null|array|ModelData $record = null, bool $markChanged = true): static
     {
-        $matches = null;
-        if (is_numeric($value)) {
-            $this->value = $value;
-        } elseif (preg_match('/-?\$?[0-9,]+(.[0-9]+)?([Ee][0-9]+)?/', $value ?? '', $matches)) {
-            $this->value = str_replace(['$', ',', $this->config()->currency_symbol], '', $matches[0] ?? '');
-        } else {
-            $this->value = 0;
+        if (is_string($value)) {
+            $symbol = static::config()->get('currency_symbol');
+            $val = str_replace(['$', ',', $symbol], '', $value);
+            if (is_numeric($val)) {
+                $value = (float) $val;
+            }
         }
-
+        parent::setValue($value, $record, $markChanged);
         return $this;
     }
 
-    /**
-     * @param string $title
-     * @param array $params
-     *
-     * @return CurrencyField
-     */
-    public function scaffoldFormField($title = null, $params = null)
+    public function scaffoldFormField(?string $title = null, array $params = []): ?FormField
     {
         return CurrencyField::create($this->getName(), $title);
+    }
+
+    public function scaffoldSearchField(?string $title = null): ?FormField
+    {
+        return NumericField::create($this->getName(), $title);
     }
 }

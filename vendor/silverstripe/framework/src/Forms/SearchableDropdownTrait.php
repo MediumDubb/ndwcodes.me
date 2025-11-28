@@ -8,13 +8,13 @@ use LogicException;
 use SilverStripe\Control\Controller;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DataObjectInterface;
 use SilverStripe\ORM\Relation;
-use SilverStripe\ORM\SS_List;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\List\SS_List;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\ORM\Search\SearchContext;
 use SilverStripe\Security\SecurityToken;
 use SilverStripe\ORM\RelationList;
@@ -139,7 +139,6 @@ trait SearchableDropdownTrait
                 return $emptyString;
             }
         }
-        $name = $this->getName();
         if ($this->getUseDynamicPlaceholder()) {
             if ($this->getIsSearchable()) {
                 if (!$this->getIsLazyLoaded()) {
@@ -320,7 +319,6 @@ trait SearchableDropdownTrait
             parent::getAttributes(),
             [
                 'name' => $name,
-                'data-schema' => json_encode($this->getSchemaData()),
             ]
         );
     }
@@ -330,7 +328,7 @@ trait SearchableDropdownTrait
      */
     public function getValueArray(): array
     {
-        $value = $this->Value();
+        $value = $this->getFormattedValue();
         if (empty($value)) {
             return [];
         }
@@ -425,16 +423,6 @@ trait SearchableDropdownTrait
         }
     }
 
-    /**
-     * @param Validator $validator
-     * @deprecated 5.4.0 Will be removed in favour of the `FormField::validate()` method in a future major release.
-     */
-    public function validate($validator): bool
-    {
-        Deprecation::noticeWithNoReplacment('5.4.0', 'Will be removed in favour of the `FormField::validate()` method in a future major release.');
-        return $this->extendValidationResult(true, $validator);
-    }
-
     public function getSchemaDataType(): string
     {
         if ($this->isMultiple) {
@@ -495,7 +483,7 @@ trait SearchableDropdownTrait
         if (!$this->getIsLazyLoaded() && $this->hasMethod('getDefaultValue')) {
             return $this->getDefaultValue();
         }
-        return $this->Value();
+        return $this->getFormattedValue();
     }
 
     private function getOptionsForSearchRequest(string $term): array
@@ -614,5 +602,10 @@ trait SearchableDropdownTrait
         $field->setReadonly(true);
 
         return $field;
+    }
+
+    protected function getSourceValues()
+    {
+        return $this->sourceList->sort(null)->column('ID');
     }
 }

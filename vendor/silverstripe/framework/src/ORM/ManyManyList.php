@@ -215,13 +215,8 @@ class ManyManyList extends RelationList
      * Column names should be ANSI quoted.
      * @throws Exception
      */
-    public function add($item, $extraFields = [])
+    public function add(mixed $item, array $extraFields = []): void
     {
-        // Ensure nulls or empty strings are correctly treated as empty arrays
-        if (empty($extraFields)) {
-            $extraFields = [];
-        }
-
         // Determine ID of new record
         $itemID = null;
         if (is_numeric($item)) {
@@ -323,6 +318,9 @@ class ManyManyList extends RelationList
         if ($this->addCallbacks) {
             $this->addCallbacks->call($this, $item, $extraFields);
         }
+
+        // We must invalidate cache to ensure cached relation lists get up-to-date data
+        static::reset($this->dataClass());
     }
 
     /**
@@ -376,6 +374,11 @@ class ManyManyList extends RelationList
         if ($this->removeCallbacks) {
             $this->removeCallbacks->call($this, [$itemID]);
         }
+
+        // Even though the underlying records aren't deleted, we still need to
+        // reset the query cache for this class, so that any cached relation lists
+        // will have the correct data.
+        static::reset($this->dataClass());
     }
 
     /**
@@ -428,6 +431,11 @@ class ManyManyList extends RelationList
         if ($this->removeCallbacks && $affectedIds) {
             $this->removeCallbacks->call($this, $affectedIds);
         }
+
+        // Even though the underlying records aren't deleted, we still need to
+        // reset the query cache for this class, so that any cached relation lists
+        // will have the correct data.
+        static::reset($this->dataClass());
     }
 
     /**

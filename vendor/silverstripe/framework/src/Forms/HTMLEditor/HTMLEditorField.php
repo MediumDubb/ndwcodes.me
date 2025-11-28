@@ -5,13 +5,15 @@ namespace SilverStripe\Forms\HTMLEditor;
 use SilverStripe\Assets\Shortcodes\ImageShortcodeProvider;
 use SilverStripe\Forms\FormField;
 use SilverStripe\Forms\TextareaField;
-use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DataObjectInterface;
 use Exception;
+use SilverStripe\Model\ModelData;
+use SilverStripe\ORM\FieldType\DBField;
+use SilverStripe\View\CastingService;
 use SilverStripe\View\Parsers\HTMLValue;
 
 /**
- * A TinyMCE-powered WYSIWYG HTML editor field with image and link insertion and tracking capabilities. Editor fields
+ * A WYSIWYG HTML editor field with image and link insertion and tracking capabilities. Editor fields
  * are created from `<textarea>` tags, which are then converted with JavaScript.
  *
  * Caution: The form field does not include any JavaScript or CSS when used outside of the CMS context,
@@ -21,12 +23,11 @@ class HTMLEditorField extends TextareaField
 {
 
     private static $casting = [
-        'Value' => 'HTMLText',
+        'FormattedValue' => 'HTMLText',
+        'getFormattedValue' => 'HTMLText',
     ];
 
     protected $schemaDataType = FormField::SCHEMA_DATA_TYPE_HTML;
-
-    protected $schemaComponent = 'HtmlEditorField';
 
     /**
      * @config
@@ -49,14 +50,6 @@ class HTMLEditorField extends TextareaField
      * @var int
      */
     private static $default_rows = 20;
-
-    /**
-     * Extra height per row
-     *
-     * @var int
-     * @deprecated 5.4.0 Will be replaced with SilverStripe\Forms\HTMLEditor\HTMLEditorConfig.fixed_row_height in a future major release
-     */
-    private static $fixed_row_height = 20;
 
     /**
      * ID or instance of editorconfig
@@ -93,6 +86,11 @@ class HTMLEditorField extends TextareaField
         return $this;
     }
 
+    public function getSchemaComponent()
+    {
+        return $this->getEditorConfig()->getSchemaComponent();
+    }
+
     /**
      * Creates a new HTMLEditorField.
      * @see TextareaField::__construct()
@@ -124,27 +122,23 @@ class HTMLEditorField extends TextareaField
         );
     }
 
-    /**
-     * @param DataObject|DataObjectInterface $record
-     * @throws Exception
-     */
     public function saveInto(DataObjectInterface $record)
     {
-        if ($record->hasField($this->name) && $record->escapeTypeForField($this->name) != 'xml') {
+        if (!$this->usesXmlFriendlyField($record)) {
             throw new Exception(
                 'HTMLEditorField->saveInto(): This field should save into a HTMLText or HTMLVarchar field.'
             );
         }
 
         // Sanitise if requested
-        $htmlValue = HTMLValue::create($this->Value());
-        if (HTMLEditorField::config()->sanitise_server_side) {
+        $htmlValue = HTMLValue::create($this->getValue());
+        if (static::config()->get('sanitise_server_side')) {
             $config = $this->getEditorConfig();
             $santiser = HTMLEditorSanitiser::create($config);
             $santiser->sanitise($htmlValue);
         }
 
-        // optionally manipulate the HTML after a TinyMCE edit and prior to a save
+        // optionally manipulate the HTML prior to storing it on the record
         $this->extend('processHTML', $htmlValue);
 
         // Store into record
@@ -187,11 +181,9 @@ class HTMLEditorField extends TextareaField
     }
 
     /**
-     * Return value with all values encoded in html entities
-     *
-     * @return string Raw HTML
+     * Return formatted value with all values encoded in html entities
      */
-    public function ValueEntities()
+    public function getFormattedValueEntities(): string
     {
         $entities = get_html_translation_table(HTML_ENTITIES);
 
@@ -199,31 +191,36 @@ class HTMLEditorField extends TextareaField
             $entities[$key] = "/" . $value . "/";
         }
 
-        $value = preg_replace_callback($entities, function ($matches) {
+        $formattedValue = preg_replace_callback($entities, function ($matches) {
             // Don't apply double encoding to ampersand
             $doubleEncoding = $matches[0] != '&amp;';
             return htmlentities($matches[0], ENT_COMPAT, 'UTF-8', $doubleEncoding);
-        }, $this->Value() ?? '');
+        }, $this->getFormattedValue() ?? '');
 
-        return $value;
+        return $formattedValue;
     }
 
     /**
-     * Set height of editor based on number of rows
+     * Set height of editor based on number of rows.
+     *
+     * This uses a clone because different HMTLEditorField instances may use different number of rows
+     * and the config is a singleton.
      */
     private function setEditorHeight(HTMLEditorConfig $config): HTMLEditorConfig
     {
-        $rowHeight = $this->config()->get('fixed_row_height');
-        if ($rowHeight && ($config instanceof TinyMCEConfig)) {
-            $rows = (int) $this->getRows();
-            $height = $rows * $rowHeight;
-            $config = clone $config;
-            if ($height) {
-                $config->setOption('height', 'auto');
-                $config->setOption('row_height', sprintf('%dpx', $height));
-            }
+        $clone = clone $config;
+        $clone->setRows($this->rows);
+        return $clone;
+    }
+
+    private function usesXmlFriendlyField(DataObjectInterface $record): bool
+    {
+        if ($record instanceof ModelData && !$record->hasField($this->getName())) {
+            return true;
         }
 
-        return $config;
+        $castingService = CastingService::singleton();
+        $castValue = $castingService->cast($this->getValue(), $record, $this->getName());
+        return $castValue instanceof DBField && $castValue::config()->get('escape_type') === 'xml';
     }
 }

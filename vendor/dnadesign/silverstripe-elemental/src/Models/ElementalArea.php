@@ -4,18 +4,18 @@ namespace DNADesign\Elemental\Models;
 
 use DNADesign\Elemental\Controllers\ElementController;
 use DNADesign\Elemental\Extensions\ElementalAreasExtension;
-use DNADesign\Elemental\TopPage\DataExtension;
+use DNADesign\Elemental\Extensions\TopPageElementExtension;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Dev\TestOnly;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBHTMLText;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\UnsavedRelationList;
 use SilverStripe\Versioned\Versioned;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 
 /**
  * Class ElementalArea
@@ -37,7 +37,7 @@ class ElementalArea extends DataObject
 
     private static $extensions = [
         Versioned::class,
-        DataExtension::class,
+        TopPageElementExtension::class,
     ];
 
     private static $owns = [
@@ -59,15 +59,6 @@ class ElementalArea extends DataObject
     private static $table_name = 'ElementalArea';
 
     /**
-     * Don't show this model in campaign admin as part of implicit change sets
-     *
-     * @config
-     * @var bool
-     * @deprecated 5.4.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    private static $hide_in_campaigns = true;
-
-    /**
      * Cache various data to improve CMS load time
      *
      * @internal
@@ -83,7 +74,7 @@ class ElementalArea extends DataObject
         $elementalClasses = [];
 
         foreach (ClassInfo::getValidSubClasses(DataObject::class) as $class) {
-            if (ViewableData::has_extension($class, ElementalAreasExtension::class)) {
+            if (ModelData::has_extension($class, ElementalAreasExtension::class)) {
                 $elementalClasses[] = $class;
             }
         }
@@ -91,10 +82,7 @@ class ElementalArea extends DataObject
         return $elementalClasses;
     }
 
-    /**
-     * @return DBHTMLText
-     */
-    public function forTemplate()
+    public function forTemplate(): string
     {
         return $this->renderWith(static::class);
     }
@@ -148,7 +136,7 @@ class ElementalArea extends DataObject
         if ($owner = $ownerClassName::get()->filter('ElementalAreaID', $this->ID)->first()) {
             return DBField::create_field('HTMLText', sprintf(
                 '<a href="%s">%s</a>',
-                $owner->CMSEditLink(),
+                $owner->getCMSEditLink(),
                 $owner->Title
             ));
         }
@@ -183,13 +171,15 @@ class ElementalArea extends DataObject
             }
         }
 
+        $this->extend('updateElementControllers', $controllers);
+
         return $controllers;
     }
 
     /**
      * @return null|DataObject
      * @throws \Psr\Container\NotFoundExceptionInterface
-     * @throws \SilverStripe\ORM\ValidationException
+     * @throws \SilverStripe\Core\Validation\ValidationException
      */
     public function getOwnerPage()
     {
@@ -214,14 +204,10 @@ class ElementalArea extends DataObject
             $elementalAreaRelations = $instance->getElementalRelations();
 
             foreach ($elementalAreaRelations as $eaRelationship) {
-                $areaID = $eaRelationship . 'ID';
-
-                $table = DataObject::getSchema()->tableForField($class, $areaID);
-                $baseTable = DataObject::getSchema()->baseDataTable($class);
-                $page = DataObject::get_one($class, [
-                    "\"{$table}\".\"{$areaID}\" = ?" => $this->ID,
-                    "\"{$baseTable}\".\"ClassName\" = ?" => $class
-                ]);
+                $page = DataObject::get($class)->setUseCache(true)->filter([
+                    $eaRelationship . 'ID' => $this->ID,
+                    'ClassName' => $class,
+                ])->first();
 
                 if ($page) {
                     $this->setOwnerPageCached($page);
@@ -277,7 +263,7 @@ class ElementalArea extends DataObject
      * @param null $member
      * @return bool
      * @throws \Psr\Container\NotFoundExceptionInterface
-     * @throws \SilverStripe\ORM\ValidationException
+     * @throws \SilverStripe\Core\Validation\ValidationException
      */
     public function canEdit($member = null)
     {
@@ -297,7 +283,7 @@ class ElementalArea extends DataObject
      * @param null $member
      * @return bool
      * @throws \Psr\Container\NotFoundExceptionInterface
-     * @throws \SilverStripe\ORM\ValidationException
+     * @throws \SilverStripe\Core\Validation\ValidationException
      */
     public function canView($member = null)
     {

@@ -3,11 +3,14 @@
 namespace SilverStripe\Control;
 
 use SilverStripe\Core\ClassInfo;
+use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Dev\Debug;
+use SilverStripe\Model\ModelData;
 use SilverStripe\ORM\FieldType\DBHTMLText;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Security;
 use SilverStripe\View\SSViewer;
+use SilverStripe\View\TemplateEngine;
 use SilverStripe\View\TemplateGlobalProvider;
 use SilverStripe\Dev\Deprecation;
 
@@ -87,6 +90,8 @@ class Controller extends RequestHandler implements TemplateGlobalProvider
         'handleAction',
         'handleIndex',
     ];
+
+    protected ?TemplateEngine $templateEngine = null;
 
     public function __construct()
     {
@@ -230,7 +235,7 @@ class Controller extends RequestHandler implements TemplateGlobalProvider
             }
             $this->setResponse($response);
         } else {
-            // Could be Controller, or ViewableData_Customised controller wrapper
+            // Could be Controller, or ModelDataCustomised controller wrapper
             if (ClassInfo::hasMethod($response, 'getViewer')) {
                 if (isset($_REQUEST['debug_request'])) {
                     $class = static::class;
@@ -401,7 +406,7 @@ class Controller extends RequestHandler implements TemplateGlobalProvider
             $templates = array_unique(array_merge($actionTemplates, $classTemplates));
         }
 
-        return SSViewer::create($templates);
+        return SSViewer::create($templates, $this->getTemplateEngine());
     }
 
     /**
@@ -453,9 +458,10 @@ class Controller extends RequestHandler implements TemplateGlobalProvider
         }
 
         $class = static::class;
-        while ($class != 'SilverStripe\\Control\\RequestHandler') {
+        $engine = $this->getTemplateEngine();
+        while ($class !== RequestHandler::class) {
             $templateName = strtok($class ?? '', '_') . '_' . $action;
-            if (SSViewer::hasTemplate($templateName)) {
+            if ($engine->hasTemplate($templateName)) {
                 return $class;
             }
 
@@ -487,17 +493,25 @@ class Controller extends RequestHandler implements TemplateGlobalProvider
             $parentClass = get_parent_class($parentClass ?? '');
         }
 
-        return SSViewer::hasTemplate($templates);
+        $engine = $this->getTemplateEngine();
+        return $engine->hasTemplate($templates);
+    }
+
+    public function renderWith($template, ModelData|array $customFields = []): DBHTMLText
+    {
+        // Ensure template engine is used, unless the viewer was already explicitly instantiated
+        if (!($template instanceof SSViewer)) {
+            $template = SSViewer::create($template, $this->getTemplateEngine());
+        }
+        return parent::renderWith($template, $customFields);
     }
 
     /**
      * Render the current controller with the templates determined by {@link getViewer()}.
      *
      * @param array $params
-     *
-     * @return string
      */
-    public function render($params = null)
+    public function render($params = null): DBHTMLText
     {
         $template = $this->getViewer($this->getAction());
 
@@ -513,30 +527,10 @@ class Controller extends RequestHandler implements TemplateGlobalProvider
 
     /**
      * Returns the current controller.
-     *
-     * @return Controller
      */
-    public static function curr()
+    public static function curr(): ?Controller
     {
-        if (Controller::$controller_stack) {
-            return Controller::$controller_stack[0];
-        }
-        // This user_error() will be removed in the next major version of Silverstripe CMS
-        user_error("No current controller available", E_USER_WARNING);
-        return null;
-    }
-
-    /**
-     * Tests whether we have a currently active controller or not. True if there is at least 1
-     * controller in the stack.
-     *
-     * @return bool
-     * @deprecated 5.4.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    public static function has_curr()
-    {
-        Deprecation::noticeWithNoReplacment('5.4.0');
-        return Controller::$controller_stack ? true : false;
+        return Controller::$controller_stack[0] ?? null;
     }
 
     /**
@@ -630,9 +624,8 @@ class Controller extends RequestHandler implements TemplateGlobalProvider
      * Caution: All parameters are expected to be URI-encoded already.
      *
      * @param string|array $arg One or more link segments, or list of link segments as an array
-     * @return string
      */
-    public static function join_links($arg = null)
+    public static function join_links($arg = null): string
     {
         if (func_num_args() === 1 && is_array($arg)) {
             $args = $arg;
@@ -739,5 +732,13 @@ class Controller extends RequestHandler implements TemplateGlobalProvider
         return [
             'CurrentPage' => 'curr',
         ];
+    }
+
+    protected function getTemplateEngine(): TemplateEngine
+    {
+        if (!$this->templateEngine) {
+            $this->templateEngine = Injector::inst()->create(TemplateEngine::class);
+        }
+        return $this->templateEngine;
     }
 }

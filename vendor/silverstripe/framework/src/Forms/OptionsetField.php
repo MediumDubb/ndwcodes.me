@@ -3,8 +3,8 @@
 namespace SilverStripe\Forms;
 
 use SilverStripe\Core\Convert;
-use SilverStripe\ORM\ArrayList;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\List\ArrayList;
+use SilverStripe\Model\ArrayData;
 
 /**
  * Set of radio buttons designed to emulate a dropdown.
@@ -75,7 +75,7 @@ class OptionsetField extends SingleSelectField
             'Name' => $this->getOptionName(),
             'Value' => $value,
             'Title' => $title,
-            'isChecked' => $this->isSelectedValue($value, $this->Value()),
+            'isChecked' => $this->isSelectedValue($value, $this->getValue()),
             'isDisabled' => $this->isDisabledValue($value)
         ]);
     }
@@ -132,18 +132,6 @@ class OptionsetField extends SingleSelectField
         ]);
 
         return FormField::Field($properties);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function validate($validator)
-    {
-        if (!$this->Value()) {
-            return $this->extendValidationResult(true, $validator);
-        }
-
-        return parent::validate($validator);
     }
 
     public function getAttributes()

@@ -13,20 +13,21 @@ use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Extension;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Core\Resettable;
-use SilverStripe\Dev\Deprecation;
 use SilverStripe\Forms\FieldList;
-use SilverStripe\ORM\ArrayList;
-use SilverStripe\ORM\DataExtension;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DataQuery;
 use SilverStripe\ORM\DB;
 use SilverStripe\ORM\FieldType\DBDatetime;
+use SilverStripe\ORM\Queries\SQLDelete;
 use SilverStripe\ORM\Queries\SQLSelect;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Permission;
 use SilverStripe\Security\Security;
 use SilverStripe\View\TemplateGlobalProvider;
+use SilverStripe\Versioned\Traits\VersionsCacheTrait;
+use SilverStripe\Versioned\Traits\VersionNumberCacheTrait;
 
 /**
  * The Versioned extension allows your DataObjects to have several versions,
@@ -38,10 +39,12 @@ use SilverStripe\View\TemplateGlobalProvider;
  * @property int $Version
  * @mixin RecursivePublishable
  *
- * @extends DataExtension<DataObject&RecursivePublishable&static>
+ * @extends Extension<DataObject&RecursivePublishable&static>
  */
-class Versioned extends DataExtension implements TemplateGlobalProvider, Resettable
+class Versioned extends Extension implements TemplateGlobalProvider, Resettable
 {
+    use VersionNumberCacheTrait;
+
     /**
      * Versioning mode for this object.
      * Note: Not related to the current versioning mode in the state / session
@@ -76,15 +79,6 @@ class Versioned extends DataExtension implements TemplateGlobalProvider, Resetta
      * The draft (default) stage
      */
     const DRAFT = 'Stage';
-
-    /**
-     * A cache used by get_versionnumber_by_stage().
-     * Clear through {@link flushCache()}.
-     * version (int)0 means not on this stage.
-     *
-     * @var array
-     */
-    protected static $cache_versionnumber;
 
     /**
      * Set if draft site is secured or not. Fails over to
@@ -194,15 +188,6 @@ class Versioned extends DataExtension implements TemplateGlobalProvider, Resetta
     ];
 
     /**
-     * Used to enable or disable the prepopulation of the version number cache.
-     * Defaults to true.
-     *
-     * @config
-     * @var boolean
-     */
-    private static $prepopulate_versionnumber_cache = true;
-
-    /**
      * Indicates whether augmentSQL operations should add subselects as WHERE conditions instead of INNER JOIN
      * intersections. Performance of the INNER JOIN scales on the size of _Versions tables where as the condition scales
      * on the number of records being returned from the base query.
@@ -298,6 +283,12 @@ class Versioned extends DataExtension implements TemplateGlobalProvider, Resetta
     private static $use_session = false;
 
     /**
+     * Temporarily store data about a deleted version
+     * @internal
+     */
+    private static $deletedVersionData = [];
+
+    /**
      * Reset static configuration variables to their default values.
      */
     public static function reset()
@@ -313,7 +304,7 @@ class Versioned extends DataExtension implements TemplateGlobalProvider, Resetta
      * @param SQLSelect $query
      * @param DataQuery $dataQuery
      */
-    public function augmentDataQueryCreation(SQLSelect &$query, DataQuery &$dataQuery)
+    protected function augmentDataQueryCreation(SQLSelect &$query, DataQuery &$dataQuery)
     {
         // Convert reading mode to dataquery params and assign
         $args = ReadingMode::toDataQueryParams(Versioned::get_reading_mode());
@@ -405,7 +396,7 @@ class Versioned extends DataExtension implements TemplateGlobalProvider, Resetta
      *
      * @param array $params
      */
-    public function updateInheritableQueryParams(&$params)
+    protected function updateInheritableQueryParams(&$params)
     {
         // Skip if versioned isn't set
         if (!isset($params['Versioned.mode'])) {
@@ -455,7 +446,7 @@ class Versioned extends DataExtension implements TemplateGlobalProvider, Resetta
      * @param DataQuery|null $dataQuery
      * @throws InvalidArgumentException
      */
-    public function augmentSQL(SQLSelect $query, DataQuery $dataQuery = null)
+    protected function augmentSQL(SQLSelect $query, ?DataQuery $dataQuery = null)
     {
         if (!$dataQuery) {
             return;
@@ -475,6 +466,12 @@ class Versioned extends DataExtension implements TemplateGlobalProvider, Resetta
                 break;
             case 'archive':
                 $this->augmentSQLVersionedArchive($query, $dataQuery);
+                break;
+            case 'archive_only':
+                $this->augmentSQLVersionedArchiveOnly($query, $dataQuery);
+                break;
+            case 'removed_from_draft':
+                $this->augmentSQLVersionedRemovedFromDraft($query, $dataQuery);
                 break;
             case 'latest_version_single':
                 $this->augmentSQLVersionedLatestSingle($query, $dataQuery);
@@ -747,6 +744,42 @@ SQL
     }
 
     /**
+     * Only include records which are archived - that is they have been removed from both the draft and live stages.
+     */
+    protected function augmentSQLVersionedArchiveOnly(SQLSelect $query, DataQuery $dataQuery): void
+    {
+        $baseTable = $this->baseTable();
+        $liveTable = $this->stageTable($baseTable, Versioned::LIVE);
+
+        $query->addLeftJoin(
+            $liveTable,
+            "\"{$baseTable}\".\"ID\" = \"{$liveTable}\".\"ID\""
+        );
+        $query->addWhere("\"{$liveTable}\".\"ID\" IS NULL");
+
+        $this->augmentSQLVersionedRemovedFromDraft($query, $dataQuery);
+    }
+
+    /**
+     * Only include records which are removed from draft - these might be archived but might also still be in the live stage.
+     */
+    protected function augmentSQLVersionedRemovedFromDraft(SQLSelect $query, DataQuery $dataQuery): void
+    {
+        $baseTable = $this->baseTable();
+
+        // Join a temporary alias BaseTable_Draft, renaming this on execution to BaseTable
+        // See Versioned::augmentSQLVersioned() For reference on this alias
+        $query->addLeftJoin(
+            "{$baseTable}_Draft",
+            "\"{$baseTable}\".\"ID\" = \"{$baseTable}_Draft\".\"ID\""
+        );
+
+        $query->addWhere("\"{$baseTable}_Draft\".\"ID\" IS NULL");
+
+        $this->augmentSQLVersionedLatestIncludingDeleted($query, $dataQuery);
+    }
+
+    /**
      * Return latest version instance, regardless of whether it is on a particular stage.
      * This is similar to augmentSQLVersionedLatest() below, except it only returns a single value
      * selected by Versioned.id
@@ -775,22 +808,35 @@ SQL
      * Return latest version instances, regardless of whether they are on a particular stage.
      * This provides "show all, including deleted" functionality.
      *
-     * Note: latest_version ignores deleted versions, and will select the latest non-deleted
-     * version.
-     *
-     * @param SQLSelect $query
-     * @param DataQuery $dataQuery
+     * Note: latest_versions ignores versions which represent the archive action (aka deleted versions),
+     * and will select the latest non-deleted version.
      */
     protected function augmentSQLVersionedLatest(SQLSelect $query, DataQuery $dataQuery)
     {
+        $this->augmentSQLVersionedLatestInner($query, $dataQuery, true);
+    }
+
+    /**
+     * Return latest version instances, regardless of whether they are on a particular stage
+     * and including versions which represent the archive action (aka deleted versions).
+     */
+    protected function augmentSQLVersionedLatestIncludingDeleted(SQLSelect $query, DataQuery $dataQuery)
+    {
+        $this->augmentSQLVersionedLatestInner($query, $dataQuery, false);
+    }
+
+    private function augmentSQLVersionedLatestInner(SQLSelect $query, DataQuery $dataQuery, bool $excludeDeleted)
+    {
         // Query against _Versions table first
-        $this->augmentSQLVersioned($query);
+        $this->augmentSQLVersioned($query, $excludeDeleted);
 
         // Join and select only latest version
         $baseTable = $this->baseTable();
         $subSelect = $this->prepareMaxVersionSubSelect($query, $dataQuery);
 
-        $subSelect->addWhere("\"{$baseTable}_Versions_Latest\".\"WasDeleted\" = 0");
+        if ($excludeDeleted) {
+            $subSelect->addWhere("\"{$baseTable}_Versions_Latest\".\"WasDeleted\" = 0");
+        }
 
         if ($this->shouldApplySubSelectAsCondition($query)) {
             $subSelect->addWhere(
@@ -896,7 +942,7 @@ SQL
      * @param DataQuery $dataQuery
      * @param DataObject $dataObject
      */
-    public function augmentLoadLazyFields(SQLSelect &$query, DataQuery &$dataQuery = null, $dataObject)
+    protected function augmentLoadLazyFields(SQLSelect &$query, ?DataQuery &$dataQuery, $dataObject)
     {
         // The VersionedMode local variable ensures that this decorator only applies to
         // queries that have originated from the Versioned object, and have the Versioned
@@ -917,7 +963,7 @@ SQL
         }
     }
 
-    public function augmentDatabase()
+    protected function augmentDatabase()
     {
         $owner = $this->owner;
         $class = get_class($owner);
@@ -1066,7 +1112,7 @@ SQL
 
         // Select all orphaned version records
         $orphanedQuery = SQLSelect::create()
-            ->selectField("\"{$childTable}\".\"ID\"")
+            ->setSelect("\"{$childTable}\".\"ID\"")
             ->setFrom("\"{$childTable}\"");
 
         // If we have a parent table limit orphaned records
@@ -1083,13 +1129,12 @@ SQL
                 ->addWhere("\"{$baseTable}\".\"ID\" IS NULL");
         }
 
-        $count = $orphanedQuery->count();
+        $ids = $orphanedQuery->execute()->column();
+        $count = count($ids);
         if ($count > 0) {
             DB::alteration_message("Removing {$count} orphaned versioned records", "deleted");
-            $ids = $orphanedQuery->execute()->column();
-            foreach ($ids as $id) {
-                DB::prepared_query("DELETE FROM \"{$childTable}\" WHERE \"ID\" = ?", [$id]);
-            }
+            // We can't use $orphanedQuery as a subquery of the DELETE, since selecting from the table we're updating is forbidden in MySQL.
+            SQLDelete::create("\"{$childTable}\"", ['"ID" IN (' . DB::placeholders($ids) . ')' => $ids])->execute();
         }
     }
 
@@ -1102,6 +1147,9 @@ SQL
     private function uniqueToIndex($indexes)
     {
         foreach ($indexes as &$spec) {
+            if ($spec === false) {
+                continue;
+            }
             if ($spec['type'] === 'unique') {
                 $spec['type'] = 'index';
             }
@@ -1133,15 +1181,21 @@ SQL
         ];
 
         // Add any extra, unchanged fields to the version record.
-        $data = DB::prepared_query("SELECT * FROM \"{$table}\" WHERE \"ID\" = ?", [$recordID])->record();
+        if ($isDelete && isset(Versioned::$deletedVersionData[$table][$recordID])) {
+            $data = Versioned::$deletedVersionData[$table][$recordID];
+        } else {
+            $data = DB::prepared_query("SELECT * FROM \"{$table}\" WHERE \"ID\" = ?", [$recordID])->record();
+        }
         if ($data) {
             $fields = $schema->databaseFields($class, false);
+            $generatedColumns = $schema->generatedFields($class, false);
             if (is_array($fields)) {
                 $data = array_intersect_key($data ?? [], $fields);
 
                 foreach ($data as $k => $v) {
                     // If the value is not set at all in the manipulation currently, use the existing value from the database
-                    if (!array_key_exists($k, $newManipulation['fields'] ?? [])) {
+                    // Do not include generated columns, cause we can't set values for those
+                    if (!array_key_exists($k, $newManipulation['fields'] ?? []) && !array_key_exists($k, $generatedColumns)) {
                         $newManipulation['fields'][$k] = $v;
                     }
                 }
@@ -1257,7 +1311,7 @@ SQL
         $this->owner->extend('onAfterVersionDelete');
     }
 
-    public function augmentWrite(&$manipulation)
+    protected function augmentWrite(&$manipulation)
     {
         // get Version number from base data table on write
         $version = null;
@@ -1348,7 +1402,7 @@ SQL
     /**
      *
      */
-    public function onAfterWrite()
+    protected function onAfterWrite()
     {
         $this->setNextWriteWithoutVersion(false);
     }
@@ -1416,7 +1470,7 @@ SQL
      * If a write was skipped, then we need to ensure that we don't leave a
      * migrateVersion() value lying around for the next write.
      */
-    public function onAfterSkippedWrite()
+    protected function onAfterSkippedWrite()
     {
         $this->setMigratingVersion(null);
     }
@@ -1494,51 +1548,19 @@ SQL
 
     /**
      * Check if the current user is allowed to archive this record.
-     * If extended, ensure that both canDelete and canUnpublish are extended also
      *
-     * @param Member $member
-     * @return bool
-     * @deprecated 5.3.0 Use canDelete() instead.
+     * We're intentionally using the canDelete check for archiving,
+     * since there's no concept of "deleting" a versioned record
+     * and having separate permission checks was confusing and easy
+     * to forget.
      */
-    public function canArchive($member = null)
+    public function canDelete($member = null): ?bool
     {
-        Deprecation::notice('5.3.0', 'Use canDelete() instead.');
-        if (!$member) {
-            $member = Security::getCurrentUser();
-        }
-
-        // Standard mechanism for accepting permission changes from extensions
-        $owner = $this->owner;
-        $extended = Deprecation::withSuppressedNotice(fn() => $owner->extendedCan('canArchive', $member));
-        if ($extended !== null) {
-            return $extended;
-        }
-
-        // Admin permissions allow
-        if (Permission::checkMember($member, "ADMIN")) {
-            return true;
-        }
-
-        // Check if this record can be deleted from stage
-        if (!$owner->canDelete($member)) {
+        // If the user isn't allowed to unpublish, they're definitely
+        // not allowed to archive live content.
+        if ($this->hasStages() && $this->isPublished() && !$this->getOwner()->canUnpublish($member)) {
             return false;
         }
-
-        // Check if we can delete from live
-        if (!$owner->canUnpublish($member)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * @deprecated 5.3.0 Will be removed without equivalent functionality in a future major release.
-     */
-    protected function extendCanArchive()
-    {
-        Deprecation::notice('5.3.0', 'Will be removed without equivalent functionality in a future major release.');
-        // Prevent canArchive() extending itself
         return null;
     }
 
@@ -1621,7 +1643,7 @@ SQL
      * @param Member $member
      * @return bool|null
      */
-    public function canView($member = null)
+    protected function canView($member = null)
     {
         // Invoke default version-gnostic canView
         if ($this->owner->canViewVersioned($member) === false) {
@@ -1827,7 +1849,7 @@ SQL
     /**
      * Removes the record from both live and stage
      *
-     * User code should call {@see canArchive()} prior to invoking this method.
+     * User code should call {@see canDelete()} prior to invoking this method.
      *
      * @return bool Success
      */
@@ -1893,10 +1915,29 @@ SQL
         return true;
     }
 
-    public function onAfterDelete()
+    protected function onBeforeDelete(): void
+    {
+        // Skip if suppressed by parent delete
+        if (!$this->getDeleteWritesVersion()) {
+            return;
+        }
+        // Pre-fetch data that will be used in augmentWriteVersioned().
+        // This is necessary because that data doesn't exist after the base record is deleted.
+        $owner = $this->getOwner();
+        $baseTable = $owner->baseTable();
+        $recordID = $owner->ID;
+        Versioned::$deletedVersionData[$baseTable][$recordID] = DB::prepared_query("SELECT * FROM \"{$baseTable}\" WHERE \"ID\" = ?", [$recordID])->record();
+    }
+
+    protected function onAfterDelete()
     {
         // Create deleted record for current stage
         $this->createDeletedVersion(static::get_stage());
+        // Remove pre-delete data.
+        $owner = $this->getOwner();
+        $baseTable = $owner->baseTable();
+        $recordID = $owner->ID;
+        unset(Versioned::$deletedVersionData[$baseTable][$recordID]);
     }
 
     /**
@@ -2019,21 +2060,10 @@ SQL
      * @param string $filter
      * @param string $sort
      * @param string $limit
-     * @param string $join Deprecated, use leftJoin($table, $joinClause) instead
-     * @param string $having @deprecated 2.2.0 The $having parameter does nothing and will be removed without in a future major release
-     *               equivalent functionality to replace it
      * @return ArrayList<Versioned_Version>
      */
-    public function Versions($filter = "", $sort = "", $limit = "", $join = "", $having = "")
+    public function Versions($filter = "", $sort = "", $limit = "", $join = "")
     {
-        if ($having) {
-            Deprecation::withSuppressedNotice(function () {
-                $message = 'The $having parameter does nothing and will be removed without equivalent'
-                . ' functionality to replace it';
-                Deprecation::notice('2.2.0', $message);
-            });
-        }
-
         $owner = $this->owner;
 
         // When an object is not yet in the Database, we can't get its versions
@@ -2045,7 +2075,7 @@ SQL
         $oldMode = static::get_reading_mode();
         static::set_stage(static::DRAFT);
 
-        $list = DataObject::get(DataObject::getSchema()->baseDataClass($owner), $filter, $sort, $join, $limit);
+        $list = DataObject::get(DataObject::getSchema()->baseDataClass($owner), $filter, $sort, $limit);
 
         $query = $list->dataQuery()->query();
 
@@ -2215,16 +2245,17 @@ SQL
             $request->getSession()->set('readingMode', $mode);
         }
 
+        // This cookie is for the silverstripe/staticpublishqueue module
         if (!headers_sent() && !Director::is_cli()) {
             if (Versioned::get_stage() === static::LIVE) {
                 // clear the cookie if it's set
                 if (Cookie::get('bypassStaticCache')) {
-                    Cookie::force_expiry('bypassStaticCache', null, null, false, true /* httponly */);
+                    Cookie::force_expiry('bypassStaticCache', httpOnly: true, sameSite: Cookie::SAMESITE_STRICT);
                 }
             } else {
                 // set the cookie if it's cleared
                 if (!Cookie::get('bypassStaticCache')) {
-                    Cookie::set('bypassStaticCache', '1', 0, null, null, false, true /* httponly */);
+                    Cookie::set('bypassStaticCache', '1', 0, httpOnly: true, sameSite: Cookie::SAMESITE_STRICT);
                 }
             }
         }
@@ -2378,7 +2409,14 @@ SQL
     {
         return static::withVersionedMode(function () use ($class, $stage, $filter, $cache, $sort) {
             Versioned::set_stage($stage);
-            return DataObject::get_one($class, $filter, $cache, $sort);
+            $list = DataObject::get($class)->setUseCache($cache);
+            if (!empty($filter)) {
+                $list = $list->where($filter);
+            }
+            if (!empty($sort) || is_null($sort)) {
+                $list = $list->sort($sort);
+            }
+            return $list->first();
         });
     }
 
@@ -2458,7 +2496,7 @@ SQL
      * @param array $options A map of hints about what should be cached. "numChildrenMethod" and
      *                       "childrenMethod" are allowed keys.
      */
-    public function onPrepopulateTreeDataCache($recordList = null, array $options = [])
+    protected function onPrepopulateTreeDataCache($recordList = null, array $options = [])
     {
         $idList = is_array($recordList) ? $recordList :
             ($recordList instanceof DataList ? $recordList->column('ID') : null);
@@ -2467,55 +2505,17 @@ SQL
     }
 
     /**
-     * Pre-populate the cache for Versioned::get_versionnumber_by_stage() for
-     * a list of record IDs, for more efficient database querying.  If $idList
-     * is null, then every record will be pre-cached.
+     * Alias of prepopulateVersionNumberCacheForStage()
      *
      * @param string $class
      * @param string $stage
      * @param array $idList
+     *
+     * @deprecated 6.1.0 Use prepopulateVersionNumberCacheForStage() instead
      */
     public static function prepopulate_versionnumber_cache($class, $stage, $idList = null)
     {
-        ReadingMode::validateStage($stage);
-        if (!Config::inst()->get(static::class, 'prepopulate_versionnumber_cache')) {
-            return;
-        }
-
-        $singleton = DataObject::singleton($class);
-        $baseClass = $singleton->baseClass();
-        $baseTable = $singleton->baseTable();
-        $stageTable = $singleton->stageTable($baseTable, $stage);
-
-        $filter = "";
-        $parameters = [];
-        if ($idList) {
-            // Validate the ID list
-            foreach ($idList as $id) {
-                if (!is_numeric($id)) {
-                    throw new InvalidArgumentException(
-                        "Bad ID passed to Versioned::prepopulate_versionnumber_cache() in \$idList: " . $id
-                    );
-                }
-            }
-            $filter = 'WHERE "ID" IN (' . DB::placeholders($idList) . ')';
-            $parameters = $idList;
-
-        // If we are caching IDs for _all_ records then we can mark this cache as "complete" and in the case of a cache-miss
-        // no subsequent call is necessary
-        } else {
-            Versioned::$cache_versionnumber[$baseClass][$stage] = [ '_complete' => true ];
-        }
-
-        $versions = DB::prepared_query("SELECT \"ID\", \"Version\" FROM \"$stageTable\" $filter", $parameters)->map();
-
-        foreach ($versions as $id => $version) {
-            Versioned::$cache_versionnumber[$baseClass][$stage][$id] = $version;
-        }
-
-        $className = $class instanceof DataObject ? $class->ClassName : $class;
-        $object = DataObject::singleton($className);
-        $object->invokeWithExtensions('updatePrePopulateVersionNumberCache', $versions, $class, $stage, $idList);
+        Versioned::prepopulateVersionNumberCacheForStage($class, $stage, $idList);
     }
 
     /**
@@ -2524,26 +2524,29 @@ SQL
      * @template T of DataObject
      * @param class-string<T> $class The name of the class.
      * @param string $stage The name of the stage.
-     * @param string $filter A filter to be inserted into the WHERE clause.
-     * @param string $sort A sort expression to be inserted into the ORDER BY clause.
-     * @param string $join Deprecated, use leftJoin($table, $joinClause) instead
-     * @param int $limit A limit on the number of records returned from the database.
      * @param string $containerClass The container class for the result set (default is DataList)
      *
      * @return DataList<T> A modified DataList designated to the specified stage
      */
     public static function get_by_stage(
-        $class,
-        $stage,
-        $filter = '',
-        $sort = '',
-        $join = '',
-        $limit = null,
-        $containerClass = DataList::class
-    ) {
+        string $class,
+        string $stage,
+        string|array $filter = '',
+        string|array|null $sort = '',
+        string|array|null $limit = null,
+        string $containerClass = DataList::class
+    ): DataList {
+        $result = DataObject::get($class, $filter, $sort, $limit, $containerClass);
+        return static::updateListToAlsoIncludeStage($result, $stage);
+    }
+
+    /**
+     * Update an existing DataList to include records for a given stage.
+     */
+    public static function updateListToAlsoIncludeStage(DataList $list, string $stage): DataList
+    {
         ReadingMode::validateStage($stage);
-        $result = DataObject::get($class, $filter, $sort, $join, $limit, $containerClass);
-        return $result->setDataQueryParam([
+        return $list->setDataQueryParam([
             'Versioned.mode' => 'stage',
             'Versioned.stage' => $stage
         ]);
@@ -2663,7 +2666,7 @@ SQL
      * @template T of DataObject
      * @param class-string<T> $class
      * @param int $id
-     * @return T&static
+     * @return null|T&static
      */
     public static function get_latest_version($class, $id)
     {
@@ -2692,7 +2695,7 @@ SQL
         }
 
         $version = static::get_latest_version($this->owner->baseClass(), $owner->ID);
-        return ($version->Version == $owner->Version);
+        return ($version?->Version == $owner->Version);
     }
 
     /**
@@ -2831,11 +2834,11 @@ SQL
      *
      * @template T of DataObject
      * @param class-string<T> $class
-     * @param string $filter
-     * @param string $sort
+     * @param string $filter Explicitly used in where clause as raw SQL - use with caution!
+     * @param string $sort Explicitly used in orderBy clause as raw SQL - use with caution!
      * @return DataList<T>
      */
-    public static function get_including_deleted($class, $filter = "", $sort = "")
+    public static function get_including_deleted(string $class, string|array $filter = '', string $sort = ''): DataList
     {
         $list = DataList::create($class);
         if (!empty($filter)) {
@@ -2844,8 +2847,78 @@ SQL
         if (!empty($sort)) {
             $list = $list->orderBy($sort);
         }
-        $list = $list->setDataQueryParam("Versioned.mode", "latest_versions");
-        return $list;
+        return static::updateListToAlsoIncludeDeleted($list);
+    }
+
+    /**
+     * Update a DataList to query the latest version of each record stored in the (class)_Versions tables.
+     *
+     * In particular, this will query deleted records as well as active ones.
+     */
+    public static function updateListToAlsoIncludeDeleted(DataList $list): DataList
+    {
+        return $list->setDataQueryParam('Versioned.mode', 'latest_versions');
+    }
+
+    /**
+     * Return the equivalent of a DataList::create() call, querying only records which have been removed
+     * from draft. This includes archived records and records which were published but have no draft record.
+     *
+     * @template T of DataObject
+     * @param class-string<T> $class
+     * @param string $where Explicitly used in where clause as raw SQL - use with caution!
+     * @param string $orderBy Explicitly used in orderBy clause as raw SQL - use with caution!
+     * @return DataList<T>
+     */
+    public static function getRemovedFromDraft(string $class, string|array $where = '', string $orderBy = ''): DataList
+    {
+        $list = DataList::create($class);
+        if (!empty($where)) {
+            $list = $list->where($where);
+        }
+        if (!empty($orderBy)) {
+            $list = $list->orderBy($orderBy);
+        }
+        return static::updateListToOnlyIncludeRemovedFromDraft($list);
+    }
+
+    /**
+     * Update a DataList to query only records which have been removed from draft.
+     * This includes archived records and records which were published but have no draft record.
+     */
+    public static function updateListToOnlyIncludeRemovedFromDraft(DataList $list): DataList
+    {
+        return $list->setDataQueryParam('Versioned.mode', 'removed_from_draft');
+    }
+
+    /**
+     * Return the equivalent of a DataList::create() call, querying only records which are archived
+     * (i.e. removed in both draft and live)
+     *
+     * @template T of DataObject
+     * @param class-string<T> $class
+     * @param string $where Explicitly used in where clause as raw SQL - use with caution!
+     * @param string $orderBy Explicitly used in orderBy clause as raw SQL - use with caution!
+     * @return DataList<T>
+     */
+    public static function getArchivedOnly(string $class, string|array $where = '', string $orderBy = ''): DataList
+    {
+        $list = DataList::create($class);
+        if (!empty($where)) {
+            $list = $list->where($where);
+        }
+        if (!empty($orderBy)) {
+            $list = $list->orderBy($orderBy);
+        }
+        return static::updateListToOnlyIncludeArchived($list);
+    }
+
+    /**
+     * Update a DataList to query only records which are archived (i.e. removed in both draft and live)
+     */
+    public static function updateListToOnlyIncludeArchived(DataList $list): DataList
+    {
+        return $list->setDataQueryParam('Versioned.mode', 'archive_only');
     }
 
     /**
@@ -2894,7 +2967,7 @@ SQL
     /**
      * @param array $labels
      */
-    public function updateFieldLabels(&$labels)
+    protected function updateFieldLabels(&$labels)
     {
         $labels['Versions'] = _t(__CLASS__ . '.has_many_Versions', 'Versions', 'Past Versions of this record');
     }
@@ -2902,7 +2975,7 @@ SQL
     /**
      * @param FieldList $fields
      */
-    public function updateCMSFields(FieldList $fields)
+    protected function updateCMSFields(FieldList $fields)
     {
         // remove the version field from the CMS as this should be left
         // entirely up to the extension (not the cms user).
@@ -2915,17 +2988,13 @@ SQL
      * @param DataObject $source Record this was duplicated from
      * @param bool $doWrite
      */
-    public function onBeforeDuplicate($source, $doWrite)
+    protected function onBeforeDuplicate($source, $doWrite)
     {
         $this->owner->Version = 0;
     }
 
-    /**
-     * @deprecated 2.4.0 Will be renamed to onFlushCache()
-     */
-    public function flushCache()
+    protected function onFlushCache()
     {
-        Deprecation::noticeWithNoReplacment('2.4.0', 'Will be renamed to onFlushCache()');
         Versioned::$cache_versionnumber = [];
         $this->versionModifiedCache = [];
     }
@@ -2935,7 +3004,7 @@ SQL
      *
      * @return string
      */
-    public function cacheKeyComponent()
+    protected function cacheKeyComponent()
     {
         return 'versionedmode-' . static::get_reading_mode();
     }
@@ -3001,7 +3070,7 @@ SQL
         if (!$this->owner->AuthorID) {
             return null;
         }
-        $member = DataObject::get_by_id(Member::class, $this->owner->AuthorID);
+        $member = Member::get()->setUseCache(true)->byID($this->owner->AuthorID);
         return $member;
     }
     /**
@@ -3015,7 +3084,45 @@ SQL
         if (!$this->owner->PublisherID) {
             return null;
         }
-        $member = DataObject::get_by_id(Member::class, $this->owner->PublisherID);
+        $member = Member::get()->setUseCache(true)->byID($this->owner->PublisherID);
         return $member;
+    }
+
+    protected function updateStatusFlags(array &$flags): void
+    {
+        if ($this->isOnLiveOnly()) {
+            $flags['removedfromdraft'] = [
+                'text' => _t(__CLASS__ . '.FLAG_ONLIVEONLY_SHORT', 'On live only'),
+                'title' => _t(
+                    __CLASS__ . '.FLAG_ONLIVEONLYSHORT_HELP',
+                    'Item is published, but has been deleted from draft'
+                ),
+            ];
+            return;
+        }
+
+        if ($this->isArchived()) {
+            $flags['archived'] = [
+                'text' => _t(__CLASS__ . '.FLAG_ARCHIVED_SHORT', 'Archived'),
+                'title' => _t(__CLASS__ . '.FLAG_ARCHIVED_HELP', 'Item is removed from draft and live'),
+            ];
+            return;
+        }
+
+        if ($this->isOnDraftOnly()) {
+            $flags['addedtodraft'] = [
+                'text' => _t(__CLASS__ . '.FLAG_ADDEDTODRAFT_SHORT', 'Draft'),
+                'title' => _t(__CLASS__ . '.FLAG_ADDEDTODRAFT_HELP', 'Item has not been published yet')
+            ];
+            return;
+        }
+
+        if ($this->isModifiedOnDraft()) {
+            $flags['modified'] = [
+                'text' => _t(__CLASS__ . '.FLAG_MODIFIEDONDRAFT_SHORT', 'Modified'),
+                'title' => _t(__CLASS__ . '.FLAG_MODIFIEDONDRAFT_HELP', 'Item has unpublished changes'),
+            ];
+            return;
+        }
     }
 }

@@ -6,8 +6,8 @@ use ReflectionException;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\ORM\DB;
-use SilverStripe\ORM\SS_List;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\SS_List;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\Connect\Query;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DataObjectSchema;
@@ -235,7 +235,7 @@ class StandardRelatedDataService implements RelatedDataService
             }
         }
 
-        // Prevent duplicate queries which can happen when an Image is inserted on a Page subclass via TinyMCE
+        // Prevent duplicate queries which can happen when an Image is inserted on a Page subclass via HTMLEditorField
         // and FileLink will make the same query multiple times for all the different page subclasses because
         // the FileLink is associated with the Base Page class database table
         $queryIden = implode('-', array_merge($selectFields, [$joinTableName, $whereField, $record->ID]));

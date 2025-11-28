@@ -27,13 +27,4 @@ class FileLink extends DataObject
         'Parent' => DataObject::class,
         'Linked' => File::class,
     ];
-
-    /**
-     * Don't show this model in campaign admin as part of implicit change sets
-     *
-     * @config
-     * @var bool
-     * @deprecated 2.4.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    private static $hide_in_campaigns = true;
 }

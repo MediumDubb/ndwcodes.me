@@ -19,13 +19,13 @@ use SilverStripe\Core\Convert;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Dev\TestOnly;
 use SilverStripe\Forms\Form;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DB;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBHTMLText;
-use SilverStripe\ORM\ValidationResult;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Core\Validation\ValidationResult;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\Requirements;
 use SilverStripe\View\SSViewer;
 use SilverStripe\View\TemplateGlobalProvider;
@@ -181,6 +181,7 @@ class Security extends Controller implements TemplateGlobalProvider
      * checks again.
      *
      * @var bool
+     * @deprecated 6.1 Use `DataObject::getSchema()->tableReadyClasses()` instead
      */
     protected static $database_is_ready = false;
 
@@ -333,7 +334,7 @@ class Security extends Controller implements TemplateGlobalProvider
             ];
         };
 
-        if (!$controller && Controller::has_curr()) {
+        if (!$controller && Controller::curr()) {
             $controller = Controller::curr();
         }
 
@@ -415,11 +416,12 @@ class Security extends Controller implements TemplateGlobalProvider
         $message = $messageSet['default'];
 
         $request = $controller->getRequest();
+        $requestUrl = Director::baseURL() . ltrim($request->getURL(true), '/');
         if ($request->hasSession()) {
             list($messageText, $messageCast) = $parseMessage($message);
             static::singleton()->setSessionMessage($messageText, ValidationResult::TYPE_WARNING, $messageCast);
 
-            $request->getSession()->set("BackURL", $_SERVER['REQUEST_URI']);
+            $request->getSession()->set('BackURL', $requestUrl);
         }
 
         // Audit logging hook
@@ -427,7 +429,7 @@ class Security extends Controller implements TemplateGlobalProvider
 
         return $controller->redirect(Controller::join_links(
             Security::config()->uninherited('login_url'),
-            "?BackURL=" . urlencode($_SERVER['REQUEST_URI'] ?? '')
+            "?BackURL=" . urlencode($requestUrl)
         ));
     }
 
@@ -444,6 +446,12 @@ class Security extends Controller implements TemplateGlobalProvider
      */
     public static function setCurrentUser($currentUser = null)
     {
+        // Always use the primary database and not a replica if a CMS user is logged in
+        // This is to ensure that when viewing content on the frontend it is always
+        // up to date i.e. not from an unsynced replica
+        if ($currentUser && Permission::checkMember($currentUser, 'CMS_ACCESS')) {
+            DB::setMustUsePrimary();
+        }
         Security::$currentUser = $currentUser;
     }
 
@@ -527,8 +535,9 @@ class Security extends Controller implements TemplateGlobalProvider
             return $request;
         }
 
-        if (Controller::has_curr() && Controller::curr() !== $this) {
-            return Controller::curr()->getRequest();
+        $controller = Controller::curr();
+        if ($controller && $controller !== $this) {
+            return $controller->getRequest();
         }
 
         return null;
@@ -647,7 +656,7 @@ class Security extends Controller implements TemplateGlobalProvider
      *
      * @param null|HTTPRequest $request
      * @param int $service
-     * @return HTTPResponse|string Returns the "login" page as HTML code.
+     * @return HTTPResponse|RequestHandler|DBHTMLText|string Returns the "login" page as HTML code.
      * @throws HTTPResponse_Exception
      */
     public function login($request = null, $service = Authenticator::LOGIN)
@@ -693,7 +702,7 @@ class Security extends Controller implements TemplateGlobalProvider
      *
      * @param null|HTTPRequest $request
      * @param int $service
-     * @return HTTPResponse|string
+     * @return HTTPResponse|RequestHandler|DBHTMLText|string
      */
     public function logout($request = null, $service = Authenticator::LOGOUT)
     {
@@ -842,7 +851,7 @@ class Security extends Controller implements TemplateGlobalProvider
      * @param string $title The title of the form
      * @param array $templates
      * @param callable $aggregator
-     * @return array|HTTPResponse|RequestHandler|DBHTMLText|string
+     * @return HTTPResponse|RequestHandler|DBHTMLText|string
      */
     protected function delegateToMultipleHandlers(array $handlers, $title, array $templates, callable $aggregator)
     {
@@ -876,7 +885,7 @@ class Security extends Controller implements TemplateGlobalProvider
      * @param RequestHandler $handler
      * @param string $title The title of the form
      * @param array $templates
-     * @return array|HTTPResponse|RequestHandler|DBHTMLText|string
+     * @return HTTPResponse|RequestHandler|DBHTMLText|string
      */
     protected function delegateToHandler(RequestHandler $handler, $title, array $templates = [])
     {
@@ -937,7 +946,7 @@ class Security extends Controller implements TemplateGlobalProvider
     /**
      * Show the "lost password" page
      *
-     * @return string Returns the "lost password" page as HTML code.
+     * @return HTTPResponse|RequestHandler|DBHTMLText|string Returns the "lost password" page as HTML code.
      */
     public function lostpassword()
     {
@@ -967,7 +976,7 @@ class Security extends Controller implements TemplateGlobalProvider
      *
      * @see ChangePasswordForm
      *
-     * @return string|HTTPRequest Returns the "change password" page as HTML code, or a redirect response
+     * @return HTTPResponse|RequestHandler|DBHTMLText|string Returns the "change password" page as HTML code, or a redirect response
      */
     public function changepassword()
     {
@@ -1064,6 +1073,12 @@ class Security extends Controller implements TemplateGlobalProvider
         // New salts will only need to be generated if the password is hashed for the first time
         $salt = ($salt) ? $salt : $encryptor->salt($password);
 
+        // PasswordEncryptors may return false, though the Member.db ['Salt'] field is
+        // a Varchar so we need to ensure it's returned as a string
+        if ($salt === false) {
+            $salt = '';
+        }
+
         return [
             'password'  => $encryptor->encrypt($password, $salt, $member),
             'salt' => $salt,
@@ -1074,7 +1089,7 @@ class Security extends Controller implements TemplateGlobalProvider
 
     /**
      * Checks the database is in a state to perform security checks.
-     * See {@link DatabaseAdmin->init()} for more information.
+     * See DbBuild permission checks for more information.
      *
      * @return bool
      */
@@ -1089,41 +1104,19 @@ class Security extends Controller implements TemplateGlobalProvider
             return Security::$database_is_ready;
         }
 
-        $requiredClasses = ClassInfo::dataClassesFor(Member::class);
-        $requiredClasses[] = Group::class;
-        $requiredClasses[] = Permission::class;
+        $toCheck = [
+            Member::class,
+            Group::class,
+            Permission::class,
+        ];
         $schema = DataObject::getSchema();
-        foreach ($requiredClasses as $class) {
-            // Skip test classes, as not all test classes are scaffolded at once
-            if (is_a($class, TestOnly::class, true)) {
-                continue;
-            }
-
-            // if any of the tables aren't created in the database
-            $table = $schema->tableName($class);
-            if (!ClassInfo::hasTable($table)) {
-                return false;
-            }
-
-            // HACK: DataExtensions aren't applied until a class is instantiated for
-            // the first time, so create an instance here.
-            singleton($class);
-
-            // if any of the tables don't have all fields mapped as table columns
-            $dbFields = DB::field_list($table);
-            if (!$dbFields) {
-                return false;
-            }
-
-            $objFields = $schema->databaseFields($class, false);
-            $missingFields = array_diff_key($objFields ?? [], $dbFields);
-
-            if ($missingFields) {
+        foreach ($toCheck as $class) {
+            if (!$schema->tablesAreReadyForClass($class)) {
                 return false;
             }
         }
-        Security::$database_is_ready = true;
 
+        Security::$database_is_ready = true;
         return true;
     }
 
@@ -1134,6 +1127,15 @@ class Security extends Controller implements TemplateGlobalProvider
     {
         Security::$database_is_ready = null;
         Security::$force_database_is_ready = null;
+        $toClear = [
+            Member::class,
+            Group::class,
+            Permission::class,
+        ];
+        $schema = DataObject::getSchema();
+        foreach ($toClear as $class) {
+            $schema->clearTableReadyForClass($class);
+        }
     }
 
     /**

@@ -6,7 +6,7 @@ use LogicException;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\Hierarchy\Hierarchy;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\HTML;
 use SilverStripe\View\SSViewer;
 
@@ -65,7 +65,7 @@ class GridFieldLevelup extends AbstractGridFieldComponent implements GridField_H
         }
 
         /** @var DataObject|Hierarchy $modelObj */
-        $modelObj = DataObject::get_by_id($modelClass, $this->currentID);
+        $modelObj = DataObject::get($modelClass)->setUseCache(true)->byID($this->currentID);
         if (!$modelObj) {
             throw new \LogicException(
                 "Can't find object of class $modelClass ID #{$this->currentID} for GridFieldLevelup"

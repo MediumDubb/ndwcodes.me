@@ -9,9 +9,9 @@ use Psr\SimpleCache\InvalidArgumentException;
 use RuntimeException;
 use SilverStripe\Core\Convert;
 use SilverStripe\Core\Injector\Injector;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\FieldType\DBField;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\Embed\Embeddable;
 use SilverStripe\View\HTML;
 use SilverStripe\View\Parsers\ShortcodeHandler;
@@ -279,7 +279,7 @@ class EmbedShortcodeProvider implements ShortcodeHandler
     private static function buildAttributeListFromArguments(array $arguments, array $exclude = []): ArrayList
     {
         // A whitelist of shortcode attributes which are allowed in the resultant markup.
-        // Note that the tinymce plugin restricts attributes on the client-side separately.
+        // Note that any WYSIWYG plugin may restrict attributes on the client-side separately.
         $whitelist = [
             'url',
             'thumbnail',

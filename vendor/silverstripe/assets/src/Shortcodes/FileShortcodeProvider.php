@@ -14,12 +14,13 @@ use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\ErrorPage\ErrorPage;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\HTML;
 use SilverStripe\View\Parsers\ShortcodeHandler;
 use SilverStripe\View\Parsers\ShortcodeParser;
+use SilverStripe\TemplateEngine\SSTemplateEngine;
 use SilverStripe\View\SSViewer;
-use SilverStripe\View\SSViewer_FromString;
+use SilverStripe\View\ViewLayerData;
 
 /**
  * Provides shortcodes for File dataobject
@@ -192,7 +193,7 @@ class FileShortcodeProvider implements ShortcodeHandler, Flushable
         }
 
         // Check if the file is found
-        $file = DataObject::get_by_id(File::class, $args['id']);
+        $file = DataObject::get(File::class)->setUseCache(true)->byID($args['id']);
         if (!$file) {
             $errorCode = 404;
             return null;
@@ -237,9 +238,9 @@ class FileShortcodeProvider implements ShortcodeHandler, Flushable
      */
     public static function getCacheKey($params, $content = null)
     {
-        $key = SSViewer::config()->get('global_key');
-        $viewer = new SSViewer_FromString($key);
-        $globalKey = md5($viewer->process(ArrayData::create([])) ?? '');
+        $key = SSTemplateEngine::config()->get('global_key');
+        $engine = SSTemplateEngine::create();
+        $globalKey = md5($engine->renderString($key, ViewLayerData::create([])));
         $argsKey = md5(serialize($params)) . '#' . md5(serialize($content));
 
         return "{$globalKey}#{$argsKey}";

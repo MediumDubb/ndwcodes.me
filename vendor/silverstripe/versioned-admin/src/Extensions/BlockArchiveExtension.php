@@ -4,7 +4,7 @@ namespace SilverStripe\VersionedAdmin\Extensions;
 
 use DNADesign\Elemental\Models\BaseElement;
 use SilverStripe\Forms\GridField\GridFieldDataColumns;
-use SilverStripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\ORM\FieldType\DBDatetime;
 use SilverStripe\Security\Member;
 use SilverStripe\VersionedAdmin\ArchiveAdmin;
@@ -13,9 +13,9 @@ use SilverStripe\VersionedAdmin\Interfaces\ArchiveViewProvider;
 /**
  * Adds a archive view for Elemental blocks
  *
- * @extends DataExtension<BaseElement>
+ * @extends Extension<BaseElement>
  */
-class BlockArchiveExtension extends DataExtension implements ArchiveViewProvider
+class BlockArchiveExtension extends Extension implements ArchiveViewProvider
 {
     /**
      * @inheritDoc
@@ -36,12 +36,12 @@ class BlockArchiveExtension extends DataExtension implements ArchiveViewProvider
         $listColumns->setDisplayFields([
             'Title' => BaseElement::singleton()->fieldLabel('Title'),
             'Type' => _t('SilverStripe\\VersionedAdmin\\ArchiveAdmin.COLUMN_TYPE', 'Type'),
-            'Versions.first.LastEdited' => _t(
+            'LastEdited' => _t(
                 'SilverStripe\\VersionedAdmin\\ArchiveAdmin.COLUMN_DATEARCHIVED',
                 'Date Archived'
             ),
             'Breadcrumbs' => _t('SilverStripe\\VersionedAdmin\\ArchiveAdmin.COLUMN_ORIGIN', 'Origin'),
-            'Versions.first.Author.Name' => _t(
+            'Author.Name' => _t(
                 'SilverStripe\\VersionedAdmin\\ArchiveAdmin.COLUMN_ARCHIVEDBY',
                 'Archived By'
             )
@@ -52,7 +52,7 @@ class BlockArchiveExtension extends DataExtension implements ArchiveViewProvider
 
                 return ($parent && $parent->hasMethod('Breadcrumbs')) ? $parent->Breadcrumbs() : null;
             },
-            'Versions.first.LastEdited' => function ($val, $item) {
+            'LastEdited' => function ($val, $item) {
                 return DBDatetime::create_field('Datetime', $val)->Ago();
             },
         ]);

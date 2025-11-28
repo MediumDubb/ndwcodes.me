@@ -9,14 +9,18 @@ use SilverStripe\Core\Convert;
 use SilverStripe\Control\Controller;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\TextField;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\Filters\SearchFilter;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\SSViewer;
 use LogicException;
 use SilverStripe\Control\HTTPResponse_Exception;
+use SilverStripe\Core\ClassInfo;
+use SilverStripe\Core\Injector\Injector;
+use SilverStripe\View\TemplateEngine;
+use SilverStripe\View\ViewLayerData;
 
 /**
  * This class is is responsible for adding objects to another object's has_many
@@ -209,7 +213,7 @@ class GridFieldAddExistingAutocompleter extends AbstractGridFieldComponent imple
             return $dataList;
         }
         $gridField->State->GridFieldAddRelation = null;
-        $object = DataObject::get_by_id($dataClass, $objectID);
+        $object = DataObject::get($dataClass)->setUseCache(true)->byID($objectID);
         if ($object) {
             if (!$object->canView()) {
                 throw new HTTPResponse_Exception(null, 403);
@@ -275,20 +279,29 @@ class GridFieldAddExistingAutocompleter extends AbstractGridFieldComponent imple
         }
 
         // Apply baseline filtering and limits which should hold regardless of any customisations
+        if (ClassInfo::hasMethod($results, 'excludeByList')) {
+            $results = $results->excludeByList($gridField->getList());
+        } elseif (ClassInfo::hasMethod($results, 'subtract')) {
+            $results = $results->subtract($gridField->getList());
+        } else {
+            $results = $results->exclude(['ID' => $gridField->getList()->column('ID')]);
+        }
         $results = $results
-            ->subtract($gridField->getList())
             ->filterAny($params)
             ->limit($this->getResultsLimit());
 
         $json = [];
         Config::nest();
         SSViewer::config()->set('source_file_comments', false);
-        $viewer = SSViewer::fromString($this->resultsFormat);
+
+        $engine = Injector::inst()->create(TemplateEngine::class);
         foreach ($results as $result) {
             if (!$result->canView()) {
                 continue;
             }
-            $title = Convert::html2raw($viewer->process($result));
+            $title = Convert::html2raw(
+                $engine->renderString($this->resultsFormat, ViewLayerData::create($result), cache: false)
+            );
             $json[] = [
                 'label' => $title,
                 'value' => $title,
@@ -369,30 +382,37 @@ class GridFieldAddExistingAutocompleter extends AbstractGridFieldComponent imple
         if ($fieldSpecs = $obj->searchableFields()) {
             $customSearchableFields = $obj->config()->get('searchable_fields');
             foreach ($fieldSpecs as $name => $spec) {
-                if (is_array($spec) && array_key_exists('filter', $spec ?? [])) {
-                    // The searchableFields() spec defaults to PartialMatch,
-                    // so we need to check the original setting.
-                    // If the field is defined $searchable_fields = array('MyField'),
-                    // then default to StartsWith filter, which makes more sense in this context.
-                    if (!$customSearchableFields || array_search($name, $customSearchableFields ?? []) !== false) {
-                        $filter = 'StartsWith';
-                    } else {
-                        $filterName = $spec['filter'];
-                        // It can be an instance
-                        if ($filterName instanceof SearchFilter) {
-                            $filterName = get_class($filterName);
-                        }
-                        // It can be a fully qualified class name
-                        if (strpos($filterName ?? '', '\\') !== false) {
-                            $filterNameParts = explode("\\", $filterName ?? '');
-                            // We expect an alias matching the class name without namespace, see #coresearchaliases
-                            $filterName = array_pop($filterNameParts);
-                        }
-                        $filter = preg_replace('/Filter$/', '', $filterName ?? '');
+                if (is_array($spec)) {
+                    // Skip fields that shouldn't be used in a general search
+                    if (array_key_exists('general', $spec) && !$spec['general']) {
+                        continue;
                     }
-                    $fields[] = "{$name}:{$filter}";
-                } else {
-                    $fields[] = $name;
+                    // Set an appropriate filter
+                    if (array_key_exists('filter', $spec)) {
+                        // The searchableFields() spec defaults to PartialMatch,
+                        // so we need to check the original setting.
+                        // If the field is defined $searchable_fields = array('MyField'),
+                        // then default to StartsWith filter, which makes more sense in this context.
+                        if (!$customSearchableFields || array_search($name, $customSearchableFields ?? []) !== false) {
+                            $filter = 'StartsWith';
+                        } else {
+                            $filterName = $spec['filter'];
+                            // It can be an instance
+                            if ($filterName instanceof SearchFilter) {
+                                $filterName = get_class($filterName);
+                            }
+                            // It can be a fully qualified class name
+                            if (strpos($filterName ?? '', '\\') !== false) {
+                                $filterNameParts = explode("\\", $filterName ?? '');
+                                // We expect an alias matching the class name without namespace, see #coresearchaliases
+                                $filterName = array_pop($filterNameParts);
+                            }
+                            $filter = preg_replace('/Filter$/', '', $filterName ?? '');
+                        }
+                        $fields[] = "{$name}:{$filter}";
+                    } else {
+                        $fields[] = $name;
+                    }
                 }
             }
         }

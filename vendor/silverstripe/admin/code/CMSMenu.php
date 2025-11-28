@@ -27,7 +27,7 @@ use Traversable;
  * configuration will also include a 'help' link to the SilverStripe user
  * documentation.
  *
- * Additional CMSMenu items can be added through {@link LeftAndMainExtension::init()}
+ * Additional CMSMenu items can be added through {@link Extension::init()}
  * extensions added to {@link LeftAndMain}.
  */
 class CMSMenu implements IteratorAggregate, i18nEntityProvider
@@ -262,10 +262,11 @@ class CMSMenu implements IteratorAggregate, i18nEntityProvider
                         // checks on
                 if ($menuItem->controller) {
                     $controllerObj = singleton($menuItem->controller);
-                    if (Controller::has_curr()) {
+                    $controllerCurr = Controller::curr();
+                    if ($controllerCurr) {
                         // Necessary for canView() to have request data available,
                         // e.g. to check permissions against LeftAndMain->currentRecord()
-                        $controllerObj->setRequest(Controller::curr()->getRequest());
+                        $controllerObj->setRequest($controllerCurr->getRequest());
                         if (!$controllerObj->canView($member)) {
                             continue;
                         }
@@ -379,7 +380,7 @@ class CMSMenu implements IteratorAggregate, i18nEntityProvider
         if (!$root) {
             $root = LeftAndMain::class;
         }
-        $abstractClasses = [LeftAndMain::class, CMSMain::class];
+        $abstractClasses = [LeftAndMain::class];
         $subClasses = array_values(ClassInfo::subclassesFor($root) ?? []);
         foreach ($subClasses as $className) {
             if ($recursive && $className != $root) {

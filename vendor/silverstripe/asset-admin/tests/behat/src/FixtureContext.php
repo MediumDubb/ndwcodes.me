@@ -2,11 +2,13 @@
 
 namespace SilverStripe\AssetAdmin\Tests\Behat\Context;
 
+use Behat\Behat\Hook\Scope\BeforeScenarioScope;
 use Behat\Mink\Element\DocumentElement;
 use Behat\Mink\Element\NodeElement;
 use Page;
 use PHPUnit\Framework\Assert;
 use SilverStripe\Assets\Image;
+use SilverStripe\BehatExtension\Context\BasicContext;
 use SilverStripe\BehatExtension\Context\FixtureContext as BaseFixtureContext;
 use SilverStripe\BehatExtension\Utility\StepHelper;
 
@@ -16,6 +18,15 @@ use SilverStripe\BehatExtension\Utility\StepHelper;
 class FixtureContext extends BaseFixtureContext
 {
     use StepHelper;
+
+    private ?BasicContext $basicContext = null;
+
+
+    /** @BeforeScenario */
+    public function gatherContexts(BeforeScenarioScope $scope)
+    {
+        $this->basicContext = $scope->getEnvironment()->getContext(BasicContext::class);
+    }
 
     /**
      * Select a gallery item by type and name
@@ -380,15 +391,26 @@ EOS
     }
 
     /**
-     * @Then I should see a modal titled :title
+     * @Then /^I should (not |)see a modal titled "([^"]*)"$/
      * @param string $title
      */
-    public function iShouldSeeAModalTitled($title)
+    public function iShouldSeeAModalTitled($not, $title)
     {
         $page = $this->getMainContext()->getSession()->getPage();
         $modalTitle = $page->find('css', '[role=dialog] .modal-header > .modal-title');
-        Assert::assertNotNull($modalTitle, 'No modal on the page');
-        Assert::assertTrue($modalTitle->getText() == $title);
+        if ($not) {
+            if ($modalTitle && $modalTitle->getText() == $title) {
+                // Modal found, but should not be visible
+                Assert::assertFalse($modalTitle->isVisible());
+            } else {
+                // Modal not found, which is also a pass
+                Assert::assertTrue(true);
+            }
+        } else {
+            // Modal should be visible and have the correct title
+            Assert::assertTrue($modalTitle->getText() == $title);
+            Assert::assertTrue($modalTitle->isVisible());
+        }
     }
 
     /**
@@ -401,11 +423,10 @@ EOS
         $modal = $page->find('css', '[role=dialog] .modal-dialog');
         Assert::assertNotNull($modal, 'No modal on the page');
 
-        // Check if the popover is open for the block
-        $button = $modal->find('xpath', "//button[contains(text(), '$buttonName')]");
-
-        Assert::assertNotNull($button, sprintf('Could not find button labelled "%s"', $buttonName));
-
+        $button = $this->basicContext->findNamedButton($buttonName, $modal);
+        if (!$button) {
+            Assert::assertNotNull($button, sprintf('Could not find button labelled "%s"', $buttonName));
+        }
         $button->click();
     }
 
@@ -417,7 +438,7 @@ EOS
     public function iShouldSeeTheGalleryItemInPosition($name, $position)
     {
         $itemByPosition = $this->getGalleryItemByRank($position);
-        Assert::assertNotNull($itemByPosition, 'Should have found a fallery item at position ' . $position);
+        Assert::assertNotNull($itemByPosition, 'Should have found a gallery item at position ' . $position);
         $title = $itemByPosition->find(
             'xpath',
             "//div[contains(text(), '{$name}')]"
@@ -425,7 +446,7 @@ EOS
             'xpath',
             "//div//span[contains(text(), '{$name}')]"
         );
-        Assert::assertNotNull($title, sprintf('File at position %s should be named %s', $position, $name));
+        Assert::assertNotNull($title, sprintf('File at position %s should be named %s, found %s', $position, $name, $itemByPosition->getText()));
     }
 
     /**
@@ -487,5 +508,34 @@ EOS
 
         $this->activatedConfigFiles[] = $path;
         $this->getMainContext()->visit('dev/build?flush');
+    }
+
+    /**
+     * Example: When I drag the file named "file1" to the folder "my folder"
+     *
+     * @When /^I drag the (?:file|folder) named "([^"]+)" to the folder "([^"]+)"$/
+     */
+    public function stepDragTheFileToTheFolder(string $fileName, string $folderName): void
+    {
+        $file = $this->getGalleryItem($fileName)->find('xpath', "/ancestor-or-self::div[contains(@class, 'gallery-item__draggable')]");
+        Assert::assertNotNull($file, "File named {$fileName} could not be found or isn't draggable");
+        $folder = $this->getGalleryItem($folderName)->find('xpath', "/ancestor-or-self::div[contains(@class, 'gallery-item__droppable')]");
+        Assert::assertNotNull($folder, "Folder named {$folderName} could not be found or isn't droppable");
+        $file->dragTo($folder);
+    }
+
+    /**
+     * Example: When I drag the folder "my folder" to the back button"
+     *
+     * @When /^I drag the (?:file|folder) named "([^"]+)" to the back button$/
+     */
+    public function stepDragTheFileToTheBackButton(string $fileName): void
+    {
+        $file = $this->getGalleryItem($fileName)->find('xpath', "/ancestor-or-self::div[contains(@class, 'gallery-item__draggable')]");
+        Assert::assertNotNull($file, "File named {$fileName} could not be found or isn't draggable");
+        $page = $this->getMainContext()->getSession()->getPage();
+        $backButton = $page->find('css', '.gallery__back-container .gallery-item__droppable');
+        Assert::assertNotNull($backButton, 'Back button could not be found');
+        $file->dragTo($backButton);
     }
 }

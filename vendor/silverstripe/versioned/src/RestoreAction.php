@@ -4,7 +4,7 @@ namespace SilverStripe\Versioned;
 
 use SilverStripe\Core\Convert;
 use SilverStripe\ORM\Hierarchy\Hierarchy;
-use SilverStripe\ORM\ValidationException;
+use SilverStripe\Core\Validation\ValidationException;
 use SilverStripe\Versioned\Versioned;
 
 /**
@@ -89,9 +89,9 @@ class RestoreAction
         $restoredID = $restoredItem->Title ?: $restoredItem->ID;
         $restoredType = Convert::raw2xml(strtolower($restoredItem->i18n_singular_name() ?? ''));
 
-        if (method_exists($restoredItem, 'CMSEditLink') &&
-        $restoredItem->CMSEditLink()) {
-            $restoredID = sprintf('<a href="%s">%s</a>', $restoredItem->CMSEditLink(), $restoredID);
+        $editLink = $restoredItem->CMSEditLink();
+        if ($editLink) {
+            $restoredID = sprintf('<a href="%s">%s</a>', $editLink, $restoredID);
         }
 
         if ($originalItem->URLSegment !== $restoredItem->URLSegment) {

@@ -3,7 +3,7 @@
 namespace SilverStripe\Forms;
 
 use BadMethodCallException;
-use SilverStripe\Admin\LeftAndMain;
+use SilverStripe\Admin\AdminController;
 use SilverStripe\Control\Controller;
 use SilverStripe\Control\HasRequestHandler;
 use SilverStripe\Control\HTTPRequest;
@@ -13,19 +13,18 @@ use SilverStripe\Control\RequestHandler;
 use SilverStripe\Control\Session;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Injector\Injector;
+use SilverStripe\Core\Validation\ValidationInterface;
 use SilverStripe\ORM\DataObjectInterface;
 use SilverStripe\ORM\FieldType\DBHTMLText;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\NullSecurityToken;
 use SilverStripe\Security\SecurityToken;
 use SilverStripe\View\AttributesHTML;
 use SilverStripe\View\SSViewer;
-use SilverStripe\View\ViewableData;
-use SilverStripe\Dev\Deprecation;
+use SilverStripe\Model\ModelData;
+use SilverStripe\Forms\Validation\Validator;
 use SilverStripe\Security\SudoMode\SudoModeServiceInterface;
 use SilverStripe\Forms\GridField\GridFieldDetailForm_ItemRequest;
-use SilverStripe\Forms\GridField\GridField;
-use SilverStripe\Forms\GridField\GridFieldViewButton;
 
 /**
  * Base class for all forms.
@@ -68,7 +67,7 @@ use SilverStripe\Forms\GridField\GridFieldViewButton;
  * For example, the "URLSegment" field in a standard CMS form would be
  * accessible through "admin/EditForm/field/URLSegment/FieldHolder".
  */
-class Form extends ViewableData implements HasRequestHandler
+class Form extends ModelData implements HasRequestHandler, ValidationInterface
 {
     use AttributesHTML;
     use FormMessage;
@@ -88,7 +87,7 @@ class Form extends ViewableData implements HasRequestHandler
     const ENC_TYPE_MULTIPART  = 'multipart/form-data';
 
     /**
-     * Accessed by Form.ss.
+     * Accessed by Form template.
      * A performance enhancement over the generate-the-form-tag-and-then-remove-it code that was there previously
      *
      * @var bool
@@ -118,9 +117,9 @@ class Form extends ViewableData implements HasRequestHandler
     protected $name;
 
     /**
-     * @var Validator
+     * @var null|Validator
      */
-    protected $validator;
+    protected $validator = null;
 
     /**
      * @see setValidationResponseCallback()
@@ -141,7 +140,7 @@ class Form extends ViewableData implements HasRequestHandler
     /**
      * Populated by {@link loadDataFrom()}.
      *
-     * @var ViewableData|null
+     * @var ModelData|null
      */
     protected $record;
 
@@ -165,7 +164,7 @@ class Form extends ViewableData implements HasRequestHandler
     /**
      * Legend value, to be inserted into the
      * <legend> element before the <fieldset>
-     * in Form.ss template.
+     * in Form template.
      *
      * @var string|null
      */
@@ -285,11 +284,11 @@ class Form extends ViewableData implements HasRequestHandler
      * @param Validator|null $validator Override the default validator instance (Default: {@link RequiredFields})
      */
     public function __construct(
-        RequestHandler $controller = null,
+        ?RequestHandler $controller = null,
         $name = Form::DEFAULT_NAME,
-        FieldList $fields = null,
-        FieldList $actions = null,
-        Validator $validator = null
+        ?FieldList $fields = null,
+        ?FieldList $actions = null,
+        ?Validator $validator = null
     ) {
         parent::__construct();
 
@@ -305,11 +304,15 @@ class Form extends ViewableData implements HasRequestHandler
         $this->setName($name);
 
         // Form validation
-        $this->validator = ($validator) ? $validator : new RequiredFields();
-        $this->validator->setForm($this);
+        if ($validator) {
+            $this->validator = $validator;
+            $this->validator->setForm($this);
+        }
 
         // Form error controls
-        $this->restoreFormState();
+        if ($controller) {
+            $this->restoreFormState();
+        }
 
         // Check if CSRF protection is enabled, either on the parent controller or from the default setting. Note that
         // method_exists() is used as some controllers (e.g. GroupTest) do not always extend from Object.
@@ -328,7 +331,7 @@ class Form extends ViewableData implements HasRequestHandler
      * Make the form require sudo mode, which will make the form readonly and add a sudo mode password field
      * unless the current user previously activated sudo mode.
      *
-     * Note that if the parent request handler for this form isn't LeftAndMain or GridFieldDetailForm_ItemRequest,
+     * Note that if the parent request handler for this form isn't AdminController or GridFieldDetailForm_ItemRequest,
      * sudo mode will not be required by this form.
      */
     public function requireSudoMode(): void
@@ -336,7 +339,7 @@ class Form extends ViewableData implements HasRequestHandler
         // Check that the current request handler for the form is one that's used
         // in an admin context where sudo mode makes sense
         $classes = [
-            LeftAndMain::class,
+            AdminController::class,
             GridFieldDetailForm_ItemRequest::class,
         ];
         $enableSudoMode = false;
@@ -448,7 +451,7 @@ class Form extends ViewableData implements HasRequestHandler
             return $controller->getRequest();
         }
         // Fall back to current controller
-        if (Controller::has_curr() && !(Controller::curr()->getRequest() instanceof NullHTTPRequest)) {
+        if (Controller::curr() && !(Controller::curr()->getRequest() instanceof NullHTTPRequest)) {
             return Controller::curr()->getRequest();
         }
         return null;
@@ -589,13 +592,13 @@ class Form extends ViewableData implements HasRequestHandler
         return $this;
     }
 
-    public function castingHelper($field)
+    public function castingHelper(string $field, bool $useFallback = true): ?string
     {
         // Override casting for field message
         if (strcasecmp($field ?? '', 'Message') === 0 && ($helper = $this->getMessageCastingHelper())) {
             return $helper;
         }
-        return parent::castingHelper($field);
+        return parent::castingHelper($field, $useFallback);
     }
 
     /**
@@ -699,7 +702,7 @@ class Form extends ViewableData implements HasRequestHandler
 
     /**
      * Get the {@link Validator} attached to this form.
-     * @return Validator
+     * @return null|Validator
      */
     public function getValidator()
     {
@@ -708,10 +711,10 @@ class Form extends ViewableData implements HasRequestHandler
 
     /**
      * Set the {@link Validator} on this form.
-     * @param Validator $validator
+     * @param null|Validator $validator
      * @return $this
      */
-    public function setValidator(Validator $validator)
+    public function setValidator(?Validator $validator)
     {
         if ($validator) {
             $this->validator = $validator;
@@ -956,7 +959,7 @@ class Form extends ViewableData implements HasRequestHandler
 
     /**
      * Set the legend value to be inserted into
-     * the <legend> element in the Form.ss template.
+     * the <legend> element in the Form template.
      * @param string $legend
      * @return $this
      */
@@ -967,10 +970,10 @@ class Form extends ViewableData implements HasRequestHandler
     }
 
     /**
-     * Set the SS template that this form should use
+     * Set the template or template candidates that this form should use
      * to render with. The default is "Form".
      *
-     * @param string|array $template The name of the template (without the .ss extension) or array form
+     * @param string|array $template The name of the template (without the file extension) or array of candidates
      * @return $this
      */
     public function setTemplate($template)
@@ -1198,7 +1201,7 @@ class Form extends ViewableData implements HasRequestHandler
      * @param RequestHandler $controller
      * @return $this
      */
-    public function setController(RequestHandler $controller = null)
+    public function setController(?RequestHandler $controller = null)
     {
         $this->controller = $controller;
         return $this;
@@ -1245,22 +1248,16 @@ class Form extends ViewableData implements HasRequestHandler
      *
      * @param string $message the text of the message
      * @param string $type Should be set to good, bad, or warning.
-     * @param string|bool $cast Cast type; One of the CAST_ constant definitions.
-     * Bool values will be treated as plain text flag.
+     * @param string $cast Cast type; One of the CAST_ constant definitions.
      */
-    public function sessionMessage($message, $type = ValidationResult::TYPE_ERROR, $cast = ValidationResult::CAST_TEXT)
-    {
-        if ($cast === null) {
-            Deprecation::notice(
-                '5.4.0',
-                'Passing $cast as null is deprecated. Pass a ValidationResult::CAST_* constant instead in a future major release.',
-                Deprecation::SCOPE_GLOBAL
-            );
-            $cast = ValidationResult::CAST_TEXT;
-        }
+    public function sessionMessage(
+        string $message,
+        string $type = ValidationResult::TYPE_ERROR,
+        string $cast = ValidationResult::CAST_TEXT
+    ) {
         $this->setMessage($message, $type, $cast);
         $result = $this->getSessionValidationResult() ?: ValidationResult::create();
-        $result->addMessage($message, $type, null, $cast);
+        $result->addMessage($message, $type, '', $cast);
         $this->setSessionValidationResult($result);
     }
 
@@ -1269,22 +1266,16 @@ class Form extends ViewableData implements HasRequestHandler
      *
      * @param string $message the text of the message
      * @param string $type Should be set to good, bad, or warning.
-     * @param string|bool $cast Cast type; One of the CAST_ constant definitions.
-     * Bool values will be treated as plain text flag.
+     * @param string $cast Cast type; One of the CAST_ constant definitions.
      */
-    public function sessionError($message, $type = ValidationResult::TYPE_ERROR, $cast = ValidationResult::CAST_TEXT)
-    {
-        if ($cast === null) {
-            Deprecation::notice(
-                '5.4.0',
-                'Passing $cast as null is deprecated. Pass a ValidationResult::CAST_* constant instead in a future major release.',
-                Deprecation::SCOPE_GLOBAL
-            );
-            $cast = ValidationResult::CAST_TEXT;
-        }
+    public function sessionError(
+        string $message,
+        string $type = ValidationResult::TYPE_ERROR,
+        string $cast = ValidationResult::CAST_TEXT
+    ) {
         $this->setMessage($message, $type, $cast);
         $result = $this->getSessionValidationResult() ?: ValidationResult::create();
-        $result->addError($message, $type, null, $cast);
+        $result->addError($message, $type, '', $cast);
         $this->setSessionValidationResult($result);
     }
 
@@ -1294,22 +1285,17 @@ class Form extends ViewableData implements HasRequestHandler
      * @param string $message the text of the message
      * @param string $fieldName Name of the field to set the error message on it.
      * @param string $type Should be set to good, bad, or warning.
-     * @param string|bool $cast Cast type; One of the CAST_ constant definitions.
-     * Bool values will be treated as plain text flag.
+     * @param string $cast Cast type; One of the CAST_ constant definitions.
      */
-    public function sessionFieldError($message, $fieldName, $type = ValidationResult::TYPE_ERROR, $cast = ValidationResult::CAST_TEXT)
-    {
-        if ($cast === null) {
-            Deprecation::notice(
-                '5.4.0',
-                'Passing $cast as null is deprecated. Pass a ValidationResult::CAST_* constant instead in a future major release.',
-                Deprecation::SCOPE_GLOBAL
-            );
-            $cast = ValidationResult::CAST_TEXT;
-        }
+    public function sessionFieldError(
+        string $message,
+        string $fieldName,
+        string $type = ValidationResult::TYPE_ERROR,
+        string $cast = ValidationResult::CAST_TEXT
+    ) {
         $this->setMessage($message, $type, $cast);
         $result = $this->getSessionValidationResult() ?: ValidationResult::create();
-        $result->addFieldMessage($fieldName, $message, $type, null, $cast);
+        $result->addFieldMessage($fieldName, $message, $type, '', $cast);
         $this->setSessionValidationResult($result);
     }
 
@@ -1317,7 +1303,7 @@ class Form extends ViewableData implements HasRequestHandler
      * Returns the record that has given this form its data
      * through {@link loadDataFrom()}.
      *
-     * @return ViewableData
+     * @return ModelData
      */
     public function getRecord()
     {
@@ -1326,25 +1312,13 @@ class Form extends ViewableData implements HasRequestHandler
 
     /**
      * Get the legend value to be inserted into the
-     * <legend> element in Form.ss
+     * <legend> element in Form template
      *
      * @return string
      */
     public function getLegend()
     {
         return $this->legend;
-    }
-
-    /**
-     * Alias of validate() for backwards compatibility.
-     *
-     * @return ValidationResult
-     * @deprecated 5.4.0 Use validate() instead
-     */
-    public function validationResult()
-    {
-        Deprecation::notice('5.4.0', 'Use validate() instead');
-        return $this->validate();
     }
 
     /**
@@ -1363,17 +1337,23 @@ class Form extends ViewableData implements HasRequestHandler
     */
     public function validate(): ValidationResult
     {
-        // Automatically pass if there is no validator, or the clicked button is exempt
+        $result = ValidationResult::create();
+        // Automatically pass if the clicked button is exempt
         // Note: Soft support here for validation with absent request handler
         $handler = $this->getRequestHandler();
         $action = $handler ? $handler->buttonClicked() : null;
-        $validator = $this->getValidator();
-        if (!$validator || $this->actionIsValidationExempt($action)) {
-            return ValidationResult::create();
+        if ($this->actionIsValidationExempt($action)) {
+            return $result;
         }
-
+        // Invoke FormField validation
+        foreach ($this->Fields() as $field) {
+            $result->combineAnd($field->validate());
+        }
         // Invoke validator
-        $result = $validator->validate();
+        $validator = $this->getValidator();
+        if ($validator) {
+            $result->combineAnd($validator->validate());
+        }
         $this->loadMessagesFrom($result);
         return $result;
     }
@@ -1406,7 +1386,7 @@ class Form extends ViewableData implements HasRequestHandler
      * @uses FormField::setSubmittedValue()
      * @uses FormField::setValue()
      *
-     * @param array|ViewableData $data
+     * @param array|ModelData $data
      * @param int $mergeStrategy
      *  For every field, {@link $data} is interrogated whether it contains a relevant property/key, and
      *  what that property/key's value is.
@@ -1432,32 +1412,8 @@ class Form extends ViewableData implements HasRequestHandler
      * form that has some fields that save to one object, and some that save to another.
      * @return $this
      */
-    public function loadDataFrom($data, $mergeStrategy = 0, $fieldList = null)
+    public function loadDataFrom(object|array $data, int $mergeStrategy = 0, array $fieldList = [])
     {
-        if (!is_object($data) && !is_array($data)) {
-            user_error("Form::loadDataFrom() not passed an array or an object", E_USER_WARNING);
-            return $this;
-        }
-
-        // Handle the backwards compatible case of passing "true" as the second argument
-        if ($mergeStrategy === true) {
-            Deprecation::notice(
-                '5.4.0',
-                'Passing `true` to the $mergeStrategy argument in ' . Form::class . '::loadDataFrom() is deprecated.'
-                    . ' Pass ' . Form::class . '::MERGE_CLEAR_MISSING instead.',
-                Deprecation::SCOPE_GLOBAL
-            );
-            $mergeStrategy = Form::MERGE_CLEAR_MISSING;
-        } elseif ($mergeStrategy === false) {
-            Deprecation::notice(
-                '5.4.0',
-                'Passing `false` to the $mergeStrategy argument in ' . Form::class . '::loadDataFrom() is deprecated.'
-                    . ' Pass 0 instead.',
-                Deprecation::SCOPE_GLOBAL
-            );
-            $mergeStrategy = 0;
-        }
-
         // If an object is passed, save it for historical reference through {@link getRecord()}
         // Also use this to determine if we are loading a submitted form, or loading
         // from a record
@@ -1486,7 +1442,7 @@ class Form extends ViewableData implements HasRequestHandler
             $name = $field->getName();
 
             // Skip fields that have been excluded
-            if ($fieldList && !in_array($name, $fieldList ?? [])) {
+            if (!empty($fieldList) && !in_array($name, $fieldList)) {
                 continue;
             }
 
@@ -1512,7 +1468,7 @@ class Form extends ViewableData implements HasRequestHandler
                         // There's no other way to tell whether the relation actually exists
                         $exists = false;
                     }
-                // Regular ViewableData access
+                // Regular ModelData access
                 } else {
                     $exists = (
                         isset($data->$name) ||
@@ -1588,7 +1544,7 @@ class Form extends ViewableData implements HasRequestHandler
      * Save the contents of this form into the given data object.
      * It will make use of setCastedField() to do this.
      *
-     * @param ViewableData&DataObjectInterface $dataObject The object to save data into
+     * @param ModelData&DataObjectInterface $dataObject The object to save data into
      * @param array<string>|null $fieldList An optional list of fields to process.  This can be useful when you have a
      * form that has some fields that save to one object, and some that save to another.
      */
@@ -1657,10 +1613,8 @@ class Form extends ViewableData implements HasRequestHandler
      *
      * This is returned when you access a form as $FormObject rather
      * than <% with FormObject %>
-     *
-     * @return DBHTMLText
      */
-    public function forTemplate()
+    public function forTemplate(): string
     {
         if (!$this->canBeCached()) {
             HTTPCacheControlMiddleware::singleton()->disableCache();
@@ -1860,7 +1814,22 @@ class Form extends ViewableData implements HasRequestHandler
         return $this;
     }
 
-    public function debug()
+    public function __clone(): void
+    {
+        $this->fields = clone $this->fields;
+        $this->actions = clone $this->actions;
+        if ($this->validator) {
+            $this->setValidator(clone $this->validator);
+        }
+        foreach ($this->fields as $field) {
+            $field->setForm($this);
+        }
+        foreach ($this->actions as $action) {
+            $action->setForm($this);
+        }
+    }
+
+    public function debug(): string
     {
         $class = static::class;
         $result = "<h3>$class</h3><ul>";

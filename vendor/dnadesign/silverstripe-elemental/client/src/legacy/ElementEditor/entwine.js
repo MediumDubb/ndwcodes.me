@@ -9,14 +9,9 @@ import { getConfig } from 'state/editor/elementConfig';
 import { destroy } from 'redux-form';
 
 /**
- * Reset the Apollo and Redux stores holding data relating to elemental inline edit forms
+ * Reset the Redux store holding data relating to elemental inline edit forms
  */
 const resetStores = () => {
-  // After page level saves we need to reload all the blocks from the server. We can remove
-  // this if we can figure out a way to optimistically update the apollo cache. See:
-  // https://github.com/dnadesign/silverstripe-elemental/pull/439#issuecomment-428773370
-  window.ss.apolloClient.resetStore();
-
   // Defer playing with redux store
   setTimeout(() => {
     // After the page submit we want to destroy the form values so it's reloaded. We can't
@@ -44,12 +39,12 @@ jQuery.entwine('ss', ($) => {
     ReactRoot: null,
 
     // This object is shared between entwine.js and the ElementList react component. It allows:
-    // - entwine to call setState() on ElementList
+    // - entwine to set state on ElementList
     // - ElementList to call entwineResolve() on entwine
     AreaIDsSharedObject: {},
 
     // Increment is in Element.js to force subsequent form submissions on failed client-side validation
-    // If elements fail client-side validation in Validator.js e.g. RequiredFields then
+    // If elements fail client-side validation in Validator.js e.g. RequiredFieldsValidator then
     // they'll end up in a state where they need to re-render in order to re-submit
     // because the form submission is blocked by the client-side validation, meaning that
     // no formSchema response is received which is normally used to trigger a state update
@@ -65,7 +60,8 @@ jQuery.entwine('ss', ($) => {
       if (!areaIDsSharedObject.hasOwnProperty(areaID)) {
         areaIDsSharedObject[areaID] = {
           entwineResolve: null,
-          setState: null,
+          setIncrement: null,
+          setSaveAllElements: null,
         };
       }
       const props = {
@@ -121,19 +117,17 @@ jQuery.entwine('ss', ($) => {
         const increment = this.getIncrement() + 1;
         this.setIncrement(increment);
         sharedObject.entwineResolve = entwineResolve;
-        // setState() is bound in the constructor of the ElementList react component
-        // setting saveAllElementst to true will trigger a re-render in the react component
-        sharedObject.setState({
-          saveAllElements: true,
-          increment
-        });
+        // These state setting methods are set by the ElementList react component
+        // setting saveAllElements state to true will trigger a re-render in the react component
+        sharedObject.setIncrement(increment);
+        sharedObject.setSaveAllElements(true);
       },
 
       onaftersubmitform(event, data) {
         const validationResultPjax = JSON.parse(data.xhr.responseText).ValidationResult;
         const validationResult = JSON.parse(validationResultPjax.replace(/<\/?script[^>]*?>/g, ''));
 
-        // Reset redux store if form is succesfully submitted so apollo to refetches element data
+        // Reset redux store if form is succesfully submitted
         // Do not reset if there are any validation errors because we want redux to hydrate the
         // form, rather than then refetching which will return a value from the database.
         // Instead the user should still see any modfied value they just entered.

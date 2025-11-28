@@ -2,44 +2,74 @@
 
 namespace SilverStripe\ORM\FieldType;
 
-use SilverStripe\Dev\Deprecation;
+use SilverStripe\Core\Validation\FieldValidation\IntFieldValidator;
+use SilverStripe\Forms\FormField;
 use SilverStripe\Forms\NumericField;
-use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DB;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ModelData;
 
 /**
- * Represents a signed 32 bit integer field.
+ * Represents a signed 32 bit integer field, which has a range between -2147483648 and 2147483647.
  */
 class DBInt extends DBField
 {
+    /**
+     * The minimum value for a signed 32-bit integer.
+     * Defined as string instead of int because be cast to a float
+     * on 32-bit systems if defined as an int
+     */
+    protected const MIN_INT = '-2147483648';
 
-    public function __construct($name = null, $defaultVal = 0)
+    /**
+     * The maximum value for a signed 32-bit integer.
+     */
+    protected const MAX_INT = '2147483647';
+
+    private static array $field_validators = [
+        IntFieldValidator::class
+    ];
+
+    public function __construct(?string $name = null, int $defaultVal = 0)
     {
-        $defaultValue = is_int($defaultVal) ? $defaultVal : 0;
-        $this->setDefaultValue($defaultValue);
-
+        $this->setDefaultValue($defaultVal);
         parent::__construct($name);
     }
 
-    /**
-     * Ensure int values are always returned.
-     * This is for mis-configured databases that return strings.
-     */
-    public function getValue()
+    public function setValue(mixed $value, null|array|ModelData $record = null, bool $markChanged = true): static
     {
-        return (int) $this->value;
+        parent::setValue($value, $record, $markChanged);
+        // Cast string ints if they're valid
+        if (is_string($this->value) && preg_match('/^-?\d+$/', $this->value)) {
+            // Ensure we can cast to int and back without loss of precision
+            // if not, keep the original value which will fail validation later
+            $stringIntValue = (string) (int) $value;
+            if ($stringIntValue !== $value) {
+                $this->value = $value;
+            } else {
+                // Cast valid string ints as ints
+                $this->value = (int) $value;
+            }
+        }
+        return $this;
     }
 
     /**
      * Returns the number, with commas added as appropriate, eg “1,000”.
      */
-    public function Formatted()
+    public function Formatted(): string
     {
         return number_format($this->value ?? 0.0);
     }
 
-    public function requireField()
+    public function requireField(): void
+    {
+        DB::require_field($this->tableName, $this->name, $this->getFieldSpec());
+    }
+
+    /**
+     * Get the specifications which will be used to generate this column in the database.
+     */
+    public function getFieldSpec(): string|array
     {
         $parts = [
             'datatype' => 'int',
@@ -48,40 +78,25 @@ class DBInt extends DBField
             'default' => $this->getDefaultValue(),
             'arrayValue' => $this->arrayValue
         ];
-        $values = ['type' => 'int', 'parts' => $parts];
-        DB::require_field($this->tableName, $this->name, $values);
+        return ['type' => 'int', 'parts' => $parts];
     }
 
-    /**
-     * @deprecated 5.4.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    public function Times()
-    {
-        Deprecation::noticeWithNoReplacment('5.4.0');
-        $output = new ArrayList();
-        for ($i = 0; $i < $this->value; $i++) {
-            $output->push(ArrayData::create(['Number' => $i + 1]));
-        }
-
-        return $output;
-    }
-
-    public function Nice()
+    public function Nice(): string
     {
         return sprintf('%d', $this->value);
     }
 
-    public function scaffoldFormField($title = null, $params = null)
+    public function scaffoldFormField(?string $title = null, array $params = []): ?FormField
     {
         return NumericField::create($this->name, $title);
     }
 
-    public function nullValue()
+    public function nullValue(): ?int
     {
         return 0;
     }
 
-    public function prepValueForDB($value)
+    public function prepValueForDB(mixed $value): array|int|null
     {
         if ($value === true) {
             return 1;
@@ -92,5 +107,15 @@ class DBInt extends DBField
         }
 
         return (int)$value;
+    }
+
+    public static function getMinValue(): string|int
+    {
+        return static::MIN_INT;
+    }
+
+    public static function getMaxValue(): string|int
+    {
+        return static::MAX_INT;
     }
 }

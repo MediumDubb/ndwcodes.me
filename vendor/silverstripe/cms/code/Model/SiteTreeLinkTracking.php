@@ -6,12 +6,12 @@ use DOMElement;
 use SilverStripe\Assets\Shortcodes\FileLinkTracking;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\FormScaffolder;
-use SilverStripe\ORM\DataExtension;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBHTMLText;
 use SilverStripe\ORM\ManyManyThroughList;
 use SilverStripe\Versioned\Versioned;
 use SilverStripe\View\Parsers\HTMLValue;
+use SilverStripe\Core\Extension;
 
 /**
  * Adds tracking of links in any HTMLText fields which reference SiteTree or File items.
@@ -29,9 +29,9 @@ use SilverStripe\View\Parsers\HTMLValue;
  * @property DataObject|SiteTreeLinkTracking $owner
  * @method ManyManyThroughList<SiteTree> LinkTracking()
  *
- * @extends DataExtension<DataObject>
+ * @extends Extension<DataObject>
  */
-class SiteTreeLinkTracking extends DataExtension
+class SiteTreeLinkTracking extends Extension
 {
     /**
      * @var SiteTreeLinkTracking_Parser
@@ -79,13 +79,13 @@ class SiteTreeLinkTracking extends DataExtension
      * @param SiteTreeLinkTracking_Parser $parser
      * @return $this
      */
-    public function setParser(SiteTreeLinkTracking_Parser $parser = null)
+    public function setParser(?SiteTreeLinkTracking_Parser $parser = null)
     {
         $this->parser = $parser;
         return $this;
     }
 
-    public function onBeforeWrite()
+    protected function onBeforeWrite()
     {
         // Trigger link tracking (unless this would also be triggered by FileLinkTracking)
         if (!$this->owner->hasExtension(FileLinkTracking::class)) {
@@ -107,7 +107,7 @@ class SiteTreeLinkTracking extends DataExtension
     /**
      * Find HTMLText fields on {@link owner} to scrape for links that need tracking
      */
-    public function augmentSyncLinkTracking()
+    protected function augmentSyncLinkTracking()
     {
         // If owner is versioned, skip tracking on live
         if (Versioned::get_stage() == Versioned::LIVE && $this->owner->hasExtension(Versioned::class)) {
@@ -143,7 +143,7 @@ class SiteTreeLinkTracking extends DataExtension
         $this->owner->LinkTracking()->setByIDList($linkedPages);
     }
 
-    public function onAfterDelete()
+    protected function onAfterDelete()
     {
         // If owner is versioned, skip tracking on live
         if (Versioned::get_stage() == Versioned::LIVE && $this->owner->hasExtension(Versioned::class)) {
@@ -215,7 +215,7 @@ class SiteTreeLinkTracking extends DataExtension
         }
     }
 
-    public function updateCMSFields(FieldList $fields)
+    protected function updateCMSFields(FieldList $fields)
     {
         if (!$this->owner->config()->get('show_sitetree_link_tracking')) {
             $fields->removeByName('LinkTracking');

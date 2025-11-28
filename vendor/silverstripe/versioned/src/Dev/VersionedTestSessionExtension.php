@@ -19,7 +19,7 @@ class VersionedTestSessionExtension extends VersionedStateExtension
      *
      * @param string $url
      */
-    public function updateLink(&$url)
+    protected function updateLink(&$url)
     {
         $session = $this->owner->session();
         if (!$session) {
@@ -54,7 +54,7 @@ class VersionedTestSessionExtension extends VersionedStateExtension
      *
      * @param string $link
      */
-    public function updateGetURL(&$link)
+    protected function updateGetURL(&$link)
     {
         $this->updateLink($link);
     }
@@ -64,7 +64,7 @@ class VersionedTestSessionExtension extends VersionedStateExtension
      *
      * @param string $link
      */
-    public function updatePostURL(&$link)
+    protected function updatePostURL(&$link)
     {
         // Default to same as http get
         $this->updateLink($link);

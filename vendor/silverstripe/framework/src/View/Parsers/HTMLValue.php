@@ -3,7 +3,7 @@
 namespace SilverStripe\View\Parsers;
 
 use SilverStripe\Core\Convert;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 use Masterminds\HTML5;
 use DOMNodeList;
 use DOMXPath;
@@ -16,7 +16,7 @@ use SilverStripe\View\HTML;
  *
  * @mixin DOMDocument
  */
-class HTMLValue extends ViewableData
+class HTMLValue extends ModelData
 {
     public function __construct($fragment = null)
     {
@@ -46,10 +46,7 @@ class HTMLValue extends ViewableData
         return false;
     }
 
-    /**
-     * @return string
-     */
-    public function getContent()
+    public function getContent(): string
     {
         $document = $this->getDocument();
         if (!$document) {
@@ -98,7 +95,7 @@ class HTMLValue extends ViewableData
     }
 
     /** @see HTMLValue::getContent() */
-    public function forTemplate()
+    public function forTemplate(): string
     {
         return $this->getContent();
     }
@@ -163,7 +160,7 @@ class HTMLValue extends ViewableData
         $doc = $this->getDocument();
 
         if ($doc && method_exists($doc, $method ?? '')) {
-            return call_user_func_array([$doc, $method], $arguments ?? []);
+            return $doc->$method(...$arguments);
         } else {
             return parent::__call($method, $arguments);
         }

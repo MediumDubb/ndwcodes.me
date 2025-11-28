@@ -2,8 +2,7 @@
 
 namespace SilverStripe\CMS\Controllers;
 
-use SilverStripe\CMS\Model\SiteTree;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\ORM\DataList;
 use SilverStripe\Versioned\Versioned;
 
 /**
@@ -11,26 +10,22 @@ use SilverStripe\Versioned\Versioned;
  */
 class CMSSiteTreeFilter_StatusDraftPages extends CMSSiteTreeFilter
 {
-
-    public static function title()
+    public static function title(): string
     {
         return _t(__CLASS__ . '.Title', 'Draft pages');
     }
 
     /**
      * Filters out all pages who's status is set to "Draft".
-     *
-     * @see {@link SiteTree::getStatusFlags()}
-     * @return SS_List
      */
-    public function getFilteredPages()
+    public function getFilteredPages(DataList $list): DataList
     {
-        $pages = Versioned::get_by_stage(SiteTree::class, 'Stage');
-        $pages = $this->applyDefaultFilters($pages);
-        $pages = $pages->filterByCallback(function (SiteTree $page) {
-            // If page exists on stage but not on live
-            return $page->isOnDraftOnly();
-        });
-        return $pages;
+        // Get all pages existing in draft but not live
+        // Don't just use withVersionedMode - that would just get the latest draft versions
+        // including records which have since been published.
+        return $list->setDataQueryParam([
+            'Versioned.mode' => 'stage_unique',
+            'Versioned.stage' => Versioned::DRAFT,
+        ]);
     }
 }

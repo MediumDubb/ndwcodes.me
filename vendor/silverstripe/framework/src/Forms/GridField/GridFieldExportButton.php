@@ -2,14 +2,15 @@
 
 namespace SilverStripe\Forms\GridField;
 
+use League\Csv\Bom;
 use League\Csv\Writer;
 use LogicException;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\ORM\DataList;
-use SilverStripe\ORM\ArrayList;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\List\ArrayList;
+use SilverStripe\Model\ModelData;
 
 /**
  * Adds an "Export list" button to the bottom of a {@link GridField}.
@@ -180,8 +181,8 @@ class GridFieldExportButton extends AbstractGridFieldComponent implements GridFi
         $csvWriter = Writer::createFromFileObject(new \SplTempFileObject());
         $csvWriter->setDelimiter($this->getCsvSeparator());
         $csvWriter->setEnclosure($this->getCsvEnclosure());
-        $csvWriter->setNewline("\r\n"); //use windows line endings for compatibility with some csv libraries
-        $csvWriter->setOutputBOM(Writer::BOM_UTF8);
+        $csvWriter->setEndOfLine("\r\n"); //use windows line endings for compatibility with some csv libraries
+        $csvWriter->setOutputBOM(Bom::Utf8);
 
         if (!Config::inst()->get(get_class($this), 'xls_export_disabled')) {
             $csvWriter->addFormatter(function (array $row) {
@@ -228,7 +229,7 @@ class GridFieldExportButton extends AbstractGridFieldComponent implements GridFi
             ? $gridFieldColumnsComponent->getColumnsHandled($gridField)
             : [];
 
-        /** @var SS_List<ViewableData> $items */
+        /** @var SS_List<ModelData> $items */
         // Remove limit as the list may be paginated, we want the full list for the export
         $items = $items->limit(null);
 
@@ -269,11 +270,7 @@ class GridFieldExportButton extends AbstractGridFieldComponent implements GridFi
             }
         }
 
-        if (method_exists($csvWriter, 'getContent')) {
-            return $csvWriter->getContent();
-        }
-
-        return (string)$csvWriter;
+        return $csvWriter->toString();
     }
 
     /**

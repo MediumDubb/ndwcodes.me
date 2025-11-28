@@ -2,7 +2,6 @@
 
 namespace SilverStripe\SessionManager\Models;
 
-use UAParser\Parser;
 use InvalidArgumentException;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
@@ -16,6 +15,7 @@ use SilverStripe\ORM\FieldType\DBDatetime;
 use SilverStripe\Security\RememberLoginHash;
 use SilverStripe\SessionManager\Security\LogInAuthenticationHandler;
 use Symfony\Component\HttpFoundation\IpUtils;
+use donatj\UserAgent\UserAgentParser;
 
 /**
  * Tracks a login session for a specific user on a specific device.
@@ -100,6 +100,12 @@ class LoginSession extends DataObject
     private static $default_session_lifetime = 3600;
 
     private static bool $anonymize_ip = false;
+
+    /**
+     * Ensure there is no risk of reading from an unsynced database replica so
+     * that the login session data is always up to date.
+     */
+    private static bool $must_use_primary_db = true;
 
     /**
      * The length of time between two updates to the LastAccessed field
@@ -241,13 +247,13 @@ class LoginSession extends DataObject
             return '';
         }
 
-        $parser = Parser::create();
+        $parser = Injector::inst()->create(UserAgentParser::class);
         $result = $parser->parse($this->UserAgent);
 
         return _t(
             __CLASS__ . '.BROWSER_ON_OS',
             "{browser} on {os}.",
-            ['browser' => $result->ua->family, 'os' => $result->os->toString()]
+            ['browser' => $result->browser(), 'os' => $result->platform()]
         );
     }
 
@@ -260,18 +266,19 @@ class LoginSession extends DataObject
     {
         // Fall back to retrieving request from current Controller if available
         if ($request === null) {
-            if (!Controller::has_curr()) {
+            $controller = Controller::curr();
+            if (!$controller) {
                 throw new InvalidArgumentException(
                     "A HTTPRequest is required to check if this is the currently used LoginSession."
                 );
             }
 
-            $request = Controller::curr()->getRequest();
+            $request = $controller->getRequest();
         }
 
         $loginHandler = Injector::inst()->get(LogInAuthenticationHandler::class);
         $loginSessionID = $request->getSession()->get($loginHandler->getSessionVariable());
-        $loginSession = LoginSession::get_by_id($loginSessionID);
+        $loginSession = LoginSession::get()->setUseCache(true)->byID($loginSessionID);
         return $loginSession;
     }
 

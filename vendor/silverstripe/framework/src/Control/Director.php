@@ -12,11 +12,12 @@ use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Core\Kernel;
 use SilverStripe\Core\Path;
-use SilverStripe\Dev\Deprecation;
+use SilverStripe\PolyExecution\PolyCommand;
 use SilverStripe\Versioned\Versioned;
 use SilverStripe\View\Requirements;
 use SilverStripe\View\Requirements_Backend;
 use SilverStripe\View\TemplateGlobalProvider;
+use SilverStripe\ORM\DB;
 
 /**
  * Director is responsible for processing URLs, and providing environment information.
@@ -83,6 +84,14 @@ class Director implements TemplateGlobalProvider
      * @var string
      */
     private static $default_base_url = '`SS_BASE_URL`';
+
+    /**
+     * List of routing rule patterns that must only use the primary database and not a replica
+     */
+    private static array $rule_patterns_must_use_primary_db = [
+        'dev',
+        'Security',
+    ];
 
     public function __construct()
     {
@@ -296,6 +305,18 @@ class Director implements TemplateGlobalProvider
     {
         Injector::inst()->registerService($request, HTTPRequest::class);
 
+        // Check if primary database must be used based on request rules
+        // Note this check must happend before the rules are processed as
+        // $shiftOnSuccess param is passed as true in `$request->match($pattern, true)` later on in
+        // this method, which modifies `$this->dirParts`, thus affecting `$request->match($rule)` directly below
+        $primaryDbOnlyRules = Director::config()->uninherited('rule_patterns_must_use_primary_db');
+        foreach ($primaryDbOnlyRules as $rule) {
+            if ($request->match($rule)) {
+                DB::setMustUsePrimary();
+                break;
+            }
+        }
+
         $rules = Director::config()->uninherited('rules');
 
         $this->extend('updateRules', $rules);
@@ -346,6 +367,9 @@ class Director implements TemplateGlobalProvider
                 try {
                     /** @var RequestHandler $controllerObj */
                     $controllerObj = Injector::inst()->create($arguments['Controller']);
+                    if ($controllerObj instanceof PolyCommand) {
+                        $controllerObj = PolyCommandController::create($controllerObj);
+                    }
                     return $controllerObj->handleRequest($request);
                 } catch (HTTPResponse_Exception $responseException) {
                     return $responseException->getResponse();
@@ -487,7 +511,7 @@ class Director implements TemplateGlobalProvider
      * @param HTTPRequest $request
      * @return string Host name, including port (if present)
      */
-    public static function host(HTTPRequest $request = null)
+    public static function host(?HTTPRequest $request = null)
     {
         // Check if overridden by alternate_base_url
         if ($baseURL = static::config()->get('alternate_base_url')) {
@@ -529,7 +553,7 @@ class Director implements TemplateGlobalProvider
      * @param HTTPRequest $request
      * @return int|null
      */
-    public static function port(HTTPRequest $request = null)
+    public static function port(?HTTPRequest $request = null)
     {
         $host = static::host($request);
         return (int)parse_url($host ?? '', PHP_URL_PORT) ?: null;
@@ -541,7 +565,7 @@ class Director implements TemplateGlobalProvider
      * @param HTTPRequest|null $request
      * @return string|null
      */
-    public static function hostName(HTTPRequest $request = null)
+    public static function hostName(?HTTPRequest $request = null)
     {
         $host = static::host($request);
         return parse_url($host ?? '', PHP_URL_HOST) ?: null;
@@ -554,7 +578,7 @@ class Director implements TemplateGlobalProvider
      * @param HTTPRequest $request
      * @return bool|string
      */
-    public static function protocolAndHost(HTTPRequest $request = null)
+    public static function protocolAndHost(?HTTPRequest $request = null)
     {
         return static::protocol($request) . static::host($request);
     }
@@ -565,7 +589,7 @@ class Director implements TemplateGlobalProvider
      * @param HTTPRequest $request
      * @return string
      */
-    public static function protocol(HTTPRequest $request = null)
+    public static function protocol(?HTTPRequest $request = null)
     {
         return (Director::is_https($request)) ? 'https://' : 'http://';
     }
@@ -576,7 +600,7 @@ class Director implements TemplateGlobalProvider
      * @param HTTPRequest $request
      * @return bool
      */
-    public static function is_https(HTTPRequest $request = null)
+    public static function is_https(?HTTPRequest $request = null)
     {
         // Check override from alternate_base_url
         if ($baseURL = static::config()->uninherited('alternate_base_url')) {
@@ -625,7 +649,7 @@ class Director implements TemplateGlobalProvider
         // Check if BASE_SCRIPT_URL is defined
         // e.g. `index.php/`
         if (defined('BASE_SCRIPT_URL')) {
-            return $baseURL . BASE_SCRIPT_URL;
+            return rtrim($baseURL . BASE_SCRIPT_URL, '/') . '/';
         }
 
         return $baseURL;
@@ -901,7 +925,7 @@ class Director implements TemplateGlobalProvider
      * @param HTTPRequest|null $request
      * @return string
      */
-    public static function absoluteBaseURLWithAuth(HTTPRequest $request = null)
+    public static function absoluteBaseURLWithAuth(?HTTPRequest $request = null)
     {
         // Detect basic auth
         $login = '';
@@ -961,7 +985,7 @@ class Director implements TemplateGlobalProvider
      * Can include port number.
      * @param HTTPRequest|null $request Request object to check
      */
-    public static function forceSSL($patterns = null, $secureDomain = null, HTTPRequest $request = null)
+    public static function forceSSL($patterns = null, $secureDomain = null, ?HTTPRequest $request = null)
     {
         $handler = CanonicalURLMiddleware::singleton()->setForceSSL(true);
         if ($patterns) {
@@ -978,7 +1002,7 @@ class Director implements TemplateGlobalProvider
      *
      * @param HTTPRequest $request
      */
-    public static function forceWWW(HTTPRequest $request = null)
+    public static function forceWWW(?HTTPRequest $request = null)
     {
         $handler = CanonicalURLMiddleware::singleton()->setForceWWW(true);
         $handler->throwRedirectIfNeeded($request);
@@ -994,7 +1018,7 @@ class Director implements TemplateGlobalProvider
      * @param HTTPRequest $request
      * @return bool
      */
-    public static function is_ajax(HTTPRequest $request = null)
+    public static function is_ajax(?HTTPRequest $request = null)
     {
         $request = Director::currentRequest($request);
         if ($request) {
@@ -1027,35 +1051,6 @@ class Director implements TemplateGlobalProvider
     {
         $kernel = Injector::inst()->get(Kernel::class);
         return $kernel->getEnvironment();
-    }
-
-
-    /**
-     * Returns the session environment override
-     *
-     * @internal This method is not a part of public API and will be deleted without a deprecation warning
-     *
-     * @param HTTPRequest $request
-     *
-     * @return string|null null if not overridden, otherwise the actual value
-     * @deprecated 5.4.0 Use get_environment_type() instead.
-     */
-    public static function get_session_environment_type(HTTPRequest $request = null)
-    {
-        Deprecation::notice('5.4.0', 'Use get_environment_type() instead.');
-        $request = static::currentRequest($request);
-
-        if (!$request) {
-            return null;
-        }
-
-        $session = $request->getSession();
-
-        if (!empty($session->get('isDev'))) {
-            return Kernel::DEV;
-        } elseif (!empty($session->get('isTest'))) {
-            return Kernel::TEST;
-        }
     }
 
     /**
@@ -1117,7 +1112,7 @@ class Director implements TemplateGlobalProvider
      * @param HTTPRequest $request
      * @return HTTPRequest Request object if one is both current and valid
      */
-    protected static function currentRequest(HTTPRequest $request = null)
+    protected static function currentRequest(?HTTPRequest $request = null)
     {
         // Ensure we only use a registered HTTPRequest and don't
         // incidentally construct a singleton

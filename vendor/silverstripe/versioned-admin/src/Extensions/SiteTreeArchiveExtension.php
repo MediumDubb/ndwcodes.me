@@ -4,7 +4,7 @@ namespace SilverStripe\VersionedAdmin\Extensions;
 
 use SilverStripe\CMS\Model\SiteTree;
 use SilverStripe\Forms\GridField\GridFieldDataColumns;
-use SilverStripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\ORM\FieldType\DBDatetime;
 use SilverStripe\Security\Member;
 use SilverStripe\VersionedAdmin\ArchiveAdmin;
@@ -13,9 +13,9 @@ use SilverStripe\VersionedAdmin\Interfaces\ArchiveViewProvider;
 /**
  * Adds a archive view for Pages
  *
- * @extends DataExtension<SiteTree>
+ * @extends Extension<SiteTree>
  */
-class SiteTreeArchiveExtension extends DataExtension implements ArchiveViewProvider
+class SiteTreeArchiveExtension extends Extension implements ArchiveViewProvider
 {
     /**
      * @inheritDoc
@@ -36,20 +36,20 @@ class SiteTreeArchiveExtension extends DataExtension implements ArchiveViewProvi
         $listColumns->setDisplayFields([
             'Title' => SiteTree::singleton()->fieldLabel('Title'),
             'i18n_singular_name' => _t('SilverStripe\\VersionedAdmin\\ArchiveAdmin.COLUMN_TYPE', 'Type'),
-            'Versions.first.LastEdited' => _t(
+            'LastEdited' => _t(
                 'SilverStripe\\VersionedAdmin\\ArchiveAdmin.COLUMN_DATEARCHIVED',
                 'Date Archived'
             ),
             'ParentID' => _t('SilverStripe\\VersionedAdmin\\ArchiveAdmin.COLUMN_ORIGIN', 'Origin'),
-            'Versions.first.Author.Name' => _t(
+            'Author.Name' => _t(
                 'SilverStripe\\VersionedAdmin\\ArchiveAdmin.COLUMN_ARCHIVEDBY',
                 'Archived By'
             )
         ]);
         $listColumns->setFieldFormatting([
             'ParentID' => function ($val, $item) {
-                if (SiteTree::get_by_id($val)) {
-                    $breadcrumbs = SiteTree::get_by_id($val)->getBreadcrumbItems(2);
+                if (SiteTree::get()->setUseCache(true)->byID($val)) {
+                    $breadcrumbs = SiteTree::get()->setUseCache(true)->byID($val)->getBreadcrumbItems(2);
                     $breadcrumbString = '../';
                     foreach ($breadcrumbs as $item) {
                         $breadcrumbString = $breadcrumbString . $item->URLSegment . '/';
@@ -57,7 +57,7 @@ class SiteTreeArchiveExtension extends DataExtension implements ArchiveViewProvi
                     return $breadcrumbString;
                 }
             },
-            'Versions.first.LastEdited' => function ($val, $item) {
+            'LastEdited' => function ($val, $item) {
                 return DBDatetime::create_field('Datetime', $val)->Ago();
             },
         ]);

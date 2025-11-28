@@ -120,19 +120,6 @@ class Deprecation
     /**
      * Used to wrap deprecated methods and deprecated config get()/set() called from the vendor
      * dir that projects have no ability to change.
-     *
-     * @return mixed
-     * @deprecated 5.4.0 Use withSuppressedNotice() instead
-     */
-    public static function withNoReplacement(callable $func)
-    {
-        Deprecation::notice('5.4.0', 'Use withSuppressedNotice() instead');
-        return Deprecation::withSuppressedNotice($func);
-    }
-
-    /**
-     * Used to wrap deprecated methods and deprecated config get()/set() called from the vendor
-     * dir that projects have no ability to change.
      */
     public static function withSuppressedNotice(callable $func): mixed
     {
@@ -157,7 +144,7 @@ class Deprecation
      */
     protected static function get_called_method_from_trace($backtrace, $level = 1)
     {
-        if ($backtrace === null) {
+        if (empty($backtrace)) {
             return '';
         }
         $level = (int)$level;
@@ -172,10 +159,14 @@ class Deprecation
     {
         $newLevel = $level;
         // handle closures inside withSuppressedNotice()
-        if (Deprecation::$insideNoticeSuppression
-            && substr($backtrace[$newLevel]['function'], -strlen('{closure}')) === '{closure}'
-        ) {
-            $newLevel = $newLevel + 2;
+        if (Deprecation::$insideNoticeSuppression) {
+            $func = $backtrace[$newLevel]['function'];
+            // different versions of php have different formats for closures
+            // php <=8.3 example "SilverStripe\Dev\{closure}"
+            // php >=8.4 example "{closure:SilverStripe\Dev\Deprecation::noticeWithNoReplacment():464}"
+            if (str_ends_with($func, '{closure}') || str_starts_with($func, '{closure:')) {
+                $newLevel = $newLevel + 2;
+            }
         }
         // handle call_user_func
         if ($level === 4 && strpos($backtrace[2]['function'] ?? '', 'call_user_func') !== false) {
@@ -202,7 +193,7 @@ class Deprecation
 
     private static function isCalledFromSupportedCode(?array $backtrace): bool
     {
-        if ($backtrace === null) {
+        if (empty($backtrace)) {
             return false;
         }
         $called = Deprecation::get_called_from_trace($backtrace, 1);
@@ -380,7 +371,7 @@ class Deprecation
             $data = null;
             if ($scope === Deprecation::SCOPE_CONFIG) {
                 // Deprecated config set via yaml will only be shown in the browser when using ?flush=1
-                // It will not show in CLI when running dev/build flush=1
+                // It will not show in CLI when running db:build --flush
                 $data = [
                     'key' => sha1($string),
                     'message' => $string,
@@ -397,7 +388,7 @@ class Deprecation
                 }
 
                 // Getting a backtrace is slow, so we only do it if we need it
-                $backtrace = null;
+                $backtrace = [];
 
                 // Get the calling scope
                 if ($scope == Deprecation::SCOPE_METHOD) {

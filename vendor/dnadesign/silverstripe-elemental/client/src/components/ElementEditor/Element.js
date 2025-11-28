@@ -1,7 +1,6 @@
 /* global window */
 
-import React, { useState, useEffect, createContext } from 'react';
-import { useMutation } from '@apollo/client';
+import React, { useState, useEffect, useContext, createContext } from 'react';
 import PropTypes from 'prop-types';
 import { elementType } from 'types/elementType';
 import { elementTypeType } from 'types/elementTypeType';
@@ -13,13 +12,14 @@ import { connect } from 'react-redux';
 import { submit, isDirty } from 'redux-form';
 import { loadElementFormStateName } from 'state/editor/loadElementFormStateName';
 import { loadElementSchemaValue } from 'state/editor/loadElementSchemaValue';
-import { publishBlockMutation } from 'state/editor/publishBlockMutation';
-import { query as readBlocksForAreaQuery } from 'state/editor/readBlocksForAreaQuery';
 import * as TabsActions from 'state/tabs/TabsActions';
-import { DragSource, DropTarget } from 'react-dnd';
-import { getEmptyImage } from 'react-dnd-html5-backend';
-import { elementDragSource, isOverTop } from 'lib/dragHelpers';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import * as toastsActions from 'state/toasts/ToastsActions';
+import { ElementEditorContext } from 'components/ElementEditor/ElementEditor';
+import { getConfig } from 'state/editor/elementConfig';
+import backend from 'lib/Backend';
+import Config from 'lib/Config';
 import getFormState from 'lib/getFormState';
 
 export const ElementContext = createContext(null);
@@ -39,8 +39,22 @@ const Element = (props) => {
   const [doPublishElementAfterSave, setDoPublishElementAfterSave] = useState(false);
   const [ensureFormRendered, setEnsureFormRendered] = useState(false);
   const [formHasRendered, setFormHasRendered] = useState(false);
-  const [publishBlock] = useMutation(publishBlockMutation);
   const [formActiveTab, setFormActiveTab] = useState(null);
+  const { fetchElements } = useContext(ElementEditorContext);
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver,
+  } = useSortable({ id: props.element.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
 
   const formRenderedIfNeeded = formHasRendered || !props.type.inlineEditable;
 
@@ -55,18 +69,6 @@ const Element = (props) => {
   }, [props.saveElement, props.formDirty, props.increment]);
 
   useEffect(() => {
-    if (props.connectDragPreview) {
-      // Use empty image as a drag preview so browsers don't draw it
-      // and we can draw whatever we want on the custom drag layer instead.
-      props.connectDragPreview(getEmptyImage(), {
-        // IE fallback: specify that we'd rather screenshot the node
-        // when it already knows it's being dragged so we can hide it with CSS.
-        captureDraggingState: true,
-      });
-    }
-  }, []);
-
-  useEffect(() => {
     if (justClickedPublishButton && formRenderedIfNeeded) {
       setJustClickedPublishButton(false);
       if (props.formDirty) {
@@ -78,7 +80,7 @@ const Element = (props) => {
         setDoPublishElement(true);
       }
     }
-  }, [justClickedPublishButton, formHasRendered]);
+  }, [justClickedPublishButton, formRenderedIfNeeded]);
 
   // When setting the active tab, ensure the form is rendered first so that the form schema is available
   useEffect(() => {
@@ -128,20 +130,11 @@ const Element = (props) => {
     }
   };
 
-  // This will trigger a graphql request that will cause this
-  // element to re-render including any updated title and versioned badge
-  const refetchElementalArea = () => window.ss.apolloClient.queryManager.refetchQueries({
-    include: [{
-      query: readBlocksForAreaQuery,
-      variables: { id: props.areaId }
-    }]
-  });
-
   const handleAfterPublish = (wasError) => {
     showPublishedElementToast(wasError);
     setDoPublishElement(false);
     setDoPublishElementAfterSave(false);
-    refetchElementalArea();
+    fetchElements();
   };
 
   // Save action
@@ -155,7 +148,12 @@ const Element = (props) => {
   // Publish action
   useEffect(() => {
     if (doPublishElement && formRenderedIfNeeded) {
-      publishBlock({ variables: { blockId: props.element.id } })
+      const url = `${getConfig().controllerLink.replace(/\/$/, '')}/api/publish`;
+      backend.post(url, {
+        id: props.element.id,
+      }, {
+        'X-SecurityID': Config.get('SecurityID')
+      })
         .then(() => handleAfterPublish(false))
         .catch(() => handleAfterPublish(true));
     }
@@ -324,8 +322,8 @@ const Element = (props) => {
     if (!doPublishElement && !doPublishElementAfterSave) {
       showSavedElementToast(title);
     }
-    refetchElementalArea();
     props.onAfterSubmitResponse(true);
+    fetchElements();
   };
 
   const {
@@ -336,11 +334,6 @@ const Element = (props) => {
     ContentComponent,
     link,
     activeTab,
-    connectDragSource,
-    connectDropTarget,
-    isDragging,
-    isOver,
-    onDragEnd,
     formDirty,
   } = props;
 
@@ -366,7 +359,7 @@ const Element = (props) => {
     onSaveButtonClick: handleSaveButtonClick,
   };
 
-  const content = connectDropTarget(<div
+  const content = <div
     className={elementClassNames}
     onClick={handleExpand}
     onKeyUp={handleKeyUp}
@@ -374,6 +367,11 @@ const Element = (props) => {
     tabIndex={0}
     title={getLinkTitle(type)}
     key={element.id}
+    // sortable properties
+    ref={setNodeRef}
+    {...attributes}
+    {...listeners}
+    style={style}
   >
     <ElementContext.Provider value={providerValue}>
       <HeaderComponent
@@ -386,7 +384,6 @@ const Element = (props) => {
         handleEditTabsClick={handleTabClick}
         activeTab={activeTab}
         disableTooltip={isDragging}
-        onDragEnd={onDragEnd}
       />
       <ContentComponent
         id={element.id}
@@ -404,11 +401,7 @@ const Element = (props) => {
         formDirty={formDirty}
       />
     </ElementContext.Provider>
-  </div>);
-
-  if (!previewExpanded) {
-    return connectDragSource(content);
-  }
+  </div>;
 
   return content;
 };
@@ -474,14 +467,7 @@ Element.propTypes = {
   activeTab: PropTypes.string,
   tabSetName: PropTypes.string,
   onActivateTab: PropTypes.func,
-  connectDragSource: PropTypes.func.isRequired,
-  connectDragPreview: PropTypes.func.isRequired,
-  connectDropTarget: PropTypes.func.isRequired,
-  isDragging: PropTypes.bool.isRequired,
   isOver: PropTypes.bool.isRequired,
-  onDragOver: PropTypes.func, // eslint-disable-line react/no-unused-prop-types
-  onDragEnd: PropTypes.func, // eslint-disable-line react/no-unused-prop-types
-  onDragStart: PropTypes.func, // eslint-disable-line react/no-unused-prop-types
   saveElement: PropTypes.bool.isRequired,
   onBeforeSubmitForm: PropTypes.func.isRequired, // eslint-disable-line react/no-unused-prop-types
   onAfterSubmitResponse: PropTypes.func.isRequired,
@@ -489,41 +475,9 @@ Element.propTypes = {
   increment: PropTypes.number.isRequired,
 };
 
-Element.defaultProps = {
-  element: null,
-};
-
 export { Element as Component };
 
-const elementTarget = {
-  drop(props, monitor, component) {
-    const { element } = props;
-
-    return {
-      target: element.id,
-      dropSpot: isOverTop(monitor, component) ? 'top' : 'bottom',
-    };
-  },
-
-  hover(props, monitor, component) {
-    const { element, onDragOver } = props;
-
-    if (onDragOver) {
-      onDragOver(element, isOverTop(monitor, component));
-    }
-  },
-};
-
 export default compose(
-  DropTarget('element', elementTarget, (connector, monitor) => ({
-    connectDropTarget: connector.dropTarget(),
-    isOver: monitor.isOver(),
-  })),
-  DragSource('element', elementDragSource, (connector, monitor) => ({
-    connectDragSource: connector.dragSource(),
-    connectDragPreview: connector.dragPreview(),
-    isDragging: monitor.isDragging(),
-  })),
   connect(mapStateToProps, mapDispatchToProps),
   inject(
     ['ElementHeader', 'ElementContent'],

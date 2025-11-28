@@ -9,7 +9,7 @@ use SilverStripe\Control\Director;
 use SilverStripe\Core\Manifest\ClassLoader;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DB;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 use Psr\SimpleCache\CacheInterface;
 use SilverStripe\Core\Flushable;
 use SilverStripe\Core\Injector\Injector;
@@ -84,8 +84,11 @@ class ClassInfo implements Flushable
      */
     public static function hasTable($tableName)
     {
+        if (empty($tableName)) {
+            return false;
+        }
         $cache = ClassInfo::getCache();
-        $configData = serialize(DB::getConfig());
+        $configData = serialize(DB::getConfig(DB::CONN_PRIMARY));
         $cacheKey = 'tableList_' . md5($configData);
         $tableList = $cache->get($cacheKey) ?? [];
         if (empty($tableList) && DB::is_active()) {
@@ -585,7 +588,7 @@ class ClassInfo implements Flushable
 
         // only keep classes with the Extension applied
         $classes = array_filter($classes ?? [], function ($class) use ($extensionClass) {
-            return ViewableData::has_extension($class, $extensionClass);
+            return ModelData::has_extension($class, $extensionClass);
         });
 
         return $classes;

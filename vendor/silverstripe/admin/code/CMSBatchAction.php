@@ -2,12 +2,13 @@
 
 namespace SilverStripe\Admin;
 
+use SilverStripe\CMS\Controllers\CMSMain;
 use SilverStripe\CMS\Model\SiteTree;
 use SilverStripe\Control\Controller;
 use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Core\Convert;
 use SilverStripe\Core\Injector\Injectable;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Versioned\Versioned;
 
@@ -69,6 +70,7 @@ abstract class CMSBatchAction
 
         return HTTPResponse::create()
             ->setStatusCode(200, sprintf($successMessage ?? '', $count, $errors))
+            ->addHeader('Content-Type', 'application/json')
             ->setBody(json_encode($status));
     }
 
@@ -106,10 +108,15 @@ abstract class CMSBatchAction
             }
 
             // Now make sure the tree title is appropriately updated
-            $publishedRecord = DataObject::get_by_id($this->managedClass, $id);
+            $publishedRecord = DataObject::get($this->managedClass)->setUseCache(true)->byID($id);
             if ($publishedRecord) {
+                if ($publishedRecord instanceof SiteTree) {
+                    $treeTitle = CMSMain::singleton()->getRecordTreeMarkup($publishedRecord);
+                } else {
+                    $treeTitle = $publishedRecord->TreeTitle;
+                }
                 $status['modified'][$id] = [
-                    'TreeTitle' => $publishedRecord->TreeTitle,
+                    'TreeTitle' => $treeTitle,
                 ];
             } else {
                 $status['deleted'][$id] = $id;

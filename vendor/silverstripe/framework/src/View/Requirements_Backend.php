@@ -810,7 +810,7 @@ class Requirements_Backend
         foreach ($this->getJavascript() as $file => $attributes) {
             // Build html attributes
             $htmlAttributes = [
-                'type' => isset($attributes['type']) ? $attributes['type'] : "application/javascript",
+                'type' => isset($attributes['type']) ? $attributes['type'] : null,
                 'src' => $this->pathForFile($file),
             ];
             if (!empty($attributes['async'])) {
@@ -832,7 +832,7 @@ class Requirements_Backend
         // Add all inline JavaScript *after* including external files they might rely on
         foreach ($this->getCustomScripts() as $key => $script) {
             // Build html attributes
-            $customHtmlAttributes = ['type' => 'application/javascript'];
+            $customHtmlAttributes = [];
             if (isset($this->customScriptAttributes[$key])) {
                 foreach ($this->customScriptAttributes[$key] as $attrKey => $attrValue) {
                     $customHtmlAttributes[$attrKey] = $attrValue;

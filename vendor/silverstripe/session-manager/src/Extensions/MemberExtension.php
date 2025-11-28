@@ -3,7 +3,7 @@
 namespace SilverStripe\SessionManager\Extensions;
 
 use SilverStripe\Forms\FieldList;
-use SilverStripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\Security\Member;
 use SilverStripe\SessionManager\FormFields\SessionManagerField;
@@ -14,9 +14,9 @@ use SilverStripe\SessionManager\Models\LoginSession;
  *
  * @method HasManyList<LoginSession> LoginSessions()
  *
- * @extends DataExtension<Member>
+ * @extends Extension<Member>
  */
-class MemberExtension extends DataExtension
+class MemberExtension extends Extension
 {
     /**
      * URL to the user help abot managing session
@@ -24,7 +24,7 @@ class MemberExtension extends DataExtension
      * @config
      */
     private static $session_login_help_url =
-        'https://userhelp.silverstripe.org/en/5/managing_your_website/session_manager';
+        'https://userhelp.silverstripe.org/en/6/managing_your_website/session_manager';
 
     /**
      * @var array
@@ -36,7 +36,7 @@ class MemberExtension extends DataExtension
     /**
      * @param FieldList $fields
      */
-    public function updateCMSFields(FieldList $fields)
+    protected function updateCMSFields(FieldList $fields)
     {
         $fields->removeByName('LoginSessions');
 

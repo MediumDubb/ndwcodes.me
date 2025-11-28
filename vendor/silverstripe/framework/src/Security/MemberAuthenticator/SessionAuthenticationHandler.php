@@ -62,7 +62,7 @@ class SessionAuthenticationHandler implements AuthenticationHandler
         if (!$id) {
             return null;
         }
-        $member = DataObject::get_by_id(Member::class, $id);
+        $member = Member::get()->setUseCache(true)->byID($id);
         return $member;
     }
 
@@ -71,7 +71,7 @@ class SessionAuthenticationHandler implements AuthenticationHandler
      * @param bool $persistent
      * @param HTTPRequest $request
      */
-    public function logIn(Member $member, $persistent = false, HTTPRequest $request = null)
+    public function logIn(Member $member, $persistent = false, ?HTTPRequest $request = null)
     {
         static::regenerateSessionId();
         $request = $request ?: Controller::curr()->getRequest();
@@ -79,8 +79,19 @@ class SessionAuthenticationHandler implements AuthenticationHandler
         $session->set($this->getSessionVariable(), $member->ID);
 
         // This lets apache rules detect whether the user has logged in
-        if (Member::config()->get('login_marker_cookie')) {
-            Cookie::set(Member::config()->get('login_marker_cookie'), 1, 0);
+        $loginMarkerCookie = Member::config()->get('login_marker_cookie');
+        if ($loginMarkerCookie) {
+            $cookieParams = session_get_cookie_params();
+            Cookie::set(
+                $loginMarkerCookie,
+                1,
+                0,
+                $cookieParams['path'],
+                $cookieParams['domain'],
+                $cookieParams['secure'],
+                $cookieParams['httponly'],
+                $cookieParams['samesite']
+            );
         }
     }
 
@@ -111,13 +122,22 @@ class SessionAuthenticationHandler implements AuthenticationHandler
     /**
      * @param HTTPRequest $request
      */
-    public function logOut(HTTPRequest $request = null)
+    public function logOut(?HTTPRequest $request = null)
     {
+        $cookieParams = session_get_cookie_params();
         $request = $request ?: Controller::curr()->getRequest();
         $request->getSession()->destroy(true, $request);
 
-        if (Member::config()->get('login_marker_cookie')) {
-            Cookie::force_expiry(Member::config()->get('login_marker_cookie'));
+        $loginMarkerCookie = Member::config()->get('login_marker_cookie');
+        if ($loginMarkerCookie) {
+            Cookie::force_expiry(
+                $loginMarkerCookie,
+                $cookieParams['path'],
+                $cookieParams['domain'],
+                $cookieParams['secure'],
+                $cookieParams['httponly'],
+                $cookieParams['samesite']
+            );
         }
     }
 }

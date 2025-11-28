@@ -56,15 +56,15 @@ class ReadonlyField extends FormField
         return 'readonly';
     }
 
-    public function castingHelper($field)
+    public function castingHelper(string $field, bool $useFallback = true): ?string
     {
-        // Get dynamic cast for 'Value' field
-        if (strcasecmp($field ?? '', 'Value') === 0) {
+        // Get dynamic cast for 'FormattedValue' field
+        if (strcasecmp($field ?? '', 'FormattedValue') === 0) {
             return $this->getValueCast();
         }
 
         // Fall back to default casting
-        return parent::castingHelper($field);
+        return parent::castingHelper($field, $useFallback);
     }
 
     public function getSchemaStateDefaults()
@@ -79,7 +79,7 @@ class ReadonlyField extends FormField
     /**
      * @return mixed|string
      */
-    public function Value()
+    public function getFormattedValue(): mixed
     {
         // Get raw value
         $value = $this->dataValue();
@@ -107,6 +107,6 @@ class ReadonlyField extends FormField
 
         // Use default casting
         $casting = $this->config()->get('casting');
-        return $casting['Value'];
+        return $casting['FormattedValue'];
     }
 }

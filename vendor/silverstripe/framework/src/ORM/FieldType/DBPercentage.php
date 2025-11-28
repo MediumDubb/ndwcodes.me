@@ -2,6 +2,9 @@
 
 namespace SilverStripe\ORM\FieldType;
 
+use SilverStripe\Model\ModelData;
+use SilverStripe\Core\Validation\FieldValidation\DecimalFieldValidator;
+
 /**
  * Represents a decimal field from 0-1 containing a percentage value.
  *
@@ -15,14 +18,19 @@ namespace SilverStripe\ORM\FieldType;
  */
 class DBPercentage extends DBDecimal
 {
+    private static array $field_validators = [
+        DecimalFieldValidator::class => [
+            'wholeSize' => 'getWholeSize',
+            'decimalSize' => 'getDecimalSize',
+            'minValue' => 'getMinValue',
+            'maxValue' => 'getMaxValue',
+        ],
+    ];
 
     /**
      * Create a new Decimal field.
-     *
-     * @param string $name
-     * @param int $precision
      */
-    public function __construct($name = null, $precision = 4)
+    public function __construct(?string $name = null, int $precision = 4)
     {
         if (!$precision) {
             $precision = 4;
@@ -31,21 +39,21 @@ class DBPercentage extends DBDecimal
         parent::__construct($name, $precision + 1, $precision);
     }
 
+    public static function getMinValue(): float
+    {
+        return 0.0;
+    }
+
+    public static function getMaxValue(): float
+    {
+        return 1.0;
+    }
+
     /**
      * Returns the number, expressed as a percentage. For example, “36.30%”
      */
-    public function Nice()
+    public function Nice(): string
     {
         return number_format($this->value * 100, $this->decimalSize - 2) . '%';
-    }
-
-    public function saveInto($dataObject)
-    {
-        parent::saveInto($dataObject);
-
-        $fieldName = $this->name;
-        if ($fieldName && $dataObject->$fieldName > 1.0) {
-            $dataObject->__set($fieldName, 1.0);
-        }
     }
 }

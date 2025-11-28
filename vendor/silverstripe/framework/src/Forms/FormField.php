@@ -11,10 +11,13 @@ use SilverStripe\Core\Convert;
 use SilverStripe\ORM\DataObjectInterface;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBHTMLText;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\View\AttributesHTML;
 use SilverStripe\View\SSViewer;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
+use SilverStripe\ORM\DataObject;
+use SilverStripe\Core\Validation\FieldValidation\FieldValidationTrait;
+use SilverStripe\Core\Validation\FieldValidation\FieldValidationInterface;
 use SilverStripe\Dev\Deprecation;
 
 /**
@@ -41,10 +44,11 @@ use SilverStripe\Dev\Deprecation;
  * including both structure (name, id, attributes, etc.) and state (field value).
  * Can be used by for JSON data which is consumed by a front-end application.
  */
-class FormField extends RequestHandler
+class FormField extends RequestHandler implements FieldValidationInterface
 {
     use AttributesHTML;
     use FormMessage;
+    use FieldValidationTrait;
 
     /** @see $schemaDataType */
     const SCHEMA_DATA_TYPE_STRING = 'String';
@@ -266,7 +270,8 @@ class FormField extends RequestHandler
         'Field' => 'HTMLFragment',
         'AttributesHTML' => 'HTMLFragment', // property $AttributesHTML version
         'getAttributesHTML' => 'HTMLFragment', // method $getAttributesHTML($arg) version
-        'Value' => 'Text',
+        'FormattedValue' => 'Text',
+        'getFormattedValue' => 'Text',
         'extraClass' => 'Text',
         'ID' => 'Text',
         'isReadOnly' => 'Boolean',
@@ -274,6 +279,8 @@ class FormField extends RequestHandler
         'Title' => 'Text',
         'RightTitle' => 'Text',
         'Description' => 'HTMLFragment',
+        // This is an associative arrays, but we cast to Text so we can get a JSON string representation
+        'SchemaData' => 'Text',
     ];
 
     /**
@@ -326,7 +333,7 @@ class FormField extends RequestHandler
      * Creates a new field.
      *
      * @param string $name The internal field name, passed to forms.
-     * @param null|string|\SilverStripe\View\ViewableData $title The human-readable field label.
+     * @param null|string|\SilverStripe\Model\ModelData $title The human-readable field label.
      * @param mixed $value The value of the field.
      */
     public function __construct($name, $title = null, $value = null)
@@ -425,12 +432,10 @@ class FormField extends RequestHandler
 
     /**
      * Returns the field name.
-     *
-     * @return string
      */
-    public function getName()
+    public function getName(): string
     {
-        return $this->name;
+        return (string) $this->name;
     }
 
     /**
@@ -444,15 +449,29 @@ class FormField extends RequestHandler
     }
 
     /**
-     * Returns the field value.
-     *
-     * @see FormField::setSubmittedValue()
-     * @return mixed
-     * @deprecated 5.4.0 Will be replaced by getFormattedValue() and getValue() in a future major release
+     * Returns the internal value of the field
      */
-    public function Value()
+    public function getValue(): mixed
     {
-        Deprecation::notice('5.4.0', 'Will be replaced by getFormattedValue() and getValue() in a future major release');
+        return $this->value;
+    }
+
+    /**
+     * Returns the value of the field which may be modified for display purposes
+     * for instance to add localisation or formatting.
+     */
+    public function getFormattedValue(): mixed
+    {
+        return $this->getValue();
+    }
+
+    /**
+     * Returns the value of the field suitable for insertion into the database.
+     *
+     * @return mixed
+     */
+    public function dataValue()
+    {
         return $this->value;
     }
 
@@ -461,7 +480,7 @@ class FormField extends RequestHandler
      *
      * By default, makes use of $this->dataValue()
      *
-     * @param ViewableData|DataObjectInterface $record Record to save data into
+     * @param DataObjectInterface $record Record to save data into
      */
     public function saveInto(DataObjectInterface $record)
     {
@@ -472,7 +491,9 @@ class FormField extends RequestHandler
         if (($pos = strrpos($this->name ?? '', '.')) !== false) {
             $relation = substr($this->name ?? '', 0, $pos);
             $fieldName = substr($this->name ?? '', $pos + 1);
-            $component = $record->relObject($relation);
+            if ($record instanceof DataObject) {
+                $component = $record->relObject($relation);
+            }
         }
 
         if ($fieldName && $component) {
@@ -480,16 +501,6 @@ class FormField extends RequestHandler
         } else {
             $record->setCastedField($this->name, $this->dataValue());
         }
-    }
-
-    /**
-     * Returns the field value suitable for insertion into the data object.
-     * @see Formfield::setValue()
-     * @return mixed
-     */
-    public function dataValue()
-    {
-        return $this->value;
     }
 
     /**
@@ -657,7 +668,7 @@ class FormField extends RequestHandler
         $attributes = [
             'type' => $this->getInputType(),
             'name' => $this->getName(),
-            'value' => $this->Value(),
+            'value' => $this->getFormattedValue(),
             'class' => $this->extraClass(),
             'id' => $this->ID(),
             'disabled' => $this->isDisabled(),
@@ -700,11 +711,14 @@ class FormField extends RequestHandler
      * or a submitted form value they should override setSubmittedValue() instead.
      *
      * @param mixed $value Either the parent object, or array of source data being loaded
-     * @param array|ViewableData $data {@see Form::loadDataFrom}
+     * @param array|ModelData $data {@see Form::loadDataFrom}
      * @return $this
      */
     public function setValue($value, $data = null)
     {
+        // Note that unlike setSubmittedValue(), we are explicity not casting blank strings to null here.
+        // This is because setValue() is used when programatically setting a value on a field
+        // and we want to enforce type strictness
         $this->value = $value;
         return $this;
     }
@@ -715,11 +729,18 @@ class FormField extends RequestHandler
      * data formats.
      *
      * @param mixed $value
-     * @param array|ViewableData $data
+     * @param array|ModelData $data
      * @return $this
      */
     public function setSubmittedValue($value, $data = null)
     {
+        // Most form sumissions will be strings, this includes for fields whose backing DBField
+        // has a numeric type, such as DBInt and DBFloat.
+        // FormFields are not aware of the DBField type they are backed by
+        // Cast blank strings to null so they don't fail DBField validation on numeric DBFields
+        if ($value === '') {
+            $value = null;
+        }
         return $this->setValue($value, $data);
     }
 
@@ -793,13 +814,13 @@ class FormField extends RequestHandler
         return $form->getSecurityToken()->isEnabled();
     }
 
-    public function castingHelper($field)
+    public function castingHelper(string $field, bool $useFallback = true): ?string
     {
         // Override casting for field message
         if (strcasecmp($field ?? '', 'Message') === 0 && ($helper = $this->getMessageCastingHelper())) {
             return $helper;
         }
-        return parent::castingHelper($field);
+        return parent::castingHelper($field, $useFallback);
     }
 
     /**
@@ -927,16 +948,12 @@ class FormField extends RequestHandler
             $context = $context->customise($properties);
         }
 
-        $result = $context->renderWith($context->getTemplates());
+        $dbHtmlText = $context->renderWith($context->getTemplates());
 
-        // Trim whitespace from the result, so that trailing newlines are suppressed. Works for strings and HTMLText values
-        if (is_string($result)) {
-            $result = trim($result ?? '');
-        } elseif ($result instanceof DBField) {
-            $result->setValue(trim($result->getValue() ?? ''));
-        }
+        // Trim whitespace from the result, so that trailing newlines are suppressed.
+        $dbHtmlText->setValue(trim($dbHtmlText->getValue() ?? ''));
 
-        return $result;
+        return $dbHtmlText;
     }
 
     /**
@@ -946,7 +963,7 @@ class FormField extends RequestHandler
      *
      * The default field holder is a label and a form field inside a div.
      *
-     * @see FieldHolder.ss
+     * see FieldHolder template
      *
      * @param array $properties
      *
@@ -1030,7 +1047,7 @@ class FormField extends RequestHandler
      */
     protected function _templates($customTemplate = null, $customTemplateSuffix = null)
     {
-        $templates = SSViewer::get_templates_by_class(static::class, $customTemplateSuffix, __CLASS__);
+        $templates = SSViewer::get_templates_by_class(static::class, $customTemplateSuffix ?? '', __CLASS__);
         // Prefer any custom template
         if ($customTemplate) {
             // Prioritise direct template
@@ -1221,35 +1238,17 @@ class FormField extends RequestHandler
     }
 
     /**
-     * Utility method to call an extension hook which allows the result of validate() calls to be adjusted
-     *
-     * @param bool $result
-     * @param Validator $validator
-     * @return bool
-     * @deprecated 5.4.0 Use extend() directly instead
+     * Determines whether the field is valid or not based on its value
      */
-    protected function extendValidationResult(bool $result, Validator $validator): bool
+    public function validate(): ValidationResult
     {
-        Deprecation::notice('5.4.0', 'Use extend() directly instead');
-        $this->extend('updateValidationResult', $result, $validator);
+        $result = ValidationResult::create();
+        $fieldValidators = $this->getFieldValidators();
+        foreach ($fieldValidators as $fieldValidator) {
+            $result->combineAnd($fieldValidator->validate());
+        }
+        $this->extend('updateValidate', $result);
         return $result;
-    }
-
-    /**
-     * Abstract method each {@link FormField} subclass must implement, determines whether the field
-     * is valid or not based on the value.
-     *
-     * @param Validator $validator
-     * @return bool
-     */
-    public function validate($validator)
-    {
-        Deprecation::noticeWithNoReplacment(
-            '5.4.0',
-            'This method will take zero arguments and return a ValidationResult in a future major release'
-            . ' object instead of a boolean in CMS 6.0.0'
-        );
-        return $this->extendValidationResult(true, $validator);
     }
 
     /**
@@ -1279,7 +1278,7 @@ class FormField extends RequestHandler
     /**
      * @return string
      */
-    public function debug()
+    public function debug(): string
     {
         $strValue = is_string($this->value) ? $this->value : print_r($this->value, true);
 
@@ -1296,10 +1295,8 @@ class FormField extends RequestHandler
     /**
      * This function is used by the template processor. If you refer to a field as a $ variable, it
      * will return the $Field value.
-     *
-     * @return string
      */
-    public function forTemplate()
+    public function forTemplate(): string
     {
         return $this->Field();
     }
@@ -1372,7 +1369,11 @@ class FormField extends RequestHandler
         $field = $classOrCopy;
 
         if (!is_object($field)) {
-            $field = $classOrCopy::create($this->name);
+            if (is_a($classOrCopy, CompositeField::class, true)) {
+                $field = $classOrCopy::create([]);
+            } else {
+                $field = $classOrCopy::create($this->name);
+            }
         }
 
         $extraClasses = $this->extraClasses ? array_values($this->extraClasses) : [];
@@ -1477,12 +1478,12 @@ class FormField extends RequestHandler
             'schemaType' => $this->getSchemaDataType(),
             'component' => $this->getSchemaComponent(),
             'holderId' => $this->HolderID(),
-            'title' => $this->obj('Title')->getSchemaValue(),
+            'title' => $this->obj('Title')?->getSchemaValue(),
             'source' => null,
             'extraClass' => $this->extraClass(),
-            'description' => $this->obj('Description')->getSchemaValue(),
-            'rightTitle' => $this->obj('RightTitle')->getSchemaValue(),
-            'leftTitle' => $this->obj('LeftTitle')->getSchemaValue(),
+            'description' => $this->obj('Description')?->getSchemaValue(),
+            'rightTitle' => $this->obj('RightTitle')?->getSchemaValue(),
+            'leftTitle' => $this->obj('LeftTitle')?->getSchemaValue(),
             'readOnly' => $this->isReadonly(),
             'disabled' => $this->isDisabled(),
             'customValidationMessage' => $this->getCustomValidationMessage(),
@@ -1495,6 +1496,16 @@ class FormField extends RequestHandler
         if ($titleTip instanceof Tip) {
             $data['titleTip'] = $titleTip->getTipSchema();
         }
+        $attributes = $this->getAttributes();
+        // Remove value from attributes because otherwise it breaks react fields
+        unset($attributes['value']);
+        // Remove above attributes from attributes list to avoid double-ups
+        foreach (array_keys($data) as $key) {
+            // HTML attributes are always lowercase so we need to make sure to transform our js key names
+            // to lowercase before unsetting them.
+            unset($attributes[strtolower($key)]);
+        }
+        $data['attributes'] = $attributes;
         return $data;
     }
 
@@ -1539,7 +1550,7 @@ class FormField extends RequestHandler
         $state = [
             'name' => $this->getName(),
             'id' => $this->ID(),
-            'value' => $this->Value(),
+            'value' => $this->getFormattedValue(),
             'message' => $this->getSchemaMessage(),
             'data' => [],
         ];
@@ -1562,6 +1573,18 @@ class FormField extends RequestHandler
         }
         $this->extend('updateSchemaValidation', $validationList);
         return $validationList;
+    }
+
+    /**
+     * Gets the data-schema and data-state attributes for the input element.
+     * Can't be included in getAttributesHtml because that would result in
+     * an infinite loop.
+     */
+    public function getSchemaAttributesHtml(): DBHTMLText
+    {
+        $content = 'data-schema="' . htmlspecialchars(json_encode($this->getSchemaData()))
+            . '" data-state="' . htmlspecialchars(json_encode($this->getSchemaState())) . '"';
+        return DBHTMLText::create()->setValue($content);
     }
 
     /**

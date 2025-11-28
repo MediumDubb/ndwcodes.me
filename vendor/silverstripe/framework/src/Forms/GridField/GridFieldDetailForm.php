@@ -14,11 +14,10 @@ use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Extensible;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Forms\FieldList;
-use SilverStripe\Forms\FieldsValidator;
-use SilverStripe\Forms\Validator;
+use SilverStripe\Forms\Validation\Validator;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 
 /**
  * Provides view and edit forms at GridField-specific URLs.
@@ -147,18 +146,16 @@ class GridFieldDetailForm extends AbstractGridFieldComponent implements GridFiel
         if (!$this->getValidator()) {
             if ($record->hasMethod('getCMSCompositeValidator')) {
                 $validator = $record->getCMSCompositeValidator();
-            } else {
-                $validator = FieldsValidator::create();
+                $this->setValidator($validator);
             }
-            $this->setValidator($validator);
         }
 
         return $handler->handleRequest($request);
     }
 
-    protected function getRecordFromRequest(GridField $gridField, HTTPRequest $request): ?ViewableData
+    protected function getRecordFromRequest(GridField $gridField, HTTPRequest $request): ?ModelData
     {
-        /** @var ViewableData $record */
+        /** @var ModelData $record */
         if (is_numeric($request->param('ID'))) {
             $dataList = $gridField->getList();
             $record = $dataList->byID($request->param('ID'));
@@ -175,7 +172,7 @@ class GridFieldDetailForm extends AbstractGridFieldComponent implements GridFiel
 
     /**
      * Try and find another URL at which the given record can be edited.
-     * If redirectMissingRecords is true and the record has a CMSEditLink method, that value will be returned.
+     * If redirectMissingRecords is true and the record has a getCMSEditLink method, that value will be returned.
      * This only works when the list passed to the GridField is a {@link DataList}.
      *
      * @param $gridField The current GridField
@@ -203,9 +200,7 @@ class GridFieldDetailForm extends AbstractGridFieldComponent implements GridFiel
         }
 
         $existing = DataObject::get($list->dataClass())->byID($id);
-        if ($existing && $existing->hasMethod('CMSEditLink')) {
-            $link = $existing->CMSEditLink();
-        }
+        $link = $existing?->getCMSEditLink();
 
         if ($link && $link == $request->getURL()) {
             throw new \LogicException(sprintf(
@@ -221,7 +216,7 @@ class GridFieldDetailForm extends AbstractGridFieldComponent implements GridFiel
      * Build a request handler for the given record
      *
      * @param GridField $gridField
-     * @param ViewableData $record
+     * @param ModelData $record
      * @param RequestHandler $requestHandler
      * @return GridFieldDetailForm_ItemRequest
      */
@@ -282,7 +277,7 @@ class GridFieldDetailForm extends AbstractGridFieldComponent implements GridFiel
      * Enable redirection to missing records.
      *
      * If a GridField shows a filtered list, and the record is not in the list but exists in the
-     * database, and the record has a CMSEditLink method, then the system will redirect to the
+     * database, and the record has a getCMSEditLink method, then the system will redirect to the
      * URL returned by that method.
      */
     public function setRedirectMissingRecords(bool $redirectMissingRecords): GridFieldDetailForm

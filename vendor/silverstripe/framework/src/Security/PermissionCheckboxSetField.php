@@ -5,10 +5,10 @@ namespace SilverStripe\Security;
 use InvalidArgumentException;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Forms\FormField;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DataObjectInterface;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 use Traversable;
 
 /**
@@ -100,7 +100,7 @@ class PermissionCheckboxSetField extends FormField
             $record = $this->form->getRecord();
             if ($record
                 && ($record instanceof Group || $record instanceof PermissionRole)
-                && !$records->find('ID', $record->ID)
+                && !$records->filter('ID', $record->ID)->exists()
             ) {
                 $records->push($record);
             }
@@ -117,7 +117,7 @@ class PermissionCheckboxSetField extends FormField
                 $uninheritedCodes[$permission->Code][] = _t(
                     'SilverStripe\\Security\\PermissionCheckboxSetField.AssignedTo',
                     'assigned to "{title}"',
-                    ['title' => $record->dbObject('Title')->forTemplate()]
+                    ['title' => $record->dbObject('Title')?->forTemplate()]
                 );
             }
 
@@ -135,7 +135,7 @@ class PermissionCheckboxSetField extends FormField
                                 'SilverStripe\\Security\\PermissionCheckboxSetField.FromRole',
                                 'inherited from role "{title}"',
                                 'A permission inherited from a certain permission role',
-                                ['title' => $role->dbObject('Title')->forTemplate()]
+                                ['title' => $role->dbObject('Title')?->forTemplate()]
                             );
                         }
                     }
@@ -159,8 +159,8 @@ class PermissionCheckboxSetField extends FormField
                                         'inherited from role "{roletitle}" on group "{grouptitle}"',
                                         'A permission inherited from a role on a certain group',
                                         [
-                                            'roletitle' => $role->dbObject('Title')->forTemplate(),
-                                            'grouptitle' => $parent->dbObject('Title')->forTemplate()
+                                            'roletitle' => $role->dbObject('Title')?->forTemplate(),
+                                            'grouptitle' => $parent->dbObject('Title')?->forTemplate()
                                         ]
                                     );
                                 }
@@ -176,7 +176,7 @@ class PermissionCheckboxSetField extends FormField
                                     'SilverStripe\\Security\\PermissionCheckboxSetField.FromGroup',
                                     'inherited from group "{title}"',
                                     'A permission inherited from a certain group',
-                                    ['title' => $parent->dbObject('Title')->forTemplate()]
+                                    ['title' => $parent->dbObject('Title')?->forTemplate()]
                                 );
                             }
                         }
@@ -253,7 +253,7 @@ class PermissionCheckboxSetField extends FormField
                         $options .= "<li class=\"$extraClass\">"
                             . "<input id=\"$itemID\"$disabled name=\"$this->name[$code]\" type=\"checkbox\""
                             . " value=\"$code\"$checked class=\"checkbox\" />"
-                            . "<label {$title}for=\"$itemID\">"
+                            . "<label class=\"form-label\" {$title}for=\"$itemID\">"
                             . "<span class=\"font-icon-$icon\"></span>"
                             . "{$value}{$inheritMessage}</label>"
                             . "</li>\n";
@@ -261,7 +261,7 @@ class PermissionCheckboxSetField extends FormField
                         $options .= "<li class=\"$extraClass\">"
                             . "<input id=\"$itemID\"$disabled name=\"$this->name[$code]\" type=\"checkbox\""
                             . " value=\"$code\"$checked class=\"checkbox\" />"
-                            . "<label {$title}for=\"$itemID\">{$value}{$inheritMessage}</label>"
+                            . "<label class=\"form-label\" {$title}for=\"$itemID\">{$value}{$inheritMessage}</label>"
                             . "</li>\n";
                     }
                 }

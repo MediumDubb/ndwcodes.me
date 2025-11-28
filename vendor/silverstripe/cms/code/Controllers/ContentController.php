@@ -13,21 +13,17 @@ use SilverStripe\Control\Middleware\HTTPCacheControlMiddleware;
 use SilverStripe\Core\Convert;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Core\Manifest\ModuleManifest;
-use SilverStripe\Dev\Deprecation;
 use SilverStripe\i18n\i18n;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBDatetime;
 use SilverStripe\ORM\FieldType\DBField;
-use SilverStripe\ORM\FieldType\DBHTMLText;
-use SilverStripe\ORM\FieldType\DBVarchar;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\Security\MemberAuthenticator\MemberAuthenticator;
 use SilverStripe\Security\Permission;
 use SilverStripe\Security\Security;
 use SilverStripe\SiteConfig\SiteConfig;
 use SilverStripe\Versioned\Versioned;
-use SilverStripe\View\ArrayData;
 use SilverStripe\View\Parsers\URLSegmentFilter;
 use SilverStripe\View\Requirements;
 use SilverStripe\View\SSViewer;
@@ -60,8 +56,6 @@ class ContentController extends Controller
     ];
 
     private static $allowed_actions = [
-        'successfullyinstalled',
-        'deleteinstallfiles', // secured through custom code
         'LoginForm',
     ];
 
@@ -119,7 +113,7 @@ class ContentController extends Controller
         $parent = SiteTree::get_by_link($parentRef);
 
         if (!$parent && is_numeric($parentRef)) {
-            $parent = DataObject::get_by_id(SiteTree::class, $parentRef);
+            $parent = DataObject::get(SiteTree::class)->setUseCache(true)->byID($parentRef);
         }
 
         if ($parent) {
@@ -296,16 +290,6 @@ class ContentController extends Controller
     }
 
     /**
-     * @return ArrayList<SiteTree>
-     * @deprecated 5.4.0 Use getMenu() instead. You can continue to use $Menu in templates.
-     */
-    public function Menu($level)
-    {
-        Deprecation::noticeWithNoReplacment('5.4.0', 'Use getMenu() instead. You can continue to use $Menu in templates.');
-        return $this->getMenu($level);
-    }
-
-    /**
      * Returns the default log-in form.
      *
      * @return \SilverStripe\Security\MemberAuthenticator\MemberLoginForm
@@ -421,106 +405,23 @@ HTML;
         $action = $action === 'index' ? '' : '_' . $action;
 
         $templatesFound = [];
-        // Find templates for the record + action together - e.g. Page_action.ss
+        // Find templates for the record + action together - e.g. Page_action
         if ($this->dataRecord instanceof SiteTree) {
             $templatesFound[] = $this->dataRecord->getViewerTemplates($action);
         }
 
-        // Find templates for the controller + action together - e.g. PageController_action.ss
-        $templatesFound[] = SSViewer::get_templates_by_class(static::class, $action, Controller::class);
+        // Find templates for the controller + action together - e.g. PageController_action
+        $templatesFound[] = SSViewer::get_templates_by_class(static::class, $action ?? '', Controller::class);
 
-        // Find templates for the record without an action - e.g. Page.ss
+        // Find templates for the record without an action - e.g. Page
         if ($this->dataRecord instanceof SiteTree) {
             $templatesFound[] = $this->dataRecord->getViewerTemplates();
         }
 
-        // Find the templates for the controller without an action - e.g. PageController.ss
-        $templatesFound[] = SSViewer::get_templates_by_class(static::class, "", Controller::class);
+        // Find the templates for the controller without an action - e.g. PageController
+        $templatesFound[] = SSViewer::get_templates_by_class(static::class, '', Controller::class);
 
         $templates = array_merge(...$templatesFound);
-        return SSViewer::create($templates);
-    }
-
-
-    /**
-     * This action is called by the installation system
-     *
-     * @deprecated 5.3.0 Will be removed without equivalent functionality in a future major release
-     */
-    public function successfullyinstalled()
-    {
-        Deprecation::notice('5.3.0', 'Will be removed without equivalent functionality in a future major release');
-        // Return 410 Gone if this site is not actually a fresh installation
-        if (!file_exists(PUBLIC_PATH . '/install.php')) {
-            $this->httpError(410);
-        }
-
-        if (isset($_SESSION['StatsID']) && $_SESSION['StatsID']) {
-            $url = 'http://ss2stat.silverstripe.com/Installation/installed?ID=' . $_SESSION['StatsID'];
-            @file_get_contents($url ?? '');
-        }
-
-        global $project;
-        $data = new ArrayData([
-            'Project' => Convert::raw2xml($project),
-            'Username' => Convert::raw2xml($this->getRequest()->getSession()->get('username')),
-            'Password' => Convert::raw2xml($this->getRequest()->getSession()->get('password')),
-        ]);
-
-        return [
-            "Title" =>  _t(__CLASS__ . ".INSTALL_SUCCESS", "Installation Successful!"),
-            "Content" => $data->renderWith([
-                'type' => 'Includes',
-                'Install_successfullyinstalled',
-            ]),
-        ];
-    }
-
-    /**
-     * @deprecated 5.3.0 Will be removed without equivalent functionality in a future major release
-     */
-    public function deleteinstallfiles()
-    {
-        Deprecation::notice('5.3.0', 'Will be removed without equivalent functionality in a future major release');
-        if (!Permission::check("ADMIN")) {
-            return Security::permissionFailure($this);
-        }
-
-        $title = new DBVarchar("Title");
-        $content = new DBHTMLText('Content');
-
-        // As of SS4, index.php is required and should never be deleted.
-        $installfiles = [
-            'install.php',
-            'install-frameworkmissing.html',
-            'index.html'
-        ];
-
-        $unsuccessful = new ArrayList();
-        foreach ($installfiles as $installfile) {
-            $installfilepath = PUBLIC_PATH . '/' . $installfile;
-            if (file_exists($installfilepath ?? '')) {
-                @unlink($installfilepath ?? '');
-            }
-
-            if (file_exists($installfilepath ?? '')) {
-                $unsuccessful->push(new ArrayData(['File' => $installfile]));
-            }
-        }
-
-        $data = new ArrayData([
-            'Username' => Convert::raw2xml($this->getRequest()->getSession()->get('username')),
-            'Password' => Convert::raw2xml($this->getRequest()->getSession()->get('password')),
-            'UnsuccessfulFiles' => $unsuccessful,
-        ]);
-        $content->setValue($data->renderWith([
-            'type' => 'Includes',
-            'Install_deleteinstallfiles',
-        ]));
-
-        return [
-            "Title" => $title,
-            "Content" => $content,
-        ];
+        return SSViewer::create($templates, $this->getTemplateEngine());
     }
 }

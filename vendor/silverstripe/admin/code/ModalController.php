@@ -2,115 +2,93 @@
 
 namespace SilverStripe\Admin;
 
+use LogicException;
 use SilverStripe\Admin\Forms\EditorEmailLinkFormFactory;
 use SilverStripe\Admin\Forms\EditorExternalLinkFormFactory;
-use SilverStripe\Control\Controller;
-use SilverStripe\Control\RequestHandler;
-use SilverStripe\Dev\Deprecation;
+use SilverStripe\Admin\Forms\LinkFormFactory;
+use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Control\HTTPResponse;
+use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Forms\Form;
 
 /**
  * Parent controller for all CMS-global modals
  */
-class ModalController extends RequestHandler
+class ModalController extends FormSchemaController
 {
-    private static $allowed_actions = [
-        'EditorExternalLink',
-        'EditorEmailLink',
+    private static ?string $url_segment = 'modals';
+
+    private static string $required_permission_codes = 'CMS_ACCESS';
+
+    private static array $allowed_actions = [
+        'linkModalForm',
+        'linkModalFormSchema',
     ];
 
-    public function Link($action = null)
-    {
-        return Controller::join_links(
-            $this->getController()->Link(),
-            $this->getName(),
-            $action,
-            '/'
-        );
-    }
+    private static array $url_handlers = [
+        'linkModalForm/$ModalName/$ItemID' => 'linkModalForm',
+        'GET linkModalFormSchema/$ModalName/$ItemID' => 'linkModalFormSchema',
+    ];
 
     /**
-     * @var Controller
-     * @deprecated 2.4.0 Will be removed without equivalent functionality to replace it in a future major release
+     * Associative array of modal form names to form factory classes.
+     * Used primarily to register modal form factories for use in the WYSIWYG link plugin.
+     * Form factories must subclass LinkFormFactory
      */
-    protected $controller;
+    private static array $link_modal_form_factories = [
+        'EditorExternalLink' => EditorExternalLinkFormFactory::class,
+        'EditorEmailLink' => EditorEmailLinkFormFactory::class,
+    ];
 
     /**
-     * @var string
-     * @deprecated 2.4.0 Will be removed without equivalent functionality to replace it in a future major release
+     * Get a link modal form built from a factory.
+     * Intended to be used in conjunction with linkModalFormSchema()
      */
-    protected $name;
-
-    public function __construct($controller, $name)
+    public function linkModalForm(HTTPRequest $request): Form
     {
-        parent::__construct();
-
-        $this->controller = $controller;
-        $this->name = $name;
-    }
-
-    public function getRequest()
-    {
-        return $this->controller->getRequest();
-    }
-
-    /**
-     * @return Controller
-     * @deprecated 2.4.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    public function getController()
-    {
-        Deprecation::noticeWithNoReplacment('2.4.0');
-        return $this->controller;
-    }
-
-    /**
-     * Get urlsegment
-     *
-     * @return string
-     * @deprecated 2.4.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    public function getName()
-    {
-        Deprecation::noticeWithNoReplacment('2.4.0');
-        return $this->name;
-    }
-
-    /**
-     * Builds and returns the external link form
-     *
-     * @return Form
-     * @deprecated 2.4.0 Will be replaced with linkModalForm() in a future major release
-     */
-    public function EditorExternalLink()
-    {
-        Deprecation::noticeWithNoReplacment('2.4.0', 'Will be replaced with linkModalForm() in a future major release');
+        $modalName = $request->param('ModalName');
+        $itemID = $request->param('ItemID');
+        if ($modalName === null || $itemID === null) {
+            $this->jsonError(400, 'Missing request params');
+        }
+        $modalForms = static::config()->get('link_modal_form_factories');
+        if (!array_key_exists($modalName, $modalForms)) {
+            $this->httpError(400);
+        }
         // Show link text field if requested
-        $showLinkText = $this->controller->getRequest()->getVar('requireLinkText');
-        $factory = EditorExternalLinkFormFactory::singleton();
-        return $factory->getForm(
-            $this->controller,
-            "{$this->name}/EditorExternalLink",
-            [ 'RequireLinkText' => isset($showLinkText) ]
+        $showLinkText = $this->getRequest()->getVar('requireLinkText');
+        $class = $modalForms[$modalName];
+        if (!is_a($class, LinkFormFactory::class, true)) {
+            throw new LogicException("Factory for '$modalName' must be a subclass of " . LinkFormFactory::class);
+        }
+
+        // Build the form
+        /** @var LinkFormFactory $factory */
+        $factory = Injector::inst()->get($class);
+        $form = $factory->getForm(
+            $this,
+            'linkModalForm/'.$modalName,
+            [
+                'RequireLinkText' => isset($showLinkText),
+                'ItemID' => $itemID,
+            ]
         );
+        // Set url handler that handles ItemID param correctly
+        $form->setRequestHandler(
+            LeftAndMainFormRequestHandler::create($form, [$itemID])
+        );
+        return $form;
     }
 
     /**
-     * Builds and returns the external link form
-     *
-     * @return Form
-     * @deprecated 2.4.0 Will be replaced with linkModalForm() in a future major release
+     * Gets a JSON schema representing a link modal form.
+     * Links to this must include the ID of the current record or 0
+     * e.g ModalController::singleton()->Link('linkModalFormSchema/myModalForm/:pageid')
      */
-    public function EditorEmailLink()
+    public function linkModalFormSchema(HTTPRequest $request): HTTPResponse
     {
-        Deprecation::noticeWithNoReplacment('2.4.0', 'Will be replaced with linkModalForm() in a future major release');
-        // Show link text field if requested
-        $showLinkText = $this->controller->getRequest()->getVar('requireLinkText');
-        $factory = EditorEmailLinkFormFactory::singleton();
-        return $factory->getForm(
-            $this->controller,
-            "{$this->name}/EditorEmailLink",
-            [ 'RequireLinkText' => isset($showLinkText) ]
-        );
+        $form = $this->linkModalForm($request);
+        $schemaID = $request->getURL();
+        return $this->getSchemaResponse($schemaID, $form);
     }
 }

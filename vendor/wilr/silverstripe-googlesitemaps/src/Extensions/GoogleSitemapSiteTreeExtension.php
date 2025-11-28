@@ -5,9 +5,10 @@ namespace Wilr\GoogleSitemaps\Extensions;
 use SilverStripe\Assets\Image;
 use SilverStripe\ErrorPage\ErrorPage;
 use SilverStripe\Forms\DropdownField;
+use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\Tab;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use Throwable;
 
 class GoogleSitemapSiteTreeExtension extends GoogleSitemapExtension
@@ -15,6 +16,11 @@ class GoogleSitemapSiteTreeExtension extends GoogleSitemapExtension
     private static $db = [
         "Priority" => "Varchar(5)"
     ];
+
+    public function updateCMSFields(FieldList $fields)
+    {
+        $fields->removeByName('Priority');
+    }
 
     public function updateSettingsFields(&$fields)
     {
@@ -62,8 +68,6 @@ class GoogleSitemapSiteTreeExtension extends GoogleSitemapExtension
 
     public function updateFieldLabels(&$labels)
     {
-        parent::updateFieldLabels($labels);
-
         $labels['Priority'] = _t('GoogleSitemaps.METAPAGEPRIO', "Page Priority");
     }
 

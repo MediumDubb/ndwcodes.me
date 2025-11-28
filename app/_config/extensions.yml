@@ -8,6 +8,3 @@ SilverStripe\Assets\Image:
   has_one:
     - SirNoah\Whittendav\Models\ImageBlockRotator
     - SirNoah\Whittendav\Models\ContentSection
-SilverStripe\Blog\Model\BlogPost:
-  extensions:
-    - SirNoah\Whittendav\Extensions\Blog\BlogPostExtension

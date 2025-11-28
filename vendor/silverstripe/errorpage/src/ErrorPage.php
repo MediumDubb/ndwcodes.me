@@ -17,7 +17,7 @@ use SilverStripe\Dev\Debug;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\ORM\DB;
-use SilverStripe\ORM\ValidationException;
+use SilverStripe\Core\Validation\ValidationException;
 use SilverStripe\Security\Member;
 use SilverStripe\View\Requirements;
 use SilverStripe\View\SSViewer;
@@ -48,21 +48,21 @@ class ErrorPage extends Page
         "ErrorCode" => 400
     ];
 
+    private static array $scaffold_cms_fields_settings = [
+        'ignoreFields' => [
+            // Scaffolded field is incorrect and poorly placed,
+            // so don't waste time scaffolding it
+            'ErrorCode',
+        ],
+    ];
+
     private static $table_name = 'ErrorPage';
 
     private static $allowed_children = [];
 
-    /**
-     * @deprecated 5.4.0 use class_description instead.
-     */
-    private static $description = 'Custom content for different error cases (e.g. "Page not found")';
-
     private static $class_description = 'Custom content for different error cases (e.g. "Page not found")';
 
-    /**
-     * @deprecated 2.4.0 Will be renamed to cms_icon_class
-     */
-    private static $icon_class = 'font-icon-p-error';
+    private static $cms_icon_class = 'font-icon-p-error';
 
     /**
      * Allow developers to opt out of dev messaging using Config
@@ -258,7 +258,7 @@ class ErrorPage extends Page
             ]
         ];
 
-        $this->extend('getDefaultRecords', $data);
+        $this->extend('updateDefaultRecords', $data);
 
         return $data;
     }

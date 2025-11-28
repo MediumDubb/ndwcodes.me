@@ -3,7 +3,11 @@
 namespace SilverStripe\Control;
 
 use BadMethodCallException;
+use SessionHandlerInterface;
+use SilverStripe\Control\SessionHandler\FileSessionHandler;
 use SilverStripe\Core\Config\Configurable;
+use SilverStripe\Core\Environment;
+use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Dev\Deprecation;
 
 /**
@@ -120,27 +124,20 @@ class Session
     /**
      * @config
      * @var string
+     * @deprecated 6.1.0 Use `session.save_path` in ini configuration instead.
      */
     private static $session_store_path;
 
     /**
      * @config
-     * @var boolean
      */
-    private static $cookie_secure = false;
-
-    /**
-     * @config
-     * @var string
-     * @deprecated 5.4.3 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    private static $cookie_name_secure = 'SECSESSID';
+    private static bool $cookie_secure = true;
 
     /**
      * Must be "Strict", "Lax", or "None".
      * @config
      */
-    private static string $cookie_samesite = Cookie::SAMESITE_LAX;
+    private static string $cookie_samesite = Cookie::SAMESITE_STRICT;
 
     /**
      * Name of session cache limiter to use.
@@ -148,6 +145,7 @@ class Session
      *
      * @see https://secure.php.net/manual/en/function.session-cache-limiter.php
      * @var string|null
+     * @deprecated 6.1.0 Will be removed without equivalent functionality to replace it
      */
     private static $sessionCacheLimiter = '';
 
@@ -158,6 +156,13 @@ class Session
      * @config
      */
     private static $strict_user_agent_check = true;
+
+    /**
+     * FQCN or injector service name for the session save handler.
+     * If null, the save handler defined in `session.save_handler` ini configuration is used.
+     * Overridden if `SS_SESSION_SAVE_HANDLER_CLASS` is set.
+     */
+    private static ?string $save_handler = FileSessionHandler::class;
 
     /**
      * Session data.
@@ -196,6 +201,18 @@ class Session
     protected $changedData = [];
 
     /**
+     * Get the session save handler if one has been configured.
+     */
+    public static function getSaveHandler(): ?SessionHandlerInterface
+    {
+        $serviceName = Environment::getEnv('SS_SESSION_SAVE_HANDLER_CLASS') ?: static::config()->get('save_handler');
+        if ($serviceName) {
+            return Injector::inst()->get($serviceName);
+        }
+        return null;
+    }
+
+    /**
      * Get user agent for this request
      *
      * @param HTTPRequest $request
@@ -232,7 +249,7 @@ class Session
      */
     public function init(HTTPRequest $request)
     {
-        if (!$this->isStarted() && $this->requestContainsSessionId($request)) {
+        if (!$this->isStarted() && $this->requestContainsSessionId()) {
             $this->start($request);
         }
 
@@ -267,19 +284,12 @@ class Session
     }
 
     /**
-     * @param HTTPRequest $request - deprecated will be removed
      * @return bool
      */
-    public function requestContainsSessionId(HTTPRequest $request)
+    public function requestContainsSessionId()
     {
-        Deprecation::noticeWithNoReplacment(
-            '5.4.3',
-            'The $request parameter is deprecated and will be removed in a future major release',
-            Deprecation::SCOPE_GLOBAL
-        );
-        $secure = Director::is_https($request) && $this->config()->get('cookie_secure');
-        $name = $secure ? $this->config()->get('cookie_name_secure') : session_name();
-        return (bool)Cookie::get($name);
+        $name = session_name();
+        return (bool) Cookie::get($name);
     }
 
     /**
@@ -295,17 +305,17 @@ class Session
             throw new BadMethodCallException("Session has already started");
         }
 
-        $session_path = $this->config()->get('session_store_path');
+        $session_path = Deprecation::withSuppressedNotice(fn () => $this->config()->get('session_store_path'));
 
         // If the session cookie is already set, then the session can be read even if headers_sent() = true
         // This helps with edge-case such as debugging.
         $data = [];
-        if (!session_id() && (!headers_sent() || $this->requestContainsSessionId($request))) {
+        if (!session_id() && (!headers_sent() || $this->requestContainsSessionId())) {
             if (!headers_sent()) {
                 $cookieParams = $this->buildCookieParams($request);
                 session_set_cookie_params($cookieParams);
 
-                $limiter = $this->config()->get('sessionCacheLimiter');
+                $limiter = Deprecation::withSuppressedNotice(fn () => $this->config()->get('sessionCacheLimiter'));
                 if (isset($limiter)) {
                     session_cache_limiter($limiter);
                 }
@@ -315,19 +325,17 @@ class Session
                     session_save_path($session_path);
                 }
 
-                // If we want a secure cookie for HTTPS, use a separate session name. This lets us have a
-                // separate (less secure) session for non-HTTPS requests
-                // if headers_sent() is true then it's best to throw the resulting error rather than risk
-                // a security hole.
-                if ($cookieParams['secure']) {
-                    session_name($this->config()->get('cookie_name_secure'));
+                // Set the session save handler if configured
+                $saveHandler = static::getSaveHandler();
+                if ($saveHandler) {
+                    session_set_save_handler($saveHandler, true);
                 }
 
                 session_start();
 
                 // Session start emits a cookie, but only if there's no existing session. If there is a session timeout
                 // tied to this request, make sure the session is held for the entire timeout by refreshing the cookie age.
-                if ($cookieParams['lifetime'] && $this->requestContainsSessionId($request)) {
+                if ($cookieParams['lifetime'] && $this->requestContainsSessionId()) {
                     Cookie::set(
                         session_name(),
                         session_id(),
@@ -335,7 +343,8 @@ class Session
                         $cookieParams['path'],
                         $cookieParams['domain'],
                         $cookieParams['secure'],
-                        true
+                        true,
+                        $cookieParams['samesite'],
                     );
                 }
             } else {
@@ -380,7 +389,7 @@ class Session
             }
         }
 
-        $sameSite = static::config()->get('cookie_samesite') ?? Cookie::SAMESITE_LAX;
+        $sameSite = $this->getCookieSamesite();
         Cookie::validateSameSite($sameSite);
         $secure = $this->isCookieSecure($sameSite, Director::is_https($request));
 
@@ -399,7 +408,7 @@ class Session
      */
     private function isCookieSecure(string $sameSite, bool $isHttps): bool
     {
-        if ($sameSite === 'None') {
+        if ($sameSite === Cookie::SAMESITE_NONE) {
             return true;
         }
         return $isHttps && $this->config()->get('cookie_secure');
@@ -411,17 +420,22 @@ class Session
      * @param bool $removeCookie
      * @param HTTPRequest $request The request for which to destroy a session
      */
-    public function destroy($removeCookie = true, HTTPRequest $request = null)
+    public function destroy($removeCookie = true, ?HTTPRequest $request = null)
     {
         if (session_id()) {
             if ($removeCookie) {
                 if (!$request) {
                     $request = Controller::curr()->getRequest();
                 }
-                $path = $this->config()->get('cookie_path') ?: Director::baseURL();
-                $domain = $this->config()->get('cookie_domain');
-                $secure = Director::is_https($request) && $this->config()->get('cookie_secure');
-                Cookie::force_expiry(session_name(), $path, $domain, $secure, true);
+                $cookieParams = $this->buildCookieParams($request);
+                Cookie::force_expiry(
+                    session_name(),
+                    $cookieParams['path'],
+                    $cookieParams['domain'],
+                    $cookieParams['secure'],
+                    true,
+                    $cookieParams['samesite']
+                );
             }
             session_destroy();
         }
@@ -704,5 +718,10 @@ class Session
         if (!headers_sent() && session_status() === PHP_SESSION_ACTIVE) {
             session_regenerate_id(true);
         }
+    }
+
+    private function getCookieSamesite(): string
+    {
+        return static::config()->get('cookie_samesite') ?? Cookie::SAMESITE_STRICT;
     }
 }

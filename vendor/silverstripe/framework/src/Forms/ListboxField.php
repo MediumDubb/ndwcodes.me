@@ -2,8 +2,10 @@
 
 namespace SilverStripe\Forms;
 
-use SilverStripe\ORM\ArrayList;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\List\ArrayList;
+use SilverStripe\Model\ArrayData;
+use SilverStripe\ORM\DB;
+use SilverStripe\ORM\FieldType\DBHTMLText;
 
 /**
  * Multi-line listbox field, created from a select tag.
@@ -68,9 +70,6 @@ class ListboxField extends MultiSelectField
 
     /**
      * Returns a select tag containing all the appropriate option tags
-     *
-     * @param array $properties
-     * @return string
      */
     public function Field($properties = [])
     {
@@ -165,6 +164,17 @@ class ListboxField extends MultiSelectField
         return $this->disabledItems;
     }
 
+    public function getValueForValidation(): mixed
+    {
+        // Unlike other MultiSelectField's, ListboxField allows setting a single value without wrapping it in an array.
+        // Ensure values are wrapped in an array here so that the validation logic can treat it as a multi-select
+        $value = parent::getValueForValidation();
+        if (!is_array($value) && !is_null($value)) {
+            $value = [$value];
+        }
+        return $value;
+    }
+
      /**
      * Provide ListboxField data to the JSON schema for the frontend component
      *
@@ -241,7 +251,7 @@ class ListboxField extends MultiSelectField
 
     public function getValueArray()
     {
-        $value = $this->Value();
+        $value = $this->getFormattedValue();
         $validValues = $this->getValidValues();
         if (empty($validValues)) {
             return [];
@@ -256,7 +266,7 @@ class ListboxField extends MultiSelectField
                 $replaced = [];
                 foreach ($value as $item) {
                     if (!is_array($item)) {
-                        $item = json_decode($item, true);
+                        $item = json_decode($item ?? '', true);
                     }
 
                     if ($targetType === gettype($item)) {

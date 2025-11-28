@@ -2,8 +2,7 @@
 
 namespace SilverStripe\UserForms\Control;
 
-use SilverStripe\Admin\AdminRootController;
-use SilverStripe\Admin\LeftAndMain;
+use SilverStripe\Admin\FormSchemaController;
 use SilverStripe\Assets\Folder;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse;
@@ -14,11 +13,11 @@ use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\OptionsetField;
-use SilverStripe\Forms\RequiredFields;
+use SilverStripe\Forms\Validation\RequiredFieldsValidator;
 use SilverStripe\Forms\Schema\FormSchema;
 use SilverStripe\Forms\TextField;
 use SilverStripe\Forms\TreeDropdownField;
-use SilverStripe\ORM\ValidationException;
+use SilverStripe\Core\Validation\ValidationException;
 use SilverStripe\Security\Group;
 use SilverStripe\Security\InheritedPermissions;
 use SilverStripe\Security\Permission;
@@ -31,10 +30,8 @@ use SilverStripe\Versioned\Versioned;
 
 /**
  * Provides a few endpoints the user form CMS UI targets with some AJAX request.
- *
- * @note While this is a LeftAndMain controller, it doesn't actually appear in the Left side CMS navigation.
  */
-class UserDefinedFormAdmin extends LeftAndMain
+class UserDefinedFormAdmin extends FormSchemaController
 {
     private static $allowed_actions = [
         'confirmfolderformschema',
@@ -77,7 +74,6 @@ class UserDefinedFormAdmin extends LeftAndMain
 
         return $textField;
     }
-
 
     public function index(HTTPRequest $request): HTTPResponse
     {
@@ -196,7 +192,7 @@ class UserDefinedFormAdmin extends LeftAndMain
                 ->setUseButtonTag(true)
         );
 
-        return Form::create($this, 'ConfirmFolderForm', $fields, $actions, RequiredFields::create('ID'))
+        return Form::create($this, 'ConfirmFolderForm', $fields, $actions, RequiredFieldsValidator::create('ID'))
             ->setFormAction($this->Link('ConfirmFolderForm'))
             ->addExtraClass('form--no-dividers');
     }
@@ -312,7 +308,7 @@ class UserDefinedFormAdmin extends LeftAndMain
      * @return Folder
      * @throws ValidationException
      */
-    public static function getFormSubmissionFolder(string $subFolder = null): ?Folder
+    public static function getFormSubmissionFolder(?string $subFolder = null): ?Folder
     {
         $folderPath = static::config()->get('form_submissions_folder');
         if ($subFolder) {

@@ -4,15 +4,14 @@ SortableGridField
 [![CI](https://github.com/UndefinedOffset/SortableGridField/actions/workflows/ci.yml/badge.svg)](https://github.com/UndefinedOffset/SortableGridField/actions/workflows/ci.yml)
 [![Latest Stable Version](https://poser.pugx.org/undefinedoffset/sortablegridfield/version.svg)](http://www.silverstripe.org/stable-download/)
 [![Latest Unstable Version](https://poser.pugx.org/undefinedoffset/sortablegridfield/v/unstable.svg)](https://packagist.org/packages/undefinedoffset/sortablegridfield)
-[![SilverStripe supported module](https://img.shields.io/badge/silverstripe-supported-0071C4.svg)](https://www.silverstripe.org/software/addons/silverstripe-commercially-supported-module-list/)
 [![Total Downloads](https://poser.pugx.org/undefinedoffset/sortablegridfield/downloads.svg)](https://packagist.org/packages/undefinedoffset/sortablegridfield)
 [![License](https://poser.pugx.org/undefinedoffset/sortablegridfield/license.svg)](https://github.com/UndefinedOffset/SortableGridField/blob/master/LICENSE)
 
-Adds drag and drop functionality to SilverStripe 4's GridField
+Adds drag and drop functionality to Silverstripe's GridField
 
 ## Requirements
 
-* SilverStripe 4.11+
+* Silverstripe 6.0+
 
 ## Installation
 

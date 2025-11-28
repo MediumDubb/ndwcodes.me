@@ -4,9 +4,8 @@ namespace DNADesign\Elemental\Models;
 
 use DNADesign\Elemental\Controllers\ElementController;
 use DNADesign\Elemental\Forms\TextCheckboxGroupField;
-use DNADesign\Elemental\ORM\FieldType\DBObjectType;
 use DNADesign\Elemental\Services\ReorderElements;
-use DNADesign\Elemental\TopPage\DataExtension;
+use DNADesign\Elemental\Extensions\TopPageElementExtension;
 use Exception;
 use SilverStripe\CMS\Controllers\CMSPageEditController;
 use SilverStripe\CMS\Model\SiteTree;
@@ -19,24 +18,21 @@ use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\NumericField;
 use SilverStripe\Forms\TextField;
-use SilverStripe\GraphQL\Scaffolding\StaticSchema;
-use SilverStripe\GraphQL\Schema\Exception\SchemaBuilderException;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBBoolean;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBHTMLText;
-use SilverStripe\ORM\ValidationException;
+use SilverStripe\Core\Validation\ValidationException;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Permission;
 use SilverStripe\Versioned\Versioned;
 use SilverStripe\VersionedAdmin\Forms\HistoryViewerField;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\Parsers\URLSegmentFilter;
 use SilverStripe\View\Requirements;
 use SilverStripe\ORM\CMSPreviewable;
 use SilverStripe\Core\Config\Config;
-use SilverStripe\Dev\Deprecation;
-use SilverStripe\ORM\DataObjectSchema;
+use SilverStripe\Core\Validation\ValidationResult;
 
 /**
  * Class BaseElement
@@ -63,18 +59,12 @@ class BaseElement extends DataObject implements CMSPreviewable
 
     /**
      * Describe the purpose of this element
-     *
-     * @config
-     * @var string
-     * @deprecated 5.4.0 use class_description instead.
      */
-    private static $description = 'Base element class';
-
     private static $class_description = 'Base element class';
 
     /**
-     * List of fields to exclude from CMS SiteTree seatch
-     * @see ElementSiteTreeFilterSearch::applyDefaultFilters()
+     * List of fields to exclude from CMS SiteTree search
+     * @see ElementalSiteTreeSearchContext
      */
     private static array $fields_excluded_from_cms_search = [
         'ExtraClass',
@@ -94,11 +84,10 @@ class BaseElement extends DataObject implements CMSPreviewable
 
     private static $extensions = [
         Versioned::class,
-        DataExtension::class,
+        TopPageElementExtension::class,
     ];
 
     private static $casting = [
-        'BlockSchema' => DBObjectType::class,
         'IsLiveVersion' => DBBoolean::class,
         'IsPublished' => DBBoolean::class,
         'canCreate' => DBBoolean::class,
@@ -280,11 +269,7 @@ class BaseElement extends DataObject implements CMSPreviewable
 
         if ($this->hasMethod('getPage')) {
             if ($page = $this->getPage()) {
-                if ($page->hasExtension(Versioned::class)) {
-                    return Deprecation::withSuppressedNotice(fn() => $page->canArchive($member));
-                } else {
-                    return $page->canDelete($member);
-                }
+                return $page->canDelete($member);
             }
         }
 
@@ -309,25 +294,32 @@ class BaseElement extends DataObject implements CMSPreviewable
         return Permission::check('CMS_ACCESS', 'any', $member);
     }
 
-    public function write($showDebug = false, $forceInsert = false, $forceWrite = false, $writeComponents = false)
-    {
+    public function write(
+        $showDebug = false,
+        $forceInsert = false,
+        $forceWrite = false,
+        $writeComponents = false,
+        bool $skipValidation = false
+    ) {
         // Skips writes for broken blocks, so that we can still publish the page to allow all other blocks to publish.
         if ($this->ObsoleteClassName) {
             return $this->ID;
         }
-        return parent::write($showDebug, $forceInsert, $forceWrite, $writeComponents);
+        return parent::write($showDebug, $forceInsert, $forceWrite, $writeComponents, $skipValidation);
+    }
+
+    protected function onBeforeWrite()
+    {
+        parent::onBeforeWrite();
+        $this->ensureSortSet();
     }
 
     /**
      * Increment the sort order if one hasn't been already defined. This
      * ensures that new elements are created at the end of the list by default.
-     *
-     * {@inheritDoc}
      */
-    public function onBeforeWrite()
+    public function ensureSortSet()
     {
-        parent::onBeforeWrite();
-
         // If a Sort has already been set, then we can exit early
         if ($this->Sort) {
             return;
@@ -507,12 +499,9 @@ JS
         return $this;
     }
 
-    /**
-     * @return Controller
-     */
-    public function Top()
+    public function Top(): ?Controller
     {
-        return (Controller::has_curr()) ? Controller::curr() : null;
+        return Controller::curr();
     }
 
     /**
@@ -543,7 +532,7 @@ JS
     }
 
     /**
-     * Provides content for CMS search if ElementSiteTreeFilterSearch.render_elements is false
+     * Provides content for CMS search if ElementalSiteTreeSearchContext.render_elements is false
      */
     public function getContentForCmsSearch(): string
     {
@@ -599,10 +588,8 @@ JS
      * Default way to render element in templates. Note that all blocks should
      * be rendered through their {@link ElementController} class as this
      * contains the holder styles.
-     *
-     * @return string|null HTML
      */
-    public function forTemplate($holder = true)
+    public function forTemplate($holder = true): string
     {
         $templates = $this->getRenderTemplates();
 
@@ -610,7 +597,7 @@ JS
             return $this->renderWith($templates);
         }
 
-        return null;
+        return '';
     }
 
     /**
@@ -653,23 +640,6 @@ JS
     }
 
     /**
-     * Given form data (wit
-     *
-     * @param $data
-     * @deprecated 5.4.0 Will be removed without equivalent functionality to replace it in a future major release.
-     */
-    public function updateFromFormData($data)
-    {
-        Deprecation::noticeWithNoReplacment('5.4.0');
-        $cmsFields = $this->getCMSFields()->saveableFields();
-        foreach ($cmsFields as $fieldName => $field) {
-            $datum = $data[$fieldName] ?? null;
-            $field->setSubmittedValue($datum);
-            $field->saveInto($this);
-        }
-    }
-
-    /**
      * Strip all namespaces from class namespace.
      *
      * @param string $classname e.g. "\Fully\Namespaced\Class"
@@ -695,7 +665,7 @@ JS
      *
      * @return null|DataObject
      * @throws \Psr\Container\NotFoundExceptionInterface
-     * @throws \SilverStripe\ORM\ValidationException
+     * @throws \SilverStripe\Core\Validation\ValidationException
      */
     public function getPage()
     {
@@ -706,7 +676,7 @@ JS
         }
 
         $class = DataObject::getSchema()->hasOneComponent($this, 'Parent');
-        $area = ($this->ParentID) ? DataObject::get_by_id($class, $this->ParentID) : null;
+        $area = ($this->ParentID) ? DataObject::get($class)->setUseCache(true)->byID($this->ParentID) : null;
 
         if ($area instanceof ElementalArea && $area->exists()) {
             $page = $area->getOwnerPage();
@@ -796,7 +766,7 @@ JS
      * @param string|null $action
      * @return string|null
      * @throws \Psr\Container\NotFoundExceptionInterface
-     * @throws \SilverStripe\ORM\ValidationException
+     * @throws \SilverStripe\Core\Validation\ValidationException
      */
     public function AbsoluteLink($action = null)
     {
@@ -816,7 +786,7 @@ JS
      * @param string|null $action
      * @return string|null
      * @throws \Psr\Container\NotFoundExceptionInterface
-     * @throws \SilverStripe\ORM\ValidationException
+     * @throws \SilverStripe\Core\Validation\ValidationException
      */
     public function Link($action = null)
     {
@@ -836,7 +806,7 @@ JS
      * @param string|null $action
      * @return string|null
      * @throws \Psr\Container\NotFoundExceptionInterface
-     * @throws \SilverStripe\ORM\ValidationException
+     * @throws \SilverStripe\Core\Validation\ValidationException
      */
     public function PreviewLink($action = null)
     {
@@ -859,19 +829,12 @@ JS
         return $link;
     }
 
-    /**
-     * @return boolean
-     */
-    public function isCMSPreview()
+    public function isCMSPreview(): bool
     {
-        if (Controller::has_curr()) {
-            $controller = Controller::curr();
-
-            if ($controller->getRequest()->requestVar('CMSPreview')) {
-                return true;
-            }
+        $controller = Controller::curr();
+        if ($controller && $controller->getRequest()->requestVar('CMSPreview')) {
+            return true;
         }
-
         return false;
     }
 
@@ -879,9 +842,9 @@ JS
      * @param bool $directLink Indicates that the GridFieldDetailEdit form link should be given even if the block can be
      *                         edited in-line.
      * @return null|string
-     * @throws \SilverStripe\ORM\ValidationException
+     * @throws \SilverStripe\Core\Validation\ValidationException
      */
-    public function CMSEditLink($directLink = false)
+    public function getCMSEditLink($directLink = false): ?string
     {
         // Allow for repeated calls to be returned from cache
         if (isset($this->cacheData['cms_edit_link'])) {
@@ -914,10 +877,14 @@ JS
         }
 
         if ($page instanceof SiteTree) {
-            $link = $page->CMSEditLink();
-        } elseif (ClassInfo::hasMethod($page, 'CMSEditLink')) {
-            $link = Controller::join_links($page->CMSEditLink(), 'ItemEditForm');
+            $link = $page->getCMSEditLink();
+        } else {
+            $baseLink = $page->getCMSEditLink();
+            if ($baseLink) {
+                $link = Controller::join_links($baseLink, 'ItemEditForm');
+            }
         }
+
         // In-line editable blocks should just take you to the page.
         // Editable ones should add the suffix for detail form.
         if (!$this->inlineEditable() || $directLink) {
@@ -932,7 +899,7 @@ JS
                     'edit'
                 );
             } else {
-                // If $page is not a Page, then generate $link base on $page->CMSEditLink()
+                // If $page is not a Page, then generate $link base on $page->getCMSEditLink()
                 return Controller::join_links(
                     $link,
                     'field',
@@ -952,7 +919,7 @@ JS
      *
      * @return int|string The name of a valid elemental area relation
      * @throws \Psr\Container\NotFoundExceptionInterface
-     * @throws \SilverStripe\ORM\ValidationException
+     * @throws \SilverStripe\Core\Validation\ValidationException
      */
     public function getAreaRelationName()
     {
@@ -967,7 +934,7 @@ JS
 
         if ($page) {
             $class = DataObject::getSchema()->hasOneComponent($this, 'Parent');
-            $area = $this->ParentID ? DataObject::get_by_id($class, $this->ParentID) : null;
+            $area = $this->ParentID ? DataObject::get($class)->setUseCache(true)->byID($this->ParentID) : null;
 
             if ($area) {
                 $has_one = $page->config()->get('has_one');
@@ -1006,24 +973,24 @@ JS
     /**
      * @return null|string
      * @throws \Psr\Container\NotFoundExceptionInterface
-     * @throws \SilverStripe\ORM\ValidationException
+     * @throws \SilverStripe\Core\Validation\ValidationException
      */
     public function getEditLink()
     {
-        return Director::absoluteURL((string) $this->CMSEditLink());
+        return Director::absoluteURL((string) $this->getCMSEditLink());
     }
 
     /**
      * @return DBField|null
      * @throws \Psr\Container\NotFoundExceptionInterface
-     * @throws \SilverStripe\ORM\ValidationException
+     * @throws \SilverStripe\Core\Validation\ValidationException
      */
     public function PageCMSEditLink()
     {
         if ($page = $this->getPage()) {
             return DBField::create_field('HTMLText', sprintf(
                 '<a href="%s">%s</a>',
-                $page->CMSEditLink(),
+                $page->getCMSEditLink(),
                 $page->Title
             ));
         }
@@ -1042,7 +1009,7 @@ JS
     /**
      * This can be overridden on child elements to create a summary for display in GridFields.
      * The react Summary component takes `content` (html) and/or `fileUrl` & `fileTitle` (image) props,
-     * which have to be added to the graphql output in `provideBlockSchema()`.
+     * which have to be added to the output in `provideBlockSchema()`.
      *
      * @return string
      */
@@ -1063,27 +1030,17 @@ JS
     }
 
     /**
-     * The block actions is an associative array available for providing data to the client side to be used to describe
-     * actions that may be performed. This is available as a plain "ObjectType" in the GraphQL schema.
-     *
-     * By default the only action is "edit" which is simply the URL where the block may be edited.
-     *
-     * To modify the actions, either use the extension point or overload the `provideBlockSchema` method.
-     *
-     * @internal This API may change in future. Treat this as a `final` method.
-     * @return array
+     * Get the block schema data which will be sent to the editor client
      */
-    public function getBlockSchema()
+    public function getBlockSchema(): array
     {
         $blockSchema = $this->provideBlockSchema();
-
         $this->extend('updateBlockSchema', $blockSchema);
-
         return $blockSchema;
     }
 
     /**
-     * Provide block schema data, which will be serialised and sent via GraphQL to the editor client.
+     * Provide block schema data which will be sent to the editor client.
      *
      * Overload this method in child element classes to augment, or use the extension point on `getBlockSchema`
      * to update it from an `Extension`.
@@ -1095,7 +1052,7 @@ JS
     protected function provideBlockSchema()
     {
         return [
-            'typeName' => static::getGraphQLTypeName(),
+            'typeName' => str_replace('\\', '_', get_class($this)),
             'actions' => [
                 'edit' => $this->getEditLink(),
             ],
@@ -1103,7 +1060,7 @@ JS
         ];
     }
 
-    /**
+     /**
      * Generate markup for element type icons suitable for use in GridFields.
      *
      * @return null|DBHTMLText
@@ -1141,19 +1098,6 @@ JS
     }
 
     /**
-     * Get a description for this content element, if available
-     *
-     * @deprecated 5.3.0 Use i18n_classDescription() instead.
-     *
-     * @return string
-     */
-    public function getDescription()
-    {
-        Deprecation::notice('5.3.0', 'Use i18n_classDescription() instead.');
-        return $this->i18n_classDescription() ?? '';
-    }
-
-    /**
      * Generate markup for element type, with description suitable for use in
      * GridFields.
      *
@@ -1161,12 +1105,12 @@ JS
      */
     public function getTypeNice()
     {
-        $description = Deprecation::withSuppressedNotice(fn () => $this->getDescription());
-        $desc = $description ? " <span class=\"element__note\"> — {$description}</span>" : '';
+        $description = $this->i18n_classDescription();
+        $markup = ($description) ? " <span class=\"element__note\"> — {$description}</span>" : '';
 
         return DBField::create_field(
             'HTMLVarchar',
-            $this->getType() . $desc
+            $this->getType() . $markup
         );
     }
 
@@ -1217,7 +1161,7 @@ JS
     /**
      * @return mixed|null
      * @throws \Psr\Container\NotFoundExceptionInterface
-     * @throws \SilverStripe\ORM\ValidationException
+     * @throws \SilverStripe\Core\Validation\ValidationException
      */
     public function getPageTitle()
     {
@@ -1276,17 +1220,9 @@ JS
 
     /**
      * @return string
-     * @deprecated 5.3.0 Will be replaced with getTypeName() in a future major release
      */
-    public static function getGraphQLTypeName(): string
+    public function getTypeName(): string
     {
-        Deprecation::withSuppressedNotice(function () {
-            Deprecation::notice('5.3.0', 'Will be replaced with getTypeName() in a future major release');
-        });
-        // For GraphQL 3, use the static schema type name - except for BaseElement for which this is inconsistent.
-        if (class_exists(StaticSchema::class) && static::class !== BaseElement::class) {
-            return StaticSchema::inst()->typeNameForDataObject(static::class);
-        }
         return str_replace('\\', '_', static::class);
     }
 

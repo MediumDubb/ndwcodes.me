@@ -74,9 +74,6 @@ html, body {
 // .cms-menu,
 // .cms-content,
 // .cms-content-header,
-// // DEPRECATED:
-// // .cms-content-tools will be removed in 4.0
-// // Use .cms-content-filters instead
 // .cms-content-tools,
 // .cms-content-fields,
 // .cms-preview,
@@ -119,8 +116,10 @@ html, body {
     min-height: $toolbar-height;
     min-width: 250px;
 
-    * {
-      display: inline-block; // align back button and breadcrumbs
+    // align back button and breadcrumbs
+    // but specifically do NOT override badge display
+    *:not(.badge) {
+      display: inline-block;
     }
 
     .section-icon {
@@ -142,7 +141,7 @@ html, body {
     }
   }
 
-  @include media-breakpoint-down(sm) {
+  @include media-breakpoint-down(md) {
     .cms-content-header-nav {
       display: block;
 
@@ -248,7 +247,7 @@ html, body {
   overflow: hidden;
   flex: 1;
 
-  @include media-breakpoint-down(sm) {
+  @include media-breakpoint-down(md) {
     margin-left: $toolbar-total-height;
 
     .toolbar__back-button + & {
@@ -953,7 +952,7 @@ html, body {
     margin-right: 10px;
   }
 
-  .page-icon {
+  .record-icon {
     display: inline-block;
     margin-right: 6px;
 

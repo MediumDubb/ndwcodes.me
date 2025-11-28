@@ -4,12 +4,12 @@ namespace SilverStripe\Reports;
 
 use SilverStripe\Core\Convert;
 use SilverStripe\ORM\FieldType\DBField;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 
 /**
  * Renderer for showing SideReports in CMSMain
  */
-class SideReportView extends ViewableData
+class SideReportView extends ModelData
 {
     protected $controller;
     protected $report;
@@ -37,7 +37,7 @@ class SideReportView extends ViewableData
         $this->parameters = $parameters;
     }
 
-    public function forTemplate()
+    public function forTemplate(): string
     {
         $records = $this->report->records($this->parameters);
         $columns = $this->report->columns();
@@ -95,8 +95,8 @@ class SideReportView extends ViewableData
         }
 
         if (isset($info['link']) && $info['link']) {
-            $link = ($info['link'] === true && $record->hasMethod('CMSEditLink'))
-                ? $record->CMSEditLink()
+            $link = ($info['link'] === true && $record->hasMethod('getCMSEditLink'))
+                ? $record->getCMSEditLink()
                 : $info['link'];
             return $prefix . "<a $classClause href=\"$link\">$val</a>";
         } else {

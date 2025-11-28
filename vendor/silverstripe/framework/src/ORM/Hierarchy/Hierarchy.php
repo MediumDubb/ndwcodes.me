@@ -6,18 +6,21 @@ use SilverStripe\Admin\LeftAndMain;
 use SilverStripe\Control\Controller;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\ORM\DataList;
-use SilverStripe\ORM\SS_List;
-use SilverStripe\ORM\ValidationResult;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\SS_List;
+use SilverStripe\Core\Validation\ValidationResult;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\ORM\DB;
 use SilverStripe\Versioned\Versioned;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Convert;
 use Exception;
+use SilverStripe\Model\ModelData;
+use SilverStripe\ORM\HiddenClass;
+use SilverStripe\Security\Member;
+use SilverStripe\Security\Security;
 use SilverStripe\Dev\Deprecation;
-use SilverStripe\View\ViewableData;
 
 /**
  * DataObjects that use the Hierarchy extension can be be organised as a hierarchy, with children and parents. The most
@@ -25,10 +28,51 @@ use SilverStripe\View\ViewableData;
  *
  * @property int $ParentID
  * @method DataObject Parent()
- * @extends DataExtension<DataObject&static>
+ * @extends Extension<DataObject&static>
  */
-class Hierarchy extends DataExtension
+class Hierarchy extends Extension
 {
+    /**
+     * The name of the dedicated sort field, if there is one.
+     * Will be null if there's no field for sorting this model.
+     * Does not affect default_sort which needs to be configured separately.
+     */
+    private static ?string $sort_field = null;
+
+    /**
+     * The default child class for this model.
+     * Note that this is intended for use with CMSMain and may not be respected with other model management methods.
+     */
+    private static ?string $default_child = null;
+
+    /**
+     * The default parent class for this model.
+     * Note that this is intended for use with CMSMain and may not be respected with other model management methods.
+     */
+    private static ?string $default_parent = null;
+
+    /**
+     * Indicates what kind of children this model can have.
+     * This can be an array of allowed child classes, or the string "none" -
+     * indicating that this model can't have children.
+     * If a classname is prefixed by "*", such as "*App\Model\MyModel", then only that
+     * class is allowed - no subclasses. Otherwise, the class and all its
+     * subclasses are allowed.
+     * To control allowed children on root level (no parent), use {@link $can_be_root}.
+     *
+     * Leaving this array empty means this model can have children of any class that is a subclass
+     * of the first class in its class hierarchy to have the Hierarchy extension, including records of the same class.
+     *
+     * Note that this is intended for use with CMSMain and may not be respected with other model management methods.
+     */
+    private static array $allowed_children = [];
+
+    /**
+     * Controls whether a record can be in the root of the hierarchy.
+     * Note that this is intended for use with CMSMain and may not be respected with other model management methods.
+     */
+    private static bool $can_be_root = true;
+
     /**
      * The lower bounds for the amount of nodes to mark. If set, the logic will expand nodes until it reaches at least
      * this number, and then stops. Root nodes will always show regardless of this setting. Further nodes can be
@@ -87,6 +131,28 @@ class Hierarchy extends DataExtension
     private static $prepopulate_numchildren_cache = true;
 
     /**
+     * The default method called on the Hierarchy class to get children
+     * This can be overriden on classes that use the Hierarchy extension, though it should only be
+     * defined on the base class that has the hierarchy extension applied to it. For instance:
+     * - MyBaseClass has the Hierarchy extension applied
+     * - MySubClass extends MyBaseClass
+     * Only define the tree_children_method on MyBaseClass
+     */
+    private static string $tree_children_method = 'getChildrenForTree';
+
+    /**
+     * Used to cache the children a node has in getChildrenForTree()
+     * @internal
+     */
+    private static array $children_for_tree_ids_cache = [];
+
+    /**
+     * Used to cache child dataobjects in getChildrenForTree()
+     * @internal
+     */
+    private static array $children_for_tree_obj_cache = [];
+
+    /**
      * Prevent virtual page virtualising these fields
      *
      * @config
@@ -100,10 +166,14 @@ class Hierarchy extends DataExtension
      * A cache used by numChildren().
      * Clear through {@link flushCache()}.
      * version (int)0 means not on this stage.
-     *
-     * @var array
      */
-    protected static $cache_numChildren = [];
+    protected static array $cache_numChildren = [];
+
+    /**
+     * Used as a cache for allowedChildren()
+     * Drastically reduces admin page load when there are a lot of subclass types
+     */
+    protected static array $cache_allowedChildren = [];
 
     public static function get_extra_config($class, $extension, $args)
     {
@@ -114,15 +184,52 @@ class Hierarchy extends DataExtension
 
     /**
      * Validate the owner object - check for existence of infinite loops.
-     *
-     * @param ValidationResult $validationResult
-     * @deprecated 5.4.0 Will be renamed to updateValidate()
      */
-    public function validate(ValidationResult $validationResult)
+    protected function updateValidate(ValidationResult $validationResult)
     {
-        Deprecation::notice('5.4.0', 'Will be renamed to updateValidate()');
-        // The object is new, won't be looping.
         $owner = $this->owner;
+        $this->validateNonCyclicalHierarchy($validationResult);
+
+        // "Can be root" validation
+        if (!$owner::config()->get('can_be_root') && !$owner->ParentID) {
+            $validationResult->addError(
+                _t(
+                    __CLASS__ . '.TypeOnRootNotAllowed',
+                    'Model type "{type}" is not allowed on the root level',
+                    ['type' => $owner->i18n_singular_name()]
+                ),
+                ValidationResult::TYPE_ERROR,
+                'CAN_BE_ROOT'
+            );
+        }
+
+        // Allowed children validation
+        $parent = $owner->getParent();
+        if ($parent && $parent->exists()) {
+            // No need to check for subclasses or instanceof, as allowedChildren() already
+            // deconstructs any inheritance trees already.
+            $allowed = $parent->allowedChildren();
+            $subject = $owner->hasMethod('getRecordForAllowedChildrenValidation')
+                ? $owner->getRecordForAllowedChildrenValidation()
+                : $owner;
+            if (!in_array($subject->ClassName, $allowed ?? [])) {
+                $validationResult->addError(
+                    _t(
+                        __CLASS__ . '.ChildTypeNotAllowed',
+                        'Model type "{type}" not allowed as child of this parent record',
+                        ['type' => $subject->i18n_singular_name()]
+                    ),
+                    ValidationResult::TYPE_ERROR,
+                    'ALLOWED_CHILDREN'
+                );
+            }
+        }
+    }
+
+    private function validateNonCyclicalHierarchy(ValidationResult $validationResult): void
+    {
+        $owner = $this->owner;
+        // The object is new, won't be looping.
         if (!$owner->ID) {
             return;
         }
@@ -130,7 +237,7 @@ class Hierarchy extends DataExtension
         if (!$owner->ParentID) {
             return;
         }
-        // The parent has not changed, skip the check for performance reasons.
+        // The parent has not changed, skip the checks for performance reasons.
         if (!$owner->isChanged('ParentID')) {
             return;
         }
@@ -155,7 +262,6 @@ class Hierarchy extends DataExtension
             $node = $node->Parent();
         }
     }
-
 
     /**
      * Get a list of this DataObject's and all it's descendants IDs.
@@ -187,6 +293,32 @@ class Hierarchy extends DataExtension
                 $this->loadDescendantIDListInto($idList, $child);
             }
         }
+    }
+
+    /**
+     * Duplicates each child of this record recursively and returns the top-level duplicate record.
+     * If there is a sort field, new sort values are set for the duplicates to retain their sort order.
+     */
+    public function duplicateWithChildren(): DataObject
+    {
+        $owner = $this->getOwner();
+        $clone = $owner->duplicate();
+        $children = $owner->AllChildren();
+        $sortField = $owner->getSortField();
+
+        $sort = 1;
+        foreach ($children as $child) {
+            $childClone = $child->duplicateWithChildren();
+            $childClone->ParentID = $clone->ID;
+            if ($sortField) {
+                //retain sort order by manually setting sort values
+                $childClone->$sortField = $sort;
+                $sort++;
+            }
+            $childClone->write();
+        }
+
+        return $clone;
     }
 
     /**
@@ -229,9 +361,11 @@ class Hierarchy extends DataExtension
      * - Everything else has "SameOnStage" set, as an indicator that this information has been looked up.
      *
      * @return ArrayList<DataObject&static>
+     * @deprecated 6.0.0 Use getChildrenForTree() instead.
      */
     public function AllChildrenIncludingDeleted()
     {
+        Deprecation::notice('6.0.0', 'Use getChildrenForTree() instead');
         /** @var DataObject|Hierarchy|Versioned $owner */
         $owner = $this->owner;
         $stageChildren = $owner->stageChildren(true);
@@ -249,6 +383,100 @@ class Hierarchy extends DataExtension
         }
         $owner->extend("augmentAllChildrenIncludingDeleted", $stageChildren);
         return $stageChildren;
+    }
+
+    /**
+     * Return direct children in the hierarchy for creating a tree
+     *
+     * This does much the same result as AllChildrenIncludingDeleted() and is far more performant,
+     * though there are some key differences:
+     * - Results will be cached in-memory to save on the number of database queries required
+     * - Database queries will be larger `WHERE "ID" IN (?, ?) style queries rather than many `WHERE "ID" = ?
+     * - While Hierarchy.node_threshold_total has not been exceeded, it will cache descendant record as
+     *   well to save future queries
+     * - Does not included deleted records, which could be done via Versioned::updateListToAlsoIncludeDeleted($children)
+     */
+    public function getChildrenForTree(): ArrayList
+    {
+        /** @var DataObject&Hierarchy */
+        $owner = $this->getOwner();
+        $parentID = $owner->ID;
+        $baseClass = $owner->getHierarchyBaseClass();
+        Hierarchy::$children_for_tree_ids_cache[$baseClass] ??= [];
+        Hierarchy::$children_for_tree_obj_cache[$baseClass] ??= [];
+        if (!array_key_exists($parentID, Hierarchy::$children_for_tree_obj_cache[$baseClass])) {
+            Hierarchy::$children_for_tree_obj_cache[$baseClass][$parentID] = $owner;
+        }
+        $this->recursivelyCacheDescendantsForTree($baseClass, [$parentID]);
+        $childIDs = [];
+        if (array_key_exists($parentID, Hierarchy::$children_for_tree_ids_cache[$baseClass])) {
+            $childIDs = Hierarchy::$children_for_tree_ids_cache[$baseClass][$parentID];
+        }
+        $childNodes = [];
+        foreach ($childIDs as $childID) {
+            if (array_key_exists($childID, Hierarchy::$children_for_tree_obj_cache[$baseClass])) {
+                $childNodes[] = Hierarchy::$children_for_tree_obj_cache[$baseClass][$childID];
+            }
+        }
+        $children = ArrayList::create($childNodes);
+        // $includeDeleted was included by accident but now that it is part of the method signature of the extension
+        // hook we can't remove it for backwards compatibility reasons.
+        $includeDeleted = false;
+        $owner->extend('updateGetChildrenForTree', $includeDeleted, $children);
+        return $children;
+    }
+
+    /**
+     * Inner recursive method used by getChildrenForTree()
+     */
+    private function recursivelyCacheDescendantsForTree(string $baseClass, array $parentIDs): void
+    {
+        // Only query records which have not be previously cached
+        $parentIDs = array_filter($parentIDs, function ($parentID) use ($baseClass) {
+            return !array_key_exists($parentID, Hierarchy::$children_for_tree_ids_cache[$baseClass]);
+        });
+        if (empty($parentIDs)) {
+            return;
+        }
+        $config = $this->getOwner()->config();
+        $count = count(Hierarchy::$children_for_tree_obj_cache[$baseClass]);
+        $threshold = $config->get('node_threshold_total');
+        if ($count > $threshold) {
+            return;
+        }
+        $nextIDs = [];
+        // This will use a hierarchical query method where it will initially fetched from the "second level down"
+        // where the ParentID equals the single DataObject at the "top level" of the hierarchy
+        // It will then fetch from the "third level down" in the hierarchy where the ParentID is of the ParentIDs in
+        // the "second level down". In will continue querying like this until the total number of cached objects has
+        // exceeded the configured value `node_threshold_total`, or all object have been fetched
+        /** @var DataList $children */
+        $children = $baseClass::get()->filter(['ParentID' => $parentIDs]);
+        $hideFromHierarchy = $config->get('hide_from_hierarchy');
+        $hideFromCMSTree = $config->get('hide_from_cms_tree');
+        if ($hideFromHierarchy) {
+            $children = $children->exclude(['ClassName' => $hideFromHierarchy]);
+        }
+        if ($hideFromCMSTree && $this->showingCMSTree()) {
+            $children = $children->exclude(['ClassName' => $hideFromCMSTree]);
+        }
+        foreach ($parentIDs as $parentID) {
+            Hierarchy::$children_for_tree_ids_cache[$baseClass][$parentID] = [];
+        }
+        foreach ($children as $child) {
+            $childID = $child->ID;
+            $parentID = $child->ParentID;
+            Hierarchy::$children_for_tree_ids_cache[$baseClass][$parentID][] = $childID;
+            Hierarchy::$children_for_tree_obj_cache[$baseClass][$childID] = $child;
+            if (!array_key_exists($childID, Hierarchy::$children_for_tree_ids_cache[$baseClass])
+                && !in_array($childID, $nextIDs)
+            ) {
+                $nextIDs[] = $childID;
+            }
+        }
+        if (count($nextIDs)) {
+            $this->recursivelyCacheDescendantsForTree($baseClass, $nextIDs);
+        }
     }
 
     /**
@@ -396,18 +624,148 @@ class Hierarchy extends DataExtension
     }
 
     /**
+     * Whether the internal Hierarchy::$cache_numChildren cache has been populated for $baseClass
+     */
+    public static function numChildrenCacheIsPopulated(string $baseClass): bool
+    {
+        return Hierarchy::$cache_numChildren[$baseClass]['numChildren']['_complete'] ?? false;
+    }
+
+    /**
+     * Returns the class name of the default class for children of this page.
+     * Note that this is intended for use with CMSMain and may not be respected with other model management methods.
+     */
+    public function defaultChild(): ?string
+    {
+        $owner = $this->getOwner();
+        $default = $owner::config()->get('default_child');
+        $allowed = $this->allowedChildren();
+        if (empty($allowed)) {
+            return null;
+        }
+        if (!$default || !in_array($default, $allowed)) {
+            $default = reset($allowed);
+        }
+        return $default;
+    }
+
+    /**
+     * Returns the class name of the default class for the parent of this page.
+     * Note that this is intended for use with CMSMain and may not be respected with other model management methods.
+     * Doesn't check the allowedChildren config for the parent class.
+     */
+    public function defaultParent(): ?string
+    {
+        return $this->getOwner()::config()->get('default_parent');
+    }
+
+    /**
+     * Returns an array of the class names of classes that are allowed to be children of this class.
+     * Note that this is intended for use with CMSMain and may not be respected with other model management methods.
+     *
+     * @return string[]
+     */
+    public function allowedChildren(): array
+    {
+        $owner = $this->getOwner();
+        if (isset(static::$cache_allowedChildren[$owner->ClassName])) {
+            $allowedChildren = static::$cache_allowedChildren[$owner->ClassName];
+        } else {
+            // Get config from the highest class in the hierarchy to define it.
+            // This avoids merged config, meaning each class that defines the allowed children defines it from scratch.
+            $baseClass = $this->getHierarchyBaseClass();
+            $class = get_class($owner);
+            $candidates = null;
+            while ($class) {
+                if (Config::inst()->exists($class, 'allowed_children', Config::UNINHERITED)) {
+                    $candidates = Config::inst()->get($class, 'allowed_children', Config::UNINHERITED);
+                    break;
+                }
+                // Stop checking if we've hit the first class in the class hierarchy which has this extension
+                if ($class === $baseClass) {
+                    break;
+                }
+                $class = get_parent_class($class);
+            }
+            if ($candidates === 'none') {
+                return [];
+            }
+
+            // If we're using a superclass, check if we've already processed its allowed children list
+            if ($class !== $owner->ClassName && isset(static::$cache_allowedChildren[$class])) {
+                $allowedChildren = static::$cache_allowedChildren[$class];
+                static::$cache_allowedChildren[$owner->ClassName] = $allowedChildren;
+                return $allowedChildren;
+            }
+
+            // Set the highest available class (and implicitly its subclasses) as being allowed.
+            if (!$candidates) {
+                $candidates = [$baseClass];
+            }
+
+            // Parse candidate list
+            $allowedChildren = [];
+            foreach ((array)$candidates as $candidate) {
+                // If a classname is prefixed by "*", such as "*App\Model\MyModel", then only that class is allowed - no subclasses.
+                // Otherwise, the class and all its subclasses are allowed.
+                if (substr($candidate, 0, 1) == '*') {
+                    $allowedChildren[] = substr($candidate, 1);
+                } elseif ($subclasses = ClassInfo::subclassesFor($candidate)) {
+                    foreach ($subclasses as $subclass) {
+                        if (!is_a($subclass, HiddenClass::class, true)) {
+                            $allowedChildren[] = $subclass;
+                        }
+                    }
+                }
+            }
+            static::$cache_allowedChildren[$owner->ClassName] = $allowedChildren;
+            // Make sure we don't have to re-process if this is the allowed children set of a superclass
+            if ($class !== $owner->ClassName) {
+                static::$cache_allowedChildren[$class] = $allowedChildren;
+            }
+        }
+        $owner->extend('updateAllowedChildren', $allowedChildren);
+
+        return $allowedChildren;
+    }
+
+    /**
      * Checks if we're on a controller where we should filter. ie. Are we loading the SiteTree?
      *
      * @return bool
      */
     public function showingCMSTree()
     {
-        if (!Controller::has_curr() || !class_exists(LeftAndMain::class)) {
+        $controller = Controller::curr();
+        if (!$controller || !class_exists(LeftAndMain::class)) {
             return false;
         }
-        $controller = Controller::curr();
         return $controller instanceof LeftAndMain
             && in_array($controller->getAction(), ["treeview", "listview", "getsubtree"]);
+    }
+
+    /**
+     * Return the CSS classes to apply to this node in the CMS tree.
+     */
+    public function CMSTreeClasses(): string
+    {
+        $owner = $this->getOwner();
+        $classes = sprintf('class-%s', Convert::raw2htmlid(get_class($owner)));
+
+        if (!$owner->canAddChildren()) {
+            $classes .= " nochildren";
+        }
+
+        if (!$owner->canEdit() && !$owner->canAddChildren()) {
+            if (!$owner->canView()) {
+                $classes .= " disabled";
+            } else {
+                $classes .= " edit-disabled";
+            }
+        }
+
+        $owner->invokeWithExtensions('updateCMSTreeClasses', $classes);
+        return $classes;
     }
 
     /**
@@ -415,11 +773,11 @@ class Hierarchy extends DataExtension
      *
      * @return string
      */
-    private function getHierarchyBaseClass(): string
+    public function getHierarchyBaseClass(): string
     {
         $ancestry = ClassInfo::ancestry($this->owner);
         $ancestorClass = array_shift($ancestry);
-        while ($ancestorClass && !ViewableData::has_extension($ancestorClass, Hierarchy::class)) {
+        while ($ancestorClass && !ModelData::has_extension($ancestorClass, Hierarchy::class)) {
             $ancestorClass = array_shift($ancestry);
         }
 
@@ -524,11 +882,11 @@ class Hierarchy extends DataExtension
             return null;
         }
         $baseClass = $this->owner->baseClass();
-        $idSQL = $this->owner->getSchema()->sqlColumnForField($baseClass, 'ID');
-        return DataObject::get_one($baseClass, [
-            [$idSQL => $parentID],
-            $filter
-        ]);
+        $list = DataObject::get($baseClass)->setUseCache(true);
+        if ($filter !== null) {
+            $list = $list->where($filter);
+        }
+        return $list->byID($parentID);
     }
 
     /**
@@ -571,16 +929,88 @@ class Hierarchy extends DataExtension
     }
 
     /**
+     * Get the title that will be used in TreeDropdownField and other tree structures.
+     */
+    public function getTreeTitle(): string
+    {
+        $owner = $this->getOwner();
+        $title = $owner->MenuTitle ?: $owner->Title;
+        $title = Convert::raw2xml($title ?? '');
+        $owner->extend('updateTreeTitle', $title);
+        return $title;
+    }
+
+    /**
+     * Get the name of the dedicated sort field, if there is one.
+     */
+    public function getSortField(): ?string
+    {
+        return $this->getOwner()::config()->get('sort_field');
+    }
+
+    /**
+     * Returns true if the current user can add children to this page.
+     *
+     * Denies permission if any of the following conditions is true:
+     * - the record is versioned and archived
+     * - canAddChildren() on a extension returns false
+     * - canEdit() is not granted
+     * - allowed_children is not set to "none"
+     */
+    public function canAddChildren(?Member $member = null): bool
+    {
+        $owner = $this->getOwner();
+        // Disable adding children to archived records
+        if ($owner->hasExtension(Versioned::class) && $owner->isArchived()) {
+            return false;
+        }
+
+        if (!$member) {
+            $member = Security::getCurrentUser();
+        }
+
+        // Standard mechanism for accepting permission changes from extensions
+        $extended = $owner->extendedCan('canAddChildren', $member);
+        if ($extended !== null) {
+            return $extended;
+        }
+
+        return $owner->canEdit($member) && $owner::config()->get('allowed_children') !== 'none';
+    }
+
+    protected function extendCanAddChildren()
+    {
+        // Prevent canAddChildren from extending itself
+        return null;
+    }
+
+    /**
      * Flush all Hierarchy caches:
      * - Children (instance)
      * - NumChildren (instance)
-     *
-     * @deprecated 5.4.0 Will be renamed to onFlushCache()
      */
-    public function flushCache()
+    protected function onFlushCache()
     {
-        Deprecation::notice('5.4.0', 'Will be renamed to onFlushCache()');
         $this->owner->_cache_children = null;
         Hierarchy::$cache_numChildren = [];
+    }
+
+    /**
+     * Block creating children not allowed for the parent type
+     */
+    protected function canCreate(?Member $member, array $context): ?bool
+    {
+        // Parent is added to context through CMSMain
+        // Note that not having a parent doesn't necessarily mean this record is being
+        // created at the root, so we can't check against can_be_root here.
+        $parent = isset($context['Parent']) ? $context['Parent'] : null;
+        $parentInHierarchy = ($parent && is_a($parent, $this->getHierarchyBaseClass()));
+        if ($parentInHierarchy && !in_array(get_class($this->getOwner()), $parent->allowedChildren())) {
+            return false;
+        }
+        if ($parent?->exists() && $parentInHierarchy && !$parent->canAddChildren($member)) {
+            return false;
+        }
+        return null;
     }
 }

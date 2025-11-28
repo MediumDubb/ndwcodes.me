@@ -7,12 +7,12 @@ use SilverStripe\Assets\ImageManipulation;
 use SilverStripe\Assets\Thumbnail;
 use SilverStripe\Control\Director;
 use SilverStripe\Core\Injector\Injector;
-use SilverStripe\Dev\Deprecation;
+use SilverStripe\Forms\FormField;
 use SilverStripe\ORM\FieldType\DBComposite;
-use SilverStripe\ORM\ValidationException;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationException;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Permission;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 
 /**
  * Represents a file reference stored in a database
@@ -29,20 +29,15 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
      * List of allowed file categories.
      *
      * {@see File::$app_categories}
-     *
-     * @var array
      */
-    protected $allowedCategories = [];
+    protected array $allowedCategories = [];
 
     /**
      * List of image mime types supported by the image manipulations API
      *
      * {@see File::app_categories} for matching extensions.
-     *
-     * @config
-     * @var array
      */
-    private static $supported_images = [
+    private static array $supported_images = [
         'image/jpg',
         'image/jpeg',
         'image/pjpeg',
@@ -68,46 +63,13 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
         'image/webp',
     ];
 
-    /**
-     * Create a new image manipulation
-     *
-     * @param string $name
-     * @param array|string $allowed List of allowed file categories (not extensions), as per File::$app_categories
-     */
-    public function __construct($name = null, $allowed = [])
-    {
-        parent::__construct($name);
-        $this->setAllowedCategories($allowed);
-    }
-
-    /**
-     * Determine if a valid non-empty image exists behind this asset, which is a format
-     * compatible with image manipulations
-     *
-     * @return boolean
-     */
-    public function getIsImage()
-    {
-        // Check file type
-        $mime = $this->getMimeType();
-        return $mime && in_array($mime, $this->config()->supported_images ?? []);
-    }
-
-    /**
-     * @return AssetStore
-     */
-    protected function getStore()
-    {
-        return Injector::inst()->get(AssetStore::class);
-    }
-
-    private static $composite_db = [
+    private static array $composite_db = [
         "Hash" => "Varchar(255)", // SHA of the base content
         "Filename" => "Varchar(255)", // Path identifier of the base content
         "Variant" => "Varchar(255)", // Identifier of the variant to the base, if given
     ];
 
-    private static $casting = [
+    private static array $casting = [
         'URL' => 'Varchar',
         'AbsoluteURL' => 'Varchar',
         'Basename' => 'Varchar',
@@ -121,27 +83,50 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
         'getAttributesHTML' => 'HTMLFragment',
     ];
 
-    public function scaffoldFormField($title = null, $params = null)
+    /**
+     * Create a new image manipulation
+     *
+     * @param array|string $allowed List of allowed file categories (not extensions), as per File::$app_categories
+     */
+    public function __construct(?string $name = null, array|string $allowed = [])
+    {
+        parent::__construct($name);
+        $this->setAllowedCategories($allowed);
+    }
+
+    /**
+     * Determine if a valid non-empty image exists behind this asset, which is a format
+     * compatible with image manipulations
+     */
+    public function getIsImage(): bool
+    {
+        // Check file type
+        $mime = $this->getMimeType();
+        return $mime && in_array($mime, $this->config()->supported_images ?? []);
+    }
+
+    protected function getStore(): AssetStore
+    {
+        return Injector::inst()->get(AssetStore::class);
+    }
+
+    public function scaffoldFormField(?string $title = null, array $params = []): ?FormField
     {
         return null;
     }
 
     /**
      * Return a html5 tag of the appropriate for this file (normally img or a)
-     *
-     * @return string
      */
-    public function XML()
+    public function XML(): string
     {
         return $this->getTag() ?: '';
     }
 
     /**
      * Return a html5 tag of the appropriate for this file (normally img or a)
-     *
-     * @return string
      */
-    public function getTag()
+    public function getTag(): string
     {
         $template = $this->getFrontendTemplate();
         if (empty($template)) {
@@ -155,12 +140,12 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
      *
      * @return string Name of template
      */
-    public function getFrontendTemplate()
+    public function getFrontendTemplate(): string
     {
         // Check that path is available
         $url = $this->getURL();
         if (empty($url)) {
-            return null;
+            return '';
         }
 
         // Image template for supported images
@@ -174,36 +159,30 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
 
     /**
      * Get trailing part of filename
-     *
-     * @return string
      */
-    public function getBasename()
+    public function getBasename(): string
     {
         if (!$this->exists()) {
-            return null;
+            return '';
         }
         return basename($this->getSourceURL() ?? '');
     }
 
     /**
      * Get file extension
-     *
-     * @return string
      */
-    public function getExtension()
+    public function getExtension(): string
     {
         if (!$this->exists()) {
-            return null;
+            return '';
         }
         return pathinfo($this->Filename ?? '', PATHINFO_EXTENSION);
     }
 
     /**
      * Alt title for this
-     *
-     * @return string
      */
-    public function getTitle()
+    public function getTitle(): string
     {
         // If customised, use the customised title
         if ($this->failover && ($title = $this->failover->Title)) {
@@ -265,40 +244,35 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
     public function getString()
     {
         if (!$this->exists()) {
-            return null;
+            return '';
         }
         return $this
             ->getStore()
             ->getAsString($this->Filename, $this->Hash, $this->Variant);
     }
 
-    public function getURL($grant = true)
+    public function getURL($grant = true): string
     {
         if (!$this->exists()) {
-            return null;
+            return '';
         }
         $url = $this->getSourceURL($grant);
-        $this->updateURL($url);
-        $this->extend('updateURL', $url);
+        $this->invokeWithExtensions('updateURL', $url);
         return $url;
     }
 
     /**
      * Return URL for this image. Alias for getURL()
-     *
-     * @return string
      */
-    public function Link()
+    public function Link(): string
     {
         return $this->getURL();
     }
 
     /**
      * Return absolute URL for this image. Alias for getAbsoluteURL()
-     *
-     * @return string
      */
-    public function AbsoluteLink()
+    public function AbsoluteLink(): string
     {
         return $this->getAbsoluteURL();
     }
@@ -308,9 +282,8 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
      * Note that this will return the url even if the file does not exist.
      *
      * @param bool $grant Ensures that the url for any protected assets is granted for the current user.
-     * @return string
      */
-    public function getSourceURL($grant = true)
+    public function getSourceURL(bool $grant = true): string
     {
         return $this
             ->getStore()
@@ -319,38 +292,36 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
 
     /**
      * Get the absolute URL to this resource
-     *
-     * @return string
      */
-    public function getAbsoluteURL()
+    public function getAbsoluteURL(): string
     {
         if (!$this->exists()) {
-            return null;
+            return '';
         }
         return Director::absoluteURL((string) $this->getURL());
     }
 
-    public function getMetaData()
+    public function getMetaData(): array
     {
         if (!$this->exists()) {
-            return null;
+            return [];
         }
         return $this
             ->getStore()
             ->getMetadata($this->Filename, $this->Hash, $this->Variant);
     }
 
-    public function getMimeType()
+    public function getMimeType(): string
     {
         if (!$this->exists()) {
-            return null;
+            return '';
         }
         return $this
             ->getStore()
             ->getMimeType($this->Filename, $this->Hash, $this->Variant);
     }
 
-    public function getValue()
+    public function getValue(): ?array
     {
         if (!$this->exists()) {
             return null;
@@ -362,7 +333,7 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
         ];
     }
 
-    public function getVisibility()
+    public function getVisibility(): ?string
     {
         if (empty($this->Filename)) {
             return null;
@@ -372,7 +343,7 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
             ->getVisibility($this->Filename, $this->Hash);
     }
 
-    public function exists()
+    public function exists(): bool
     {
         if (empty($this->Filename)) {
             return false;
@@ -382,27 +353,25 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
             ->exists($this->Filename, $this->Hash, $this->Variant);
     }
 
-    public function getFilename()
+    public function getFilename(): ?string
     {
         return $this->getField('Filename');
     }
 
-    public function getHash()
+    public function getHash(): ?string
     {
         return $this->getField('Hash');
     }
 
-    public function getVariant()
+    public function getVariant(): ?string
     {
         return $this->getField('Variant');
     }
 
     /**
      * Return file size in bytes.
-     *
-     * @return int
      */
-    public function getAbsoluteSize()
+    public function getAbsoluteSize(): int
     {
         $metadata = $this->getMetaData();
         if (isset($metadata['size'])) {
@@ -413,13 +382,10 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
 
     /**
      * Customise this object with an "original" record for getting other customised fields
-     *
-     * @param AssetContainer $original
-     * @return $this
      */
-    public function setOriginal($original)
+    public function setOriginal(AssetContainer $original): static
     {
-        if ($original instanceof ViewableData) {
+        if ($original instanceof ModelData) {
             $this->setFailover($original);
         }
         return $this;
@@ -427,21 +393,16 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
 
     /**
      * Get list of allowed file categories
-     *
-     * @return array
      */
-    public function getAllowedCategories()
+    public function getAllowedCategories(): array
     {
         return $this->allowedCategories;
     }
 
     /**
      * Assign allowed categories
-     *
-     * @param array|string $categories
-     * @return $this
      */
-    public function setAllowedCategories($categories)
+    public function setAllowedCategories(array|string $categories): static
     {
         if (is_string($categories)) {
             $categories = preg_split('/\s*,\s*/', $categories ?? '');
@@ -453,10 +414,8 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
     /**
      * Gets the list of extensions (if limited) for this field. Empty list
      * means there is no restriction on allowed types.
-     *
-     * @return array
      */
-    protected function getAllowedExtensions()
+    protected function getAllowedExtensions(): array
     {
         $categories = $this->getAllowedCategories();
         return File::get_category_extensions($categories);
@@ -465,11 +424,9 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
     /**
      * Validate that this DBFile accepts this filename as valid
      *
-     * @param string $filename
      * @throws ValidationException
-     * @return bool
      */
-    protected function isValidFilename($filename)
+    protected function isValidFilename(string $filename): bool
     {
         $extension = strtolower(File::get_file_extension($filename) ?? '');
 
@@ -492,13 +449,12 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
     /**
      * Check filename, and raise a ValidationException if invalid
      *
-     * @param string $filename
      * @throws ValidationException
      */
-    protected function assertFilenameValid($filename)
+    protected function assertFilenameValid(string $filename): void
     {
         $result = new ValidationResult();
-        $this->validate($result, $filename);
+        $this->validateFilename($result, $filename);
         if (!$result->isValid()) {
             throw new ValidationException($result);
         }
@@ -507,25 +463,9 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
     /**
      * Hook to validate this record against a validation result
      *
-     * @param ValidationResult $result
-     * @param string $filename Optional filename to validate. If omitted, the current value is validated.
-     * @return bool Valid flag
-     * @deprecated 2.4.0 Use validateFilename() instead
+     * @param null|string $filename Optional filename to validate. If omitted, the current value is validated.
      */
-    public function validate(ValidationResult $result, $filename = null)
-    {
-        Deprecation::withSuppressedNotice(function () {
-            Deprecation::notice('2.4.0', 'Use validateFilename() instead');
-        });
-        return $this->validateFilename($result, $filename);
-    }
-
-    /**
-     * Hook to validate this record against a validation result
-     *
-     * @param string $filename Optional filename to validate. If omitted, the current value is validated.
-     */
-    public function validateFilename(ValidationResult $result, $filename = null): bool
+    public function validateFilename(ValidationResult $result, ?string $filename = null): bool
     {
         if (empty($filename)) {
             $filename = $this->getFilename();
@@ -543,23 +483,22 @@ class DBFile extends DBComposite implements AssetContainer, Thumbnail
         return false;
     }
 
-    public function setField($field, $value, $markChanged = true)
+    public function setField(string $fieldName, mixed $value, bool $markChanged = true): static
     {
         // Catch filename validation on direct assignment
-        if ($field === 'Filename' && $value) {
+        if ($fieldName === 'Filename' && $value) {
             $this->assertFilenameValid($value);
         }
 
-        return parent::setField($field, $value, $markChanged);
+        return parent::setField($fieldName, $value, $markChanged);
     }
-
 
     /**
      * Returns the size of the file type in an appropriate format.
      *
      * @return string|false String value, or false if doesn't exist
      */
-    public function getSize()
+    public function getSize(): string|false
     {
         $size = $this->getAbsoluteSize();
         if ($size) {

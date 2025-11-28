@@ -15,23 +15,27 @@ use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldGroup;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\Form;
+use SilverStripe\Forms\FormField;
 use SilverStripe\Forms\GridField\GridField;
+use SilverStripe\Forms\GridField\GridFieldAddNewButton;
 use SilverStripe\Forms\GridField\GridFieldButtonRow;
 use SilverStripe\Forms\GridField\GridFieldConfig;
+use SilverStripe\Forms\GridField\GridFieldConfig_RecordEditor;
 use SilverStripe\Forms\GridField\GridFieldDeleteAction;
+use SilverStripe\Forms\GridField\GridFieldDetailForm;
 use SilverStripe\Forms\GridField\GridFieldToolbarHeader;
 use SilverStripe\Forms\HTMLEditor\HTMLEditorField;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\TabSet;
 use SilverStripe\Forms\TextareaField;
 use SilverStripe\Forms\TextField;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DB;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\HasManyList;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Member;
 use SilverStripe\UserForms\Model\EditableFormField;
 use SilverStripe\UserForms\Model\EditableFormField\EditableEmailField;
@@ -133,6 +137,12 @@ class EmailRecipient extends DataObject
      */
     private static $allow_unbound_recipient_fields = false;
 
+    /**
+     * The regex used to find template files for rendering emails.
+     * By default this finds ss template files.
+     */
+    private static string $email_template_regex = '/^.*\.ss$/';
+
     public function requireDefaultRecords()
     {
         parent::requireDefaultRecords();
@@ -141,7 +151,7 @@ class EmailRecipient extends DataObject
         DB::query("UPDATE \"UserDefinedForm_EmailRecipient\" SET \"FormClass\" = 'Page' WHERE \"FormClass\" IS NULL");
     }
 
-    public function onBeforeWrite()
+    protected function onBeforeWrite()
     {
         parent::onBeforeWrite();
 
@@ -167,6 +177,46 @@ class EmailRecipient extends DataObject
         return $fields;
     }
 
+    public function scaffoldFormFieldForHasMany(
+        string $relationName,
+        ?string $fieldTitle,
+        DataObject $ownerRecord,
+        bool &$includeInOwnTab
+    ): FormField {
+        $includeInOwnTab = true;
+        return $this->scaffoldFormFieldForManyRelation($relationName, $fieldTitle, $ownerRecord);
+    }
+
+    public function scaffoldFormFieldForManyMany(
+        string $relationName,
+        ?string $fieldTitle,
+        DataObject $ownerRecord,
+        bool &$includeInOwnTab
+    ): FormField {
+        $includeInOwnTab = true;
+        return $this->scaffoldFormFieldForManyRelation($relationName, $fieldTitle, $ownerRecord);
+    }
+
+    private function scaffoldFormFieldForManyRelation(
+        string $relationName,
+        ?string $fieldTitle,
+        DataObject $ownerRecord
+    ): FormField {
+        $emailRecipientsConfig = GridFieldConfig_RecordEditor::create(10);
+        $emailRecipientsConfig->getComponentByType(GridFieldAddNewButton::class)
+            ->setButtonName(
+                _t(UserDefinedForm::class . '.ADDEMAILRECIPIENT', 'Add Email Recipient')
+            );
+        $emailRecipientsConfig->getComponentByType(GridFieldDetailForm::class)
+            ->setItemRequestClass(UserFormRecipientItemRequest::class);
+        return GridField::create(
+            $relationName,
+            $fieldTitle,
+            $ownerRecord->$relationName(),
+            $emailRecipientsConfig
+        );
+    }
+
     /**
      * Get instance of UserForm when editing in getCMSFields
      *
@@ -179,15 +229,7 @@ class EmailRecipient extends DataObject
             $formClass = $this->FormClass;
             return $formClass::get()->byID($this->FormID);
         }
-
-        // Revert to checking for a form from the session
-        // LeftAndMain::sessionNamespace is protected.
-        $sessionNamespace = $this->config()->get('session_namespace') ?: CMSMain::class;
-
-        $formID = Controller::curr()->getRequest()->getSession()->get($sessionNamespace . '.currentPage');
-        if ($formID) {
-            return UserDefinedForm::get()->byID($formID);
-        }
+        return null;
     }
 
     public function getTitle()
@@ -415,8 +457,9 @@ class EmailRecipient extends DataObject
             return $args[1][Form::class];
         }
         // Hack in currently edited page if context is missing
-        if (Controller::has_curr() && Controller::curr() instanceof CMSMain) {
-            return Controller::curr()->currentRecord();
+        $controller = Controller::curr();
+        if ($controller instanceof CMSMain) {
+            return $controller->currentRecord();
         }
 
         // No page being edited
@@ -518,7 +561,7 @@ class EmailRecipient extends DataObject
         $templates = [];
 
         $finder = new FileFinder();
-        $finder->setOption('name_regex', '/^.*\.ss$/');
+        $finder->setOption('name_regex', static::config()->get('email_template_regex'));
 
         $parent = $this->getFormParent();
 
@@ -561,10 +604,8 @@ class EmailRecipient extends DataObject
 
     /**
      * Validate that valid email addresses are being used
-     *
-     * @return ValidationResult
      */
-    public function validate()
+    public function validate(): ValidationResult
     {
         $result = parent::validate();
         $checkEmail = [

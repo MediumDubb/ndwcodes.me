@@ -5,8 +5,12 @@ SilverStripe\Assets\File:
   extensions:
     - SilverStripe\AssetAdmin\Controller\AssetAdminFile
 SilverStripe\Admin\LeftAndMain:
-  extensions:
-    - SilverStripe\AssetAdmin\Controller\AssetAdminFieldsExtension
+  extra_requirements_i18n:
+    - 'silverstripe/asset-admin:client/lang'
+  extra_requirements_javascript:
+    - 'silverstripe/asset-admin:client/dist/js/bundle.js'
+  extra_requirements_css:
+    - 'silverstripe/asset-admin:client/dist/styles/bundle.css'
 SilverStripe\Admin\Forms\UsedOnTable:
   extensions:
   - SilverStripe\AssetAdmin\Extensions\UsedOnTableExtension
@@ -14,13 +18,27 @@ SilverStripe\Admin\Forms\UsedOnTable:
 Name: assetadminthumbnails
 ---
 SilverStripe\Core\Injector\Injector:
+  # This ThumbnailGenerator is used for upload fields despite its name.
+  # It generates thumbnails because there aren't expected to be many loaded on any given page load
   SilverStripe\AssetAdmin\Model\ThumbnailGenerator.assetadmin:
     class: SilverStripe\AssetAdmin\Model\ThumbnailGenerator
     properties:
       Generates: true
+  # This ThumbnailGenerator is used for asset admin.
+  # It doesn't generate thumbnails (other than on upload) because we expect lots of images
+  # on any given page load.
+  # Setting `Generates: false` to prevent trying to generate new thumbnails when loading asset admin
+  # if the thumbnail generation criteria change, because that would massively slow down the CMS.
+  SilverStripe\AssetAdmin\Model\ThumbnailGenerator.assetadminopen:
+    class: SilverStripe\AssetAdmin\Model\ThumbnailGenerator
+    properties:
+      Generates: false
   SilverStripe\AssetAdmin\Controller\AssetAdmin:
     properties:
       ThumbnailGenerator: '%$SilverStripe\AssetAdmin\Model\ThumbnailGenerator.assetadmin'
+  SilverStripe\AssetAdmin\Controller\AssetAdminOpen:
+    properties:
+      ThumbnailGenerator: '%$SilverStripe\AssetAdmin\Model\ThumbnailGenerator.assetadminopen'
 ---
 Name: assetadminfield
 After:
@@ -30,26 +48,8 @@ SilverStripe\Core\Injector\Injector:
   SilverStripe\Forms\FileHandleField:
     class: SilverStripe\AssetAdmin\Forms\UploadField
 ---
-Name: assetadmincampaigns
-Only:
-  moduleexists: 'silverstripe/campaign-admin'
----
-SilverStripe\AssetAdmin\Forms\FileFormFactory:
-  extensions:
-    - 'SilverStripe\AssetAdmin\Extensions\CampaignAdminExtension'
----
 Name: assetadminmodals
 ---
 SilverStripe\Admin\ModalController:
   extensions:
     - SilverStripe\AssetAdmin\Extensions\RemoteFileModalExtension
----
-Name: asset-admin-graphql-thumbnails
-Only:
-  moduleexists: 'silverstripe/graphql'
----
-SilverStripe\Core\Injector\Injector:
-  SilverStripe\AssetAdmin\Model\ThumbnailGenerator.graphql:
-    class: SilverStripe\AssetAdmin\Model\ThumbnailGenerator
-    properties:
-      Generates: false

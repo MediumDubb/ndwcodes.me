@@ -362,7 +362,7 @@ SilverStripe\Control\HTTP:
     jpgm: video/jpm
     jpgv: video/jpeg
     jpm: video/jpm
-    js: application/javascript
+    js: text/javascript
     json: application/json
     jsonml: application/jsonml+json
     kar: audio/midi

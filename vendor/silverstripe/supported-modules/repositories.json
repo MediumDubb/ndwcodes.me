@@ -132,7 +132,7 @@
       "github": "silverstripe/developer-docs",
       "packagist": "silverstripe/developer-docs",
       "githubId": 510980223,
-      "isCore": true,
+      "isCore": false,
       "lockstepped": false,
       "type": "other",
       "majorVersionMapping": {
@@ -271,16 +271,15 @@
       "type": "module",
       "majorVersionMapping": {
         "4": ["3"],
-        "5": ["4"],
-        "6": ["5"]
+        "5": ["4"]
       }
     },
     {
       "github": "silverstripe/silverstripe-campaign-admin",
       "packagist": "silverstripe/campaign-admin",
       "githubId": 85750633,
-      "isCore": true,
-      "lockstepped": true,
+      "isCore": false,
+      "lockstepped": false,
       "type": "module",
       "majorVersionMapping": {
         "4": ["1"],
@@ -484,7 +483,7 @@
       "github": "silverstripe/silverstripe-graphql",
       "packagist": "silverstripe/graphql",
       "githubId": 68341446,
-      "isCore": true,
+      "isCore": false,
       "lockstepped": false,
       "type": "module",
       "majorVersionMapping": {
@@ -548,8 +547,7 @@
       "type": "module",
       "majorVersionMapping": {
         "4": ["2"],
-        "5": ["3"],
-        "6": ["4"]
+        "5": ["3"]
       }
     },
     {
@@ -618,7 +616,7 @@
       "github": "silverstripe/silverstripe-mimevalidator",
       "packagist": "silverstripe/mimevalidator",
       "githubId": 22493606,
-      "isCore": false,
+      "isCore": true,
       "lockstepped": false,
       "type": "module",
       "majorVersionMapping": {
@@ -1003,8 +1001,7 @@
       "type": "module",
       "majorVersionMapping": {
         "4": ["2"],
-        "5": ["3"],
-        "6": ["4"]
+        "5": ["3"]
       }
     },
     {
@@ -1265,15 +1262,14 @@
       "type": "module",
       "majorVersionMapping": {
         "4": ["4"],
-        "5": ["5"],
-        "6": ["6"]
+        "5": ["5"]
       }
     },
     {
       "github": "silverstripe/silverstripe-login-forms",
       "packagist": "silverstripe/login-forms",
       "githubId": 155142697,
-      "isCore": false,
+      "isCore": true,
       "lockstepped": false,
       "type": "module",
       "majorVersionMapping": {
@@ -1463,6 +1459,14 @@
       }
     },
     {
+      "github": "silverstripe/roadmap",
+      "packagist": null,
+      "githubId": 1025319696,
+      "majorVersionMapping": {
+        "*": []
+      }
+    },
+    {
       "github": "silverstripe/github-issue-search-client",
       "packagist": null,
       "githubId": 125294952,
@@ -1599,6 +1603,14 @@
       "majorVersionMapping": {
         "4": ["4"],
         "5": ["5"]
+      }
+    },
+    {
+      "github": "silverstripe/silverstripe-non-blocking-sessions",
+      "packagist": "silverstripe/non-blocking-sessions",
+      "githubId": 1021093050,
+      "majorVersionMapping": {
+        "5": ["1"]
       }
     },
     {

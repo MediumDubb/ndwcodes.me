@@ -5,6 +5,7 @@ namespace SilverStripe\ORM;
 use Exception;
 use InvalidArgumentException;
 use LogicException;
+use SilverStripe\Core\ArrayLib;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Config\Configurable;
@@ -15,6 +16,8 @@ use SilverStripe\Dev\TestOnly;
 use SilverStripe\ORM\Connect\DBSchemaManager;
 use SilverStripe\ORM\FieldType\DBComposite;
 use SilverStripe\ORM\FieldType\DBField;
+use SilverStripe\ORM\FieldType\DBGenerated;
+use SilverStripe\ORM\FieldType\DBText;
 
 /**
  * Provides dataobject and database schema mapping functionality
@@ -28,6 +31,30 @@ class DataObjectSchema
      * Configuration key for has_one relations that can support multiple reciprocal has_many relations.
      */
     public const HAS_ONE_MULTI_RELATIONAL = 'multirelational';
+
+    /**
+     * Do not create any index for sort columns.
+     * You can also set the value to `null` to get this mode.
+     * Only select this mode if you intend to create your own indexes which cover sorting.
+     */
+    public const string SORT_INDEX_MODE_NONE = 'none';
+
+    /**
+     * Create an index for each individual column in the sort order.
+     * Do not create a composite index.
+     */
+    public const string SORT_INDEX_MODE_SINGLE = 'single';
+
+    /**
+     * Create a composite index with all columns in the sort order.
+     * Do not create individual indexes for each column.
+     */
+    public const string SORT_INDEX_MODE_COMPOSITE = 'composite';
+
+    /**
+     * Create both a composite index and a single index for each column in the sort order.
+     */
+    public const string SORT_INDEX_MODE_BOTH = 'both';
 
     /**
      * Default separate for table namespaces. Can be set to any string for
@@ -67,11 +94,25 @@ class DataObjectSchema
     protected $compositeFields = [];
 
     /**
+     * Cache of generated database column specs
+     */
+    protected array $generatedFields = [];
+
+    /**
      * Cache of table names
      *
      * @var array
      */
     protected $tableNames = [];
+
+    /**
+     * Array of classes that have been confirmed ready for database queries.
+     * Once the database has been verified as ready, it will not do the
+     * checks again.
+     *
+     * @var array<string, boolean>
+     */
+    protected array $tableReadyClasses = [];
 
     /**
      * Clear cached table names
@@ -83,6 +124,7 @@ class DataObjectSchema
         $this->databaseIndexes = [];
         $this->defaultDatabaseIndexes = [];
         $this->compositeFields = [];
+        $this->tableReadyClasses = [];
     }
 
     /**
@@ -126,7 +168,7 @@ class DataObjectSchema
      *
      * @param string $class
      *
-     * @return string Returns the table name, or null if there is no table
+     * @return string|null Returns the table name, or null if there is no table
      */
     public function tableName($class)
     {
@@ -313,7 +355,7 @@ class DataObjectSchema
      * Generate table name for a class.
      *
      * Note: some DB schema have a hard limit on table name length. This is not enforced by this method.
-     * See dev/build errors for details in case of table name violation.
+     * See build errors for details in case of table name violation.
      *
      * @param string $class
      *
@@ -470,6 +512,31 @@ class DataObjectSchema
     }
 
     /**
+     * Returns a list of all the generated database columns on the class.
+     * Will check all applicable ancestor classes and aggregate results if $aggregated is true.
+     *
+     * @param string $class Name of class to check
+     * @param bool $aggregated Include fields in entire hierarchy, rather than just on this table
+     */
+    public function generatedFields(string $class, bool $aggregated = true): array
+    {
+        $class = ClassInfo::class_name($class);
+        if ($class === DataObject::class) {
+            return [];
+        }
+        $this->cacheDatabaseFields($class);
+
+        $generatedFields = $this->generatedFields[$class];
+        if (!$aggregated) {
+            return $generatedFields;
+        }
+
+        // Recursively merge
+        $parentFields = $this->generatedFields(get_parent_class($class));
+        return array_merge($generatedFields, array_diff_key($parentFields, $generatedFields));
+    }
+
+    /**
      * Cache all database and composite fields for the given class.
      * Will do nothing if already cached
      *
@@ -482,6 +549,7 @@ class DataObjectSchema
             return;
         }
         $compositeFields = [];
+        $generatedFields = [];
         $dbFields = [];
 
         // Ensure fixed fields appear at the start
@@ -497,8 +565,12 @@ class DataObjectSchema
         $db = Config::inst()->get($class, 'db', Config::UNINHERITED) ?: [];
         foreach ($db as $fieldName => $fieldSpec) {
             $fieldClass = strtok($fieldSpec ?? '', '(');
-            if (singleton($fieldClass) instanceof DBComposite) {
+            $singleton = singleton($fieldClass);
+            if ($singleton instanceof DBComposite) {
                 $compositeFields[$fieldName] = $fieldSpec;
+            } elseif ($singleton instanceof DBGenerated) {
+                $generatedFields[$fieldName] = $fieldSpec;
+                $dbFields[$fieldName] = $fieldSpec;
             } else {
                 $dbFields[$fieldName] = $fieldSpec;
             }
@@ -545,6 +617,7 @@ class DataObjectSchema
         // Return cached results
         $this->databaseFields[$class] = $dbFields;
         $this->compositeFields[$class] = $compositeFields;
+        $this->generatedFields[$class] = $generatedFields;
     }
 
     /**
@@ -628,7 +701,7 @@ class DataObjectSchema
                         var_export($indexSpec['columns'], true)
                     ));
                 }
-            } else {
+            } elseif ($indexSpec !== false) {
                 $indexSpec = [
                     'type' => 'index',
                     'columns' => [$indexName],
@@ -642,27 +715,96 @@ class DataObjectSchema
     protected function buildSortDatabaseIndexes($class)
     {
         $sort = Config::inst()->get($class, 'default_sort', Config::UNINHERITED);
+        if (!is_string($sort) && !is_array($sort)) {
+            return [];
+        }
+        return $this->deriveIndexFromSort(
+            DataObjectSchema::tableName($class) ?? '',
+            $this->databaseFields($class, false),
+            $sort,
+            $this->getSortIndexMode($class)
+        );
+    }
+
+    /**
+     * Derive the index spec for default_sort, e.g. for a DataObject table or for a many_many join table.
+     */
+    public function deriveIndexFromSort(string $tableName, array $fields, string|array $sort, string $indexMode): array
+    {
+        $indexModes = [
+            DataObjectSchema::SORT_INDEX_MODE_NONE,
+            DataObjectSchema::SORT_INDEX_MODE_BOTH,
+            DataObjectSchema::SORT_INDEX_MODE_COMPOSITE,
+            DataObjectSchema::SORT_INDEX_MODE_SINGLE,
+        ];
+        if (!in_array($indexMode, $indexModes)) {
+            throw new InvalidArgumentException('$indexMode must be one of the DataObjectSchema::SORT_INDEX_MODE_* constant values');
+        }
+
+        if (empty($sort) || $indexMode === DataObjectSchema::SORT_INDEX_MODE_NONE) {
+            return [];
+        }
+
+        $shouldAddToComposite = in_array($indexMode, [DataObjectSchema::SORT_INDEX_MODE_BOTH, DataObjectSchema::SORT_INDEX_MODE_COMPOSITE]);
+        $shouldAddToSingle = in_array($indexMode, [DataObjectSchema::SORT_INDEX_MODE_BOTH, DataObjectSchema::SORT_INDEX_MODE_SINGLE]);
+        $compositeCols = [];
         $indexes = [];
 
-        if ($sort && (is_string($sort) || is_array($sort))) {
-            $sort = $this->normaliseSort($sort);
-            foreach ($sort as $value) {
-                try {
-                    list ($table, $column) = $this->parseSortColumn(trim($value ?? ''));
-                    $table = trim($table ?? '', '"');
-                    $column = trim($column ?? '', '"');
-                    if ($table && strtolower($table ?? '') !== strtolower(DataObjectSchema::tableName($class) ?? '')) {
-                        continue;
-                    }
-                    if ($this->databaseField($class, $column, false)) {
-                        $indexes[$column] = [
-                            'type' => 'index',
-                            'columns' => [$column],
-                        ];
-                    }
-                } catch (InvalidArgumentException $e) {
+        $sort = $this->normaliseSort($sort);
+        foreach ($sort as $value) {
+            try {
+                list ($table, $column, $dir) = $this->parseSortColumn(trim($value ?? ''));
+                $table = trim($table ?? '', '"');
+                $column = trim($column ?? '', '"');
+                // Skip and stop grabbing composite columns if the sort column is on a different table
+                if ($table && strtolower($table ?? '') !== strtolower($tableName)) {
+                    $shouldAddToComposite = false;
+                    continue;
                 }
+                // ID is always the primary key, so we don't need a new index for it.
+                if ($column === 'ID') {
+                    if ($shouldAddToComposite) {
+                        // We still need to include it in the composite index if it's part-way through
+                        $compositeCols[$column] = "$column $dir";
+                    }
+                    continue;
+                }
+                // Skip and stop grabbing composite columns if this isn't a column in the database.
+                if (!array_key_exists($column, $fields)) {
+                    $shouldAddToComposite = false;
+                    continue;
+                }
+                // Skip TEXT field types since not all SQL database servers can index them
+                $fieldSpec = $fields[$column];
+                $dbField = Injector::inst()->create($fieldSpec, $column);
+                if ($dbField instanceof DBText) {
+                    $shouldAddToComposite = false;
+                    continue;
+                }
+                // Add indexes as appropriate
+                if ($shouldAddToSingle) {
+                    $indexes[$column] = [
+                        'type' => 'index',
+                        'columns' => [$column],
+                    ];
+                }
+                if ($shouldAddToComposite) {
+                    $compositeCols[$column] = "$column $dir";
+                }
+            } catch (InvalidArgumentException $e) {
             }
+        }
+
+        // If ID is last, we can omit it since that gets implicitly added to all indexes
+        if (array_key_last($compositeCols) === 'ID') {
+            unset($compositeCols['ID']);
+        }
+        // Add a composite index if we either didn't already add a single column or have multiple columns.
+        if (!empty($compositeCols) && (!$shouldAddToSingle || count($compositeCols) > 1)) {
+            $indexes['default_sort_composite'] = [
+                'type' => 'index',
+                'columns' => array_values($compositeCols),
+            ];
         }
         return $indexes;
     }
@@ -686,19 +828,99 @@ class DataObjectSchema
      *
      * @param string $column String to parse containing the column name
      *
-     * @return array Resolved table and column.
+     * @return array Resolved table, column, and direction.
      */
     protected function parseSortColumn($column)
     {
         // Parse column specification, considering possible ansi sql quoting
         // Note that table prefix is allowed, but discarded
-        if (preg_match('/^("?(?<table>[^"\s]+)"?\\.)?"?(?<column>[^"\s]+)"?(\s+(?<direction>((asc)|(desc))(ending)?))?$/i', $column ?? '', $match)) {
-            $table = $match['table'];
-            $column = $match['column'];
-        } else {
+        if (!preg_match('/^("?(?<table>[^"\s]+)"?\\.)?"?(?<column>[^"\s]+)"?(\s+(?<direction>asc|desc)(ending)?)?$/i', $column ?? '', $match)) {
             throw new InvalidArgumentException("Invalid sort() column");
         }
-        return [$table, $column];
+        return [$match['table'], $match['column'], $match['direction'] ?? 'ASC'];
+    }
+
+    /**
+     * Check if all tables and field columns for a class exist in the database.
+     */
+    public function tablesAreReadyForClass(string $class): bool
+    {
+        if (!is_subclass_of($class, DataObject::class)) {
+            throw new InvalidArgumentException("$class is not a subclass of " . DataObject::class);
+        }
+
+        // Bail if there's no active database connection yet
+        if (!DB::is_active()) {
+            return false;
+        }
+
+        // Don't check again if we already know the db is ready for this class.
+        // Necessary here before the loop to catch situations where a subclass
+        // is forced as ready without having to check all the superclasses.
+        if (!empty($this->tableReadyClasses[$class])) {
+            return true;
+        }
+
+        // Check if all tables and fields required for the class exist in the database.
+        $requiredClasses = ClassInfo::dataClassesFor($class);
+        foreach ($requiredClasses as $required) {
+            // Skip test classes, as not all test classes are scaffolded at once
+            if (is_a($required, TestOnly::class, true)) {
+                continue;
+            }
+
+            // Don't check again if we already know the db is ready for this class.
+            if (!empty($this->tableReadyClasses[$required])) {
+                continue;
+            }
+
+            // if any of the tables aren't created in the database
+            $table = $this->tableName($required);
+            if (!ClassInfo::hasTable($table)) {
+                return false;
+            }
+
+            // Extensions aren't applied until a class is instantiated for
+            // the first time, so create a singleton to ensure extensions are applied.
+            singleton($required);
+
+            // if any of the tables haven't had columns added yet
+            $dbFields = DB::field_list($table);
+            if (empty($dbFields)) {
+                return false;
+            }
+
+            // if any columns are missing from the db
+            $objFields = $this->databaseFields($required, false);
+            $missingFields = array_diff_key($objFields, $dbFields);
+            if ($missingFields) {
+                return false;
+            }
+
+            // Add each ready class to the cached array.
+            $this->tableReadyClasses[$required] = true;
+        }
+
+        return true;
+    }
+
+    /**
+     * Resets the cache for tablesAreReadyForClass.
+     *
+     * @param string|null $class The specific class to be cleared.
+     * If not passed, the cache for all classes is cleared.
+     * If passed, the class and all classes in its hierarchy will be cleared.
+     */
+    public function clearTableReadyForClass(?string $class = null): void
+    {
+        if ($class) {
+            $clearClasses = ClassInfo::dataClassesFor($class);
+            foreach ($clearClasses as $clear) {
+                unset($this->tableReadyClasses[$clear]);
+            }
+        } else {
+            $this->tableReadyClasses = [];
+        }
     }
 
     /**
@@ -1341,5 +1563,23 @@ class DataObjectSchema
                 . " which is not a subclass of " . DataObject::class
             );
         }
+    }
+
+    /**
+     * Get the mode that determines which indexes to create for default_sort.
+     */
+    private function getSortIndexMode(string $class): string
+    {
+        $mode = Config::inst()->get($class, 'default_sort_index_mode') ?? DataObjectSchema::SORT_INDEX_MODE_NONE;
+        $allowedModes = [
+            DataObjectSchema::SORT_INDEX_MODE_NONE,
+            DataObjectSchema::SORT_INDEX_MODE_SINGLE,
+            DataObjectSchema::SORT_INDEX_MODE_COMPOSITE,
+            DataObjectSchema::SORT_INDEX_MODE_BOTH,
+        ];
+        if (!in_array($mode, $allowedModes)) {
+            throw new LogicException("Invalid value for $class.default_sort_index_mode: '$mode'");
+        }
+        return $mode;
     }
 }

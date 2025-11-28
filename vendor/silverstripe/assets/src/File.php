@@ -3,6 +3,7 @@
 namespace SilverStripe\Assets;
 
 use InvalidArgumentException;
+use SilverStripe\AssetAdmin\Forms\UploadField;
 use SilverStripe\Assets\Shortcodes\FileLink;
 use SilverStripe\Assets\Shortcodes\FileLinkTracking;
 use SilverStripe\Assets\Shortcodes\FileShortcodeProvider;
@@ -20,16 +21,17 @@ use SilverStripe\Forms\FileHandleField;
 use SilverStripe\Forms\FormField;
 use SilverStripe\Forms\HTMLReadonlyField;
 use SilverStripe\Forms\TextField;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\CMSPreviewable;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\Hierarchy\Hierarchy;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\InheritedPermissions;
 use SilverStripe\Security\InheritedPermissionsExtension;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Permission;
+use SilverStripe\Security\PermissionCheckable;
 use SilverStripe\Security\PermissionChecker;
 use SilverStripe\Security\PermissionProvider;
 use SilverStripe\Security\Security;
@@ -98,7 +100,7 @@ use SilverStripe\View\HTML;
  * @method Member Owner()
  * @method File Parent()
  */
-class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewable, PermissionProvider, Resettable
+class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewable, PermissionProvider, Resettable, PermissionCheckable
 {
     use ImageManipulation;
 
@@ -142,6 +144,14 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
         "File" => "DBFile",
         // Only applies to files, doesn't inherit for folder
         'ShowInSearch' => 'Boolean(1)',
+        // FQCN needs 4 backslashes so the raw SQL ends up with a single escaped backslash in the string literal.
+        'IsFolder' => <<<'SPEC'
+            Generated(
+                "Boolean",
+                "CASE WHEN \"ClassName\"='SilverStripe\\\\Assets\\\\Folder' THEN 1 ELSE 0 END",
+                "STORED"
+            )
+            SPEC,
     ];
 
     private static $has_one = [
@@ -158,7 +168,24 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
     ];
 
     private static $indexes = [
-        'FileHash' => true
+        'FileHash' => true,
+        // Used when viewing files in AssetAdmin ordered by Title ASC
+        // Not used for other sort (e.g. Title DESC or Created) so if the default
+        // sort in AssetAdmin changes, we should update this index.
+        'default_asset_sort' => [
+            'type' => 'index',
+            'columns' => [
+                'ParentID',
+                'IsFolder DESC',
+                'Title',
+            ],
+        ]
+    ];
+
+    private static bool|array $skip_fetch_generated_columns_after_write = [
+        // Updating the ClassName which this is based on is very unlikely,
+        // so we can skip the extra SELECT query after write.
+        'IsFolder',
     ];
 
     private static $defaults = [
@@ -298,10 +325,8 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
      *
      * Use $file->isInDB() to only check for a DB record
      * Use $file->File->exists() to only check if the asset exists
-     *
-     * @return bool
      */
-    public function exists()
+    public function exists(): bool
     {
         return parent::exists() && $this->File->exists();
     }
@@ -315,7 +340,7 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
     public static function find($filename)
     {
         // Split to folders and the actual filename, and traverse the structure.
-        $parts = array_filter(preg_split("#[/\\\\]+#", $filename ?? '') ?? []);
+        $parts = static::getFilePathParts($filename ?? '');
         $parentID = 0;
         $item = null;
         foreach ($parts as $part) {
@@ -350,14 +375,6 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
     public function AbsoluteLink()
     {
         return $this->getAbsoluteURL();
-    }
-
-    /**
-     * @return string
-     */
-    public function getTreeTitle()
-    {
-        return Convert::raw2xml($this->Title);
     }
 
     /**
@@ -594,12 +611,42 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
         ?string $fieldTitle,
         string $relationName,
         DataObject $ownerRecord
-    ): FormField&FileHandleField {
+    ): FormField {
         $field = Injector::inst()->create(FileHandleField::class, $relationName, $fieldTitle);
         if ($field->hasMethod('setAllowedMaxFileNumber')) {
             $field->setAllowedMaxFileNumber(1);
         }
         return $field;
+    }
+
+    public function scaffoldFormFieldForHasMany(
+        string $relationName,
+        ?string $fieldTitle,
+        DataObject $ownerRecord,
+        bool &$includeInOwnTab
+    ): FormField {
+        $field = Injector::inst()->create(FileHandleField::class, $relationName, $fieldTitle);
+        if ($field instanceof UploadField) {
+            $includeInOwnTab = false;
+            $field->setIsMultiUpload(true);
+            return $field;
+        }
+        return parent::scaffoldFormFieldForHasMany($relationName, $fieldTitle, $ownerRecord, $includeInOwnTab);
+    }
+
+    public function scaffoldFormFieldForManyMany(
+        string $relationName,
+        ?string $fieldTitle,
+        DataObject $ownerRecord,
+        bool &$includeInOwnTab
+    ): FormField {
+        $field = Injector::inst()->create(FileHandleField::class, $relationName, $fieldTitle);
+        if ($field instanceof UploadField) {
+            $includeInOwnTab = false;
+            $field->setIsMultiUpload(true);
+            return $field;
+        }
+        return parent::scaffoldFormFieldForManyMany($relationName, $fieldTitle, $ownerRecord, $includeInOwnTab);
     }
 
     /**
@@ -687,7 +734,7 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
     /**
      * Should be called after the file was uploaded
      */
-    public function onAfterUpload()
+    protected function onAfterUpload()
     {
         $this->extend('onAfterUpload');
     }
@@ -768,7 +815,7 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
         $this->updateDependantObjects();
     }
 
-    public function onAfterRevertToLive()
+    protected function onAfterRevertToLive()
     {
         // Force query of draft object and update (as source record is bound to live stage)
         if (class_exists(Versioned::class) &&
@@ -1145,14 +1192,11 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
         return $this->File->getAbsoluteSize();
     }
 
-    /**
-     * @return ValidationResult
-     */
-    public function validate()
+    public function validate(): ValidationResult
     {
         $result = ValidationResult::create();
-        $this->File->validate($result, $this->Name);
-        $this->extend('validate', $result);
+        $this->File->validateFilename($result, $this->Name);
+        $this->extend('updateValidate', $result);
         return $result;
     }
 
@@ -1285,26 +1329,22 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
 
     /**
      * Return a html5 tag of the appropriate for this file (normally img or a)
-     *
-     * @return string
      */
-    public function forTemplate()
+    public function forTemplate(): string
     {
         return $this->getTag() ?: '';
     }
 
     /**
      * Return a html5 tag of the appropriate for this file (normally img or a)
-     *
-     * @return string
      */
-    public function getTag()
+    public function getTag(): string
     {
         $template = $this->File->getFrontendTemplate();
         if (empty($template)) {
             return '';
         }
-        return (string)$this->renderWith($template);
+        return $this->renderWith($template);
     }
 
     /**
@@ -1398,13 +1438,6 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
         return $this->File->canViewFile();
     }
 
-    public function CMSEditLink()
-    {
-        $link = null;
-        $this->extend('updateCMSEditLink', $link);
-        return $link;
-    }
-
     public function PreviewLink($action = null)
     {
         // Since AbsoluteURL can whitelist protected assets,
@@ -1417,10 +1450,7 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
         return $link;
     }
 
-    /**
-     * @return PermissionChecker
-     */
-    public function getPermissionChecker()
+    public function getPermissionChecker(): PermissionChecker
     {
         return Injector::inst()->get(PermissionChecker::class.'.file');
     }
@@ -1499,18 +1529,18 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
     {
         // Fix illegal characters
         $filter = $this->getFilter();
-        $parts = array_filter(preg_split("#[/\\\\]+#", $name ?? '') ?? []);
+        $parts = static::getFilePathParts($name ?? '');
         return implode('/', array_map(function ($part) use ($filter) {
             return $filter->filter($part);
         }, $parts ?? []));
     }
 
-    public function flushCache($persistent = true)
+    public function flushCache(bool $persistent = true): static
     {
-        parent::flushCache($persistent);
         static::reset();
         ImageShortcodeProvider::flush();
         FileShortcodeProvider::flush();
+        return parent::flushCache($persistent);
     }
 
     public static function reset()
@@ -1530,5 +1560,15 @@ class File extends DataObject implements AssetContainer, Thumbnail, CMSPreviewab
     protected function getFilter()
     {
         return FileNameFilter::create();
+    }
+
+    /**
+     * Get an array with each segment (directory name and file name) in a file path as a value.
+     */
+    protected static function getFilePathParts(string $filePath): array
+    {
+        // Explicitly allow zero as a segment in the path (e.g. /some/path/0/file.txt)
+        $notEmpty = fn(mixed $part) => ($part === 0 || $part === '0' || (bool) $part);
+        return array_filter(preg_split("#[/\\\\]+#", $filePath), $notEmpty);
     }
 }

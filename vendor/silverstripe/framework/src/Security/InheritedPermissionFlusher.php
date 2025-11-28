@@ -4,15 +4,15 @@ namespace SilverStripe\Security;
 
 use Psr\Log\InvalidArgumentException;
 use SilverStripe\Core\Flushable;
-use SilverStripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Core\Cache\MemberCacheFlusher;
 use SilverStripe\Dev\Deprecation;
 
 /**
- * @extends DataExtension<Member|Group>
+ * @extends Extension<Member|Group>
  */
-class InheritedPermissionFlusher extends DataExtension implements Flushable
+class InheritedPermissionFlusher extends Extension implements Flushable
 {
     /**
      * @var MemberCacheFlusher[]
@@ -24,7 +24,7 @@ class InheritedPermissionFlusher extends DataExtension implements Flushable
      */
     public static function flush()
     {
-        singleton(__CLASS__)->flushCache();
+        singleton(__CLASS__)->onFlushCache();
     }
 
     /**
@@ -77,11 +77,9 @@ class InheritedPermissionFlusher extends DataExtension implements Flushable
 
     /**
      * Flushes all registered MemberCacheFlusher services
-     * @deprecated 5.4.0 Will be renamed to onFlushCache()
      */
-    public function flushCache()
+    protected function onFlushCache()
     {
-        Deprecation::noticeWithNoReplacment('5.4.0', 'Will be renamed to onFlushCache()');
         $ids = $this->getMemberIDList();
         foreach ($this->getServices() as $service) {
             $service->flushMemberCache($ids);

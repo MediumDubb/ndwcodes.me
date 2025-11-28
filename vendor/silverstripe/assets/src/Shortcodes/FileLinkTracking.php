@@ -6,12 +6,12 @@ use DOMElement;
 use SilverStripe\Assets\File;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\FormScaffolder;
-use SilverStripe\ORM\DataExtension;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBHTMLText;
 use SilverStripe\ORM\ManyManyThroughList;
 use SilverStripe\Versioned\Versioned;
 use SilverStripe\View\Parsers\HTMLValue;
+use SilverStripe\Core\Extension;
 
 /**
  * Adds tracking of links in any HTMLText fields which reference SiteTree or File items.
@@ -24,9 +24,9 @@ use SilverStripe\View\Parsers\HTMLValue;
  * only be enabled for the Stage record.
  *
  * @method ManyManyThroughList<File> FileTracking()
- * @extends DataExtension<DataObject&static>
+ * @extends Extension<DataObject&static>
  */
-class FileLinkTracking extends DataExtension
+class FileLinkTracking extends Extension
 {
     /**
      * @var FileLinkTrackingParser
@@ -78,13 +78,13 @@ class FileLinkTracking extends DataExtension
      * @param FileLinkTrackingParser $parser
      * @return $this
      */
-    public function setFileParser(FileLinkTrackingParser $parser = null)
+    public function setFileParser(?FileLinkTrackingParser $parser = null)
     {
         $this->fileParser = $parser;
         return $this;
     }
 
-    public function onBeforeWrite()
+    protected function onBeforeWrite()
     {
         // Trigger link tracking
         // Note: SiteTreeLinkTracking::onBeforeWrite() has a check to
@@ -106,7 +106,7 @@ class FileLinkTracking extends DataExtension
     /**
      * Find HTMLText fields on {@link owner} to scrape for links that need tracking
      */
-    public function augmentSyncLinkTracking()
+    protected function augmentSyncLinkTracking()
     {
         // If owner is versioned, skip tracking on live
         if (class_exists(Versioned::class) &&
@@ -145,7 +145,7 @@ class FileLinkTracking extends DataExtension
         $this->owner->FileTracking()->setByIDList($linkedPages);
     }
 
-    public function onAfterDelete()
+    protected function onAfterDelete()
     {
         // If owner is versioned, skip tracking on live
         if (class_exists(Versioned::class) &&
@@ -223,7 +223,7 @@ class FileLinkTracking extends DataExtension
         }
     }
 
-    public function updateCMSFields(FieldList $fields)
+    protected function updateCMSFields(FieldList $fields)
     {
         if (!$this->owner->config()->get('show_file_link_tracking')) {
             $fields->removeByName('FileTracking');

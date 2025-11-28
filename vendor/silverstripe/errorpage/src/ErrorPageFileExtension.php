@@ -3,15 +3,15 @@
 namespace SilverStripe\ErrorPage;
 
 use SilverStripe\Assets\Shortcodes\FileShortcodeProvider;
-use SilverStripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\ORM\DataObject;
 
 /**
  * Decorates {@see File} with ErrorPage support
  *
- * @extends DataExtension<FileShortcodeProvider>
+ * @extends Extension<FileShortcodeProvider>
  */
-class ErrorPageFileExtension extends DataExtension
+class ErrorPageFileExtension extends Extension
 {
     /**
      * Used by {@see File::handle_shortcode}
@@ -19,7 +19,7 @@ class ErrorPageFileExtension extends DataExtension
      * @param int $statusCode HTTP Error code
      * @return DataObject Substitute object suitable for handling the given error code
      */
-    public function getErrorRecordFor($statusCode)
+    protected function getErrorRecordFor($statusCode)
     {
         return ErrorPage::get()->filter("ErrorCode", $statusCode)->first();
     }

@@ -13,7 +13,7 @@ use SilverStripe\Dev\Debug;
 use SilverStripe\Security\Permission;
 use SilverStripe\Security\PermissionFailureException;
 use SilverStripe\Security\Security;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 
 /**
  * This class is the base class of any SilverStripe object that can be used to handle HTTP requests.
@@ -45,7 +45,7 @@ use SilverStripe\View\ViewableData;
  *
  * {@link RequestHandler::handleRequest()} is where this behaviour is implemented.
  */
-class RequestHandler extends ViewableData
+class RequestHandler extends ModelData
 {
 
     /**
@@ -91,7 +91,6 @@ class RequestHandler extends ViewableData
         '$Action' => '$Action',
     ];
 
-
     /**
      * Define a list of action handling methods that are allowed to be called directly by URLs.
      * The variable should be an array of action names. This sample shows the different values that it can contain:
@@ -118,6 +117,14 @@ class RequestHandler extends ViewableData
      */
     private static $allowed_actions = null;
 
+    /**
+     * If the request is handed off to a nested request handler, and that handler returns an array,
+     * by default this handler will be customised with that returned array.
+     * Setting this to true will return the array directly instead, which treats it as through this handler
+     * returned the array from an action method directly.
+     */
+    private static bool $customise_array_return_value = true;
+
     public function __construct()
     {
         $this->brokenOnConstruct = false;
@@ -130,7 +137,7 @@ class RequestHandler extends ViewableData
     /**
      * Handles URL requests.
      *
-     *  - ViewableData::handleRequest() iterates through each rule in {@link RequestHandler::$url_handlers}.
+     *  - ModelData::handleRequest() iterates through each rule in {@link RequestHandler::$url_handlers}.
      *  - If the rule matches, the named method will be called.
      *  - If there is still more URL to be processed, then handleRequest()
      *    is called on the object that that method returns.
@@ -224,7 +231,7 @@ class RequestHandler extends ViewableData
             $returnValue = $result->handleRequest($request);
 
             // Array results can be used to handle
-            if (is_array($returnValue)) {
+            if (is_array($returnValue) && static::config()->get('customise_array_return_value')) {
                 $returnValue = $this->customise($returnValue);
             }
 
@@ -248,8 +255,8 @@ class RequestHandler extends ViewableData
     {
         $handlerClass = static::class;
 
-        // We stop after RequestHandler; in other words, at ViewableData
-        while ($handlerClass && $handlerClass != ViewableData::class) {
+        // We stop after RequestHandler; in other words, at ModelData
+        while ($handlerClass && $handlerClass != ModelData::class) {
             $urlHandlers = Config::inst()->get($handlerClass, 'url_handlers', Config::UNINHERITED);
 
             if ($urlHandlers) {

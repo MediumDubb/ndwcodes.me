@@ -4,7 +4,6 @@ namespace SirNoah\Whittendav\Models;
 
 use Bummzack\SortableFile\Forms\SortableUploadField;
 use SilverStripe\Assets\Image;
-use SilverStripe\Blog\Model\BlogPost;
 use SilverStripe\Forms\HTMLEditor\HTMLEditorField;
 use SilverStripe\Forms\Tab;
 use SilverStripe\Forms\TabSet;
@@ -25,7 +24,7 @@ class ContentSection extends DataObject
     ];
 
     private static array $has_one = [
-        'BlogPost'          =>  BlogPost::class,
+        'BlogPost'          =>  BasePost::class,
     ];
 
     private static array $has_many = [

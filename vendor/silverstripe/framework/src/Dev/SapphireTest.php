@@ -3,11 +3,13 @@
 namespace SilverStripe\Dev;
 
 use Exception;
+use Facebook\WebDriver\Exception\UnknownErrorException;
 use InvalidArgumentException;
 use LogicException;
 use PHPUnit\Framework\Constraint\LogicalNot;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Exception as PHPUnitFrameworkException;
+use PHPUnit\Framework\TestSize\Unknown;
 use PHPUnit\Util\Test as TestUtil;
 use SilverStripe\CMS\Controllers\RootURLController;
 use SilverStripe\Control\CLIRequestBuilder;
@@ -31,7 +33,7 @@ use SilverStripe\i18n\i18n;
 use SilverStripe\ORM\Connect\TempDatabase;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBDatetime;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\Security\Group;
 use SilverStripe\Security\IdentityStore;
 use SilverStripe\Security\Member;
@@ -42,6 +44,13 @@ use SilverStripe\View\SSViewer;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mailer\Transport\NullTransport;
+use ReflectionMethod;
+use ReflectionClass;
+use SilverStripe\Core\Environment;
+use SilverStripe\Dev\Exceptions\ExpectedErrorException;
+use SilverStripe\Dev\Exceptions\ExpectedNoticeException;
+use SilverStripe\Dev\Exceptions\ExpectedWarningException;
+use SilverStripe\ORM\DB;
 use SilverStripe\Core\Path;
 
 /**
@@ -231,6 +240,9 @@ abstract class SapphireTest extends TestCase implements TestOnly
     protected static function set_is_running_test($bool)
     {
         SapphireTest::$is_running_test = $bool;
+        // Setting this to true means a local copy of silverstripe/supported-modules repositories.json
+        // is used rather than making a live HTTP request to the repository during the unit test
+        MetaData::$isRunningUnitTests = $bool;
     }
 
     /**
@@ -342,6 +354,37 @@ abstract class SapphireTest extends TestCase implements TestOnly
         $this->origMaxExecutionTime = ini_get('max_execution_time');
     }
 
+     /**
+     * @param callable|null $oldHandler
+     */
+    private $oldErrorHandler = null;
+
+    /**
+     * Setup a custom error handler to throw exceptions on errors
+     */
+    protected function enableErrorHandler()
+    {
+        // If changing this method, ensure that the corresponding table on 00_Unit_Testing.md
+        // in silverstripe/deveoper-docs is also updated
+        $this->oldErrorHandler = set_error_handler(
+            function (int $errno, string $errstr, string $errfile, int $errline) {
+                // E_ERROR, E_PARSE, E_CORE_ERROR, E_CORE_WARNING, E_COMPILE_ERROR, E_COMPILE_WARNING
+                // cannot be handled in set_error_handler()
+                // https://www.php.net/manual/en/function.set-error-handler.php
+                // https://www.php.net/manual/en/errorfunc.constants.php
+                if (in_array($errno, [E_USER_ERROR, E_RECOVERABLE_ERROR])) {
+                    throw new ExpectedErrorException($errstr);
+                } elseif (in_array($errno, [E_NOTICE, E_USER_NOTICE])) {
+                    throw new ExpectedNoticeException($errstr);
+                } elseif (in_array($errno, [E_WARNING, E_USER_WARNING])) {
+                    throw new ExpectedWarningException($errstr);
+                }
+                // Use the standard PHP error handler
+                return false;
+            }
+        );
+    }
+
     /**
      * Helper method to determine if the current test should enable a test database
      *
@@ -403,6 +446,9 @@ abstract class SapphireTest extends TestCase implements TestOnly
      */
     public static function setUpBeforeClass(): void
     {
+        // Disallow the use of DB replicas in tests
+        DB::setMustUsePrimary();
+
         // Start tests
         static::start();
 
@@ -524,7 +570,7 @@ abstract class SapphireTest extends TestCase implements TestOnly
         $filename = ClassLoader::inst()->getItemPath(static::class);
         if (!$filename) {
             throw new LogicException('getItemPath returned null for ' . static::class
-                . '. Try adding flush=1 to the test run.');
+                . '. Try setting the SS_PHPUNIT_FLUSH=1 environment variable.');
         }
         return dirname($filename ?? '');
     }
@@ -562,7 +608,7 @@ abstract class SapphireTest extends TestCase implements TestOnly
         // Note: Ideally a clean Controller should be created for each test.
         // Now all tests executed in a batch share the same controller.
         if (class_exists(Controller::class)) {
-            $controller = Controller::has_curr() ? Controller::curr() : null;
+            $controller = Controller::curr();
             if ($controller && ($response = $controller->getResponse()) && $response->getHeader('Location')) {
                 $response->setStatusCode(200);
                 $response->removeHeader('Location');
@@ -571,6 +617,12 @@ abstract class SapphireTest extends TestCase implements TestOnly
 
         // Call state helpers
         static::$state->tearDown($this);
+
+        // Reset custom error handler
+        if ($this->oldErrorHandler) {
+            restore_error_handler();
+            $this->oldErrorHandler = null;
+        }
 
         // Reset max_execution_time in case some code or a unit test changed it,
         // either via ini_set() or set_time_limit()
@@ -898,7 +950,7 @@ abstract class SapphireTest extends TestCase implements TestOnly
             $request = CLIRequestBuilder::createFromEnvironment();
 
             $app = new HTTPApplication($kernel);
-            $flush = array_key_exists('flush', $request->getVars() ?? []);
+            $flush = Environment::getEnv('SS_PHPUNIT_FLUSH') || array_key_exists('flush', $request->getVars() ?? []);
 
             // Custom application
             $res = $app->execute($request, function (HTTPRequest $request) {
@@ -907,6 +959,7 @@ abstract class SapphireTest extends TestCase implements TestOnly
 
                 // Invalidate classname spec since the test manifest will now pull out new subclasses for each internal class
                 // (e.g. Member will now have various subclasses of DataObjects that implement TestOnly)
+                // Also resets caches (e.g. cached DataList queries)
                 DataObject::reset();
 
                 // Set dummy controller;
@@ -921,10 +974,12 @@ abstract class SapphireTest extends TestCase implements TestOnly
             }
         } else {
             // Allow flush from the command line in the absence of HTTPApplication's special sauce
-            $flush = false;
-            foreach ($_SERVER['argv'] as $arg) {
-                if (preg_match('/^(--)?flush(=1)?$/', $arg ?? '')) {
-                    $flush = true;
+            $flush = Environment::getEnv('SS_PHPUNIT_FLUSH');
+            if (!$flush) {
+                foreach ($_SERVER['argv'] as $arg) {
+                    if (preg_match('/^(--)?flush(=1)?$/', $arg ?? '')) {
+                        $flush = true;
+                    }
                 }
             }
             $kernel->boot($flush);
@@ -1048,7 +1103,7 @@ abstract class SapphireTest extends TestCase implements TestOnly
     public function logInAs($member)
     {
         if (is_numeric($member)) {
-            $member = DataObject::get_by_id(Member::class, $member);
+            $member = Member::get()->setUseCache(true)->byID($member);
         } elseif (!is_object($member)) {
             $member = $this->objFromFixture(Member::class, $member);
         }
@@ -1224,16 +1279,30 @@ abstract class SapphireTest extends TestCase implements TestOnly
     }
 
     /**
-     * Returns the annotations for this test.
-     *
-     * @return array
+     * Returns the annotations for this test
      */
     public function getAnnotations(): array
     {
-        return TestUtil::parseTestMethodAnnotations(
-            get_class($this),
-            $this->getName(false)
-        );
+        $class = get_class($this);
+        $method = $this->name();
+        $ret = [];
+        foreach (['method', 'class'] as $what) {
+            if ($what === 'method') {
+                $reflection = new ReflectionMethod($class, $method);
+            } else {
+                $reflection = new ReflectionClass($class);
+            }
+            preg_match_all('#@(.*?)\n#s', $reflection->getDocComment(), $annotations);
+            $ret[$what] = [];
+            foreach ($annotations[1] as $annotation) {
+                $parts = explode(' ', $annotation);
+                $key = array_shift($parts);
+                $value = implode(' ', $parts);
+                $ret[$what][$key] ??= [];
+                $ret[$what][$key][] = $value;
+            }
+        }
+        return $ret;
     }
 
     /**

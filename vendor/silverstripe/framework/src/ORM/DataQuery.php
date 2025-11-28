@@ -10,6 +10,10 @@ use SilverStripe\ORM\Connect\Query;
 use SilverStripe\ORM\Queries\SQLConditionGroup;
 use SilverStripe\ORM\Queries\SQLSelect;
 use InvalidArgumentException;
+use SilverStripe\Core\Config\Config;
+use SilverStripe\Core\Resettable;
+use SilverStripe\Dev\Deprecation;
+use SilverStripe\Security\RandomGenerator;
 
 /**
  * An object representing a query of data from the DataObject's supporting database.
@@ -19,7 +23,7 @@ use InvalidArgumentException;
  * Unlike DataList, modifiers on DataQuery modify the object rather than returning a clone.
  * DataList is immutable, DataQuery is mutable.
  */
-class DataQuery
+class DataQuery implements Resettable
 {
 
     use Extensible;
@@ -71,6 +75,30 @@ class DataQuery
     protected $querySubclasses = true;
 
     protected $filterByClassName = true;
+
+    /**
+     * Whether the query result should be cached or not
+     */
+    private bool $useCache = false;
+
+    /**
+     * @inheritDoc
+     * For most purposes, do not call this method directly. Call reset on DataList instead.
+     */
+    public static function reset(string $class = ''): void
+    {
+        if (!$class) {
+            SQLSelect::reset();
+            return;
+        }
+
+        // Reset for all superclasses as well, since superclass queries
+        // include records from subclasses
+        $classHierarchy = ClassInfo::ancestry($class);
+        foreach ($classHierarchy as $currentClass) {
+            SQLSelect::reset($currentClass);
+        }
+    }
 
     /**
      * Create a new DataQuery.
@@ -394,6 +422,17 @@ class DataQuery
                     continue;
                 }
 
+                // If we're already selecting the value with an expression (for example using a case statement or function call,
+                // which may select values in dynamic ways), just make sure the sort column is quotes and move on.
+                $selects = $query->getSelect();
+                // This regex looks for anything that isn't a single column (with optional table name and ANSI quotes).
+                if (isset($selects[$col]) && !preg_match('/^\s*"?[^.("]+"?\.?"?[^("]*"?\s*$/', $selects[$col])) {
+                    unset($newOrderby[$k]);
+                    $newOrderby['"' . $col . '"'] = $dir;
+                    continue;
+                }
+
+                // Make sure we select the correct column, and both fully qualify and ANSI quote the sort reference.
                 if (count($parts ?? []) == 1) {
                     // Get expression for sort value
                     $qualCol = "\"{$parts[0]}\"";
@@ -410,7 +449,6 @@ class DataQuery
 
                     // To-do: Remove this if block once SQLSelect::$select has been refactored to store getSelect()
                     // format internally; then this check can be part of selectField()
-                    $selects = $query->getSelect();
                     if (!isset($selects[$col]) && !in_array($qualCol, $selects ?? [])) {
                         // Use the original select if possible.
                         if (array_key_exists($col, $originalSelect ?? [])) {
@@ -449,7 +487,9 @@ class DataQuery
      */
     public function execute()
     {
-        return $this->getFinalisedQuery()->execute();
+        return $this->withCorrectDatabase(
+            fn() => $this->getFinalisedQuery()->execute()
+        );
     }
 
     /**
@@ -472,7 +512,16 @@ class DataQuery
     public function count()
     {
         $quotedColumn = DataObject::getSchema()->sqlColumnForField($this->dataClass(), 'ID');
-        return $this->getFinalisedQuery()->count("DISTINCT {$quotedColumn}");
+        return $this->withCorrectDatabase(function () use ($quotedColumn) {
+            $finalisedQuery = $this->getFinalisedQuery();
+            // COUNT(DISTINCT ...) can be slower compared to COUNT(...) because it requires sorting and removing duplicates to find the unique values
+            // When using only one table and counting by ID (and since there are no NULL IDs), we can ignore DISTINCT
+            if (count($finalisedQuery->getFrom()) === 1) {
+                return $finalisedQuery->count($quotedColumn);
+            }
+            // The COUNT(DISTINCT ...) is added in case a join is added to the query (to apply a filter on related records)
+            return $finalisedQuery->count("DISTINCT {$quotedColumn}");
+        });
     }
 
     /**
@@ -500,13 +549,20 @@ class DataQuery
         }
 
         // Wrap the whole thing in an "EXISTS"
-        $sql = 'SELECT CASE WHEN EXISTS(' . $statement->sql($params) . ') THEN 1 ELSE 0 END';
-        $result = DB::prepared_query($sql, $params);
-        $row = $result->record();
-        $result = reset($row);
+        $subQuerySql = $statement->sql($params);
+        $selectExists = SQLSelect::create('1')->setUseCache($this->useCache, $this->dataClass())->addWhere(['EXISTS (' . $subQuerySql . ')' => $params]);
 
-        // Checking for 't' supports PostgreSQL before silverstripe/postgresql@2.2
-        return $result === true || $result === 1 || $result === '1' || $result === 't';
+        $queryResult = $this->withCorrectDatabase(
+            fn() => $selectExists->execute()
+        );
+        $row = $queryResult->record();
+        if ($row) {
+            $result = reset($row);
+        } else {
+            $result = false;
+        }
+
+        return $result === true || $result === 1 || $result === '1';
     }
 
     /**
@@ -582,7 +638,9 @@ class DataQuery
      */
     public function aggregate($expression)
     {
-        return $this->getFinalisedQuery()->aggregate($expression)->execute()->value();
+        return $this->withCorrectDatabase(
+            fn() => $this->getFinalisedQuery()->aggregate($expression)->execute()->value()
+        );
     }
 
     /**
@@ -593,7 +651,9 @@ class DataQuery
      */
     public function firstRow()
     {
-        return $this->getFinalisedQuery()->firstRow();
+        return $this->withCorrectDatabase(
+            fn() => $this->getFinalisedQuery()->firstRow()
+        );
     }
 
     /**
@@ -604,7 +664,9 @@ class DataQuery
      */
     public function lastRow()
     {
-        return $this->getFinalisedQuery()->lastRow();
+        return $this->withCorrectDatabase(
+            fn() => $this->getFinalisedQuery()->lastRow()
+        );
     }
 
     /**
@@ -691,19 +753,9 @@ class DataQuery
      * Create a disjunctive subgroup.
      *
      * That is a subgroup joined by OR
-     *
-     * @param string $clause
-     * @return DataQuery_SubGroup
      */
-    public function disjunctiveGroup()
+    public function disjunctiveGroup(string $clause = 'WHERE'): DataQuery_SubGroup
     {
-        // using func_get_args to add a new param while retaining BC
-        // @deprecated - add a new param for CMS 6 - string $clause = 'WHERE'
-        $clause = 'WHERE';
-        $args = func_get_args();
-        if (count($args) > 0) {
-            $clause = $args[0];
-        }
         return new DataQuery_SubGroup($this, 'OR', $clause);
     }
 
@@ -711,19 +763,9 @@ class DataQuery
      * Create a conjunctive subgroup
      *
      * That is a subgroup joined by AND
-     *
-     * @param string $clause
-     * @return DataQuery_SubGroup
      */
-    public function conjunctiveGroup()
+    public function conjunctiveGroup(string $clause = 'WHERE'): DataQuery_SubGroup
     {
-        // using func_get_args to add a new param while retaining BC
-        // @deprecated - add a new param for CMS 6 - string $clause = 'WHERE'
-        $clause = 'WHERE';
-        $args = func_get_args();
-        if (count($args) > 0) {
-            $clause = $args[0];
-        }
         return new DataQuery_SubGroup($this, 'AND', $clause);
     }
 
@@ -794,6 +836,28 @@ class DataQuery
             $this->query->addWhereAny($filter);
         }
         return $this;
+    }
+
+    /**
+     * Filters the query where $fieldToFilterBy matches values in $fieldFromOtherList from $subQuery.
+     *
+     * @param string $fieldToFilterBy The name of the column in the current query to filter by
+     * @param string $fieldFromOtherList The name of the column in $subQuery to get filter values from
+     */
+    public function filterByQuery(DataQuery $subQuery, string $fieldToFilterBy = 'ID', string $fieldFromOtherList = 'ID'): static
+    {
+        return $this->filterOrExcludeByQuery($subQuery, false, $fieldToFilterBy, $fieldFromOtherList);
+    }
+
+    /**
+     * Excludes records in the query where $fieldToFilterBy matches values in $fieldFromOtherList from $subQuery.
+     *
+     * @param string $fieldToFilterBy The name of the column in the current query to filter by
+     * @param string $fieldFromOtherList The name of the column in $subQuery to get filter values from
+     */
+    public function excludeByQuery(DataQuery $subQuery, string $fieldToFilterBy = 'ID', string $fieldFromOtherList = 'ID'): static
+    {
+        return $this->filterOrExcludeByQuery($subQuery, true, $fieldToFilterBy, $fieldFromOtherList);
     }
 
     /**
@@ -1248,18 +1312,12 @@ class DataQuery
      * @param DataQuery $subtractQuery
      * @param string $field
      * @return $this
+     * @deprecated 6.1.0 use excludeByQuery() instead.
      */
     public function subtract(DataQuery $subtractQuery, $field = 'ID')
     {
-        $fieldExpression = $subtractQuery->expressionForField($field);
-        $subSelect = $subtractQuery->getFinalisedQuery();
-        $subSelect->setSelect([]);
-        $subSelect->selectField($fieldExpression, $field);
-        $subSelect->setOrderBy(null);
-        $subSelectSQL = $subSelect->sql($subSelectParameters);
-        $this->where([$this->expressionForField($field) . " NOT IN ($subSelectSQL)" => $subSelectParameters]);
-
-        return $this;
+        Deprecation::notice('6.1.0', 'Use excludeByQuery() instead.');
+        return $this->excludeByQuery($subtractQuery, $field, $field);
     }
 
     /**
@@ -1344,7 +1402,9 @@ class DataQuery
         $query->selectField($fieldExpression, $field);
         $this->ensureSelectContainsOrderbyColumns($query, $originalSelect);
 
-        return $query->execute()->column($field);
+        return $this->withCorrectDatabase(
+            fn() => $query->execute()->column($field)
+        );
     }
 
     /**
@@ -1379,6 +1439,29 @@ class DataQuery
     public function selectField($fieldExpression, $alias = null)
     {
         $this->query->selectField($fieldExpression, $alias);
+    }
+
+    /**
+     * Set whether to cache the result of this query or not.
+     * Query uniqueness is based on the query itself (tables, joins, sort, filter, etc) and eagerloading relations.
+     * That means a query with eagerloaded relations won't match an otherwise identical query with no eagerloading,
+     * though that implementation detail is subject to change.
+     *
+     * @return $this
+     */
+    public function setUseCache(bool $useCache): static
+    {
+        $this->useCache = $useCache;
+        $this->query->setUseCache($useCache, $this->dataClass());
+        return $this;
+    }
+
+    /**
+     * Get the key that will be used to identify this query for caching purposes.
+     */
+    public function getCacheKey(): string
+    {
+        return $this->getFinalisedQuery()->getCacheKey();
     }
 
     //// QUERY PARAMS
@@ -1494,5 +1577,56 @@ class DataQuery
         $this->invokeWithExtensions('updateJoinTableName', $class, $table, $updated);
 
         return $updated;
+    }
+
+    /**
+     * Calls a callback on either the primary database or a replica, with respect to the configured
+     * value of `must_use_primary_db` on the current dataClass
+     */
+    private function withCorrectDatabase(callable $callback): mixed
+    {
+        if (Config::inst()->get($this->dataClass(), 'must_use_primary_db')) {
+            return DB::withPrimary($callback);
+        }
+        return $callback();
+    }
+
+    private function filterOrExcludeByQuery(DataQuery $subQuery, bool $isExclude, string $fieldToFilterBy, string $fieldFromOtherList): static
+    {
+        if ($fieldFromOtherList === '' || $fieldToFilterBy === '') {
+            throw new InvalidArgumentException('$fieldToFilterBy and $fieldFromOtherList must not be empty strings');
+        }
+        $subSelect = $subQuery->getFinalisedQuery();
+        // Select only the relevant field, and ID. The ID is used below to validate the join.
+        $subSelect->setSelect([]);
+        $subSelect->selectField($subQuery->expressionForField($fieldFromOtherList), $fieldFromOtherList);
+        $subSelect->selectField($subQuery->expressionForField('ID'), 'ID');
+        // Remove order so the database can use whatever order is most efficient.
+        $subSelect->setOrderBy(null);
+
+        // Alias has to be unique so it doesn't conflict with another alias generated on the same query.
+        // A conflict is very unlikely but it's better to be 100% sure rather than having intermittent failures.
+        $from = $this->query->getFrom();
+        $subQueryAlias = null;
+        do {
+            // md5 is fast and very unlikely to have conflicts in this scenario.
+            $subQueryAlias = 'subQueryAlias' . RandomGenerator::singleton()->randomToken('md5');
+        } while (array_key_exists($subQueryAlias, $from));
+        // TL;DR: join on to the subquery works here while WHERE on its own would be complex to handle in an elegant way.
+        // Lengthy explanation:
+        // Join onto the subquery - this is more robust than adding it as a WHERE clause because it allows us to use an alias
+        // which protects us from errors if this method is called multiple times.
+        // We can't just do a straight "WHERE NOT IN (<subquery>)" because that doesn't account for null values, so any if we
+        // wanted to do that we'd need to use WHERE NOT EXISTS IN (<altered subquery>) where the altered subquery needs to check
+        // if the parent query $fieldToFilterBy is null-safe-equals to the subquery $fieldToFilterBy, and if both queries are on
+        // the same table that REQUIRES an alias to be used.
+        $subSelectSQL = $subSelect->sql($subSelectParameters);
+        $filterByExpression = $this->expressionForField($fieldToFilterBy);
+        $on = DB::get_conn()->nullSafeEqualsClause($filterByExpression, Convert::symbol2sql("{$subQueryAlias}.{$fieldFromOtherList}"));
+        $this->leftJoin('(' . $subSelectSQL . ')', $on, $subQueryAlias, parameters: $subSelectParameters);
+
+        // This WHERE clause is required to distinguish between a join with no results and a join where $fieldFromOtherList is NULL.
+        $this->where(DB::get_conn()->nullCheckClause(Convert::symbol2sql("{$subQueryAlias}.ID"), $isExclude));
+        return $this;
     }
 }

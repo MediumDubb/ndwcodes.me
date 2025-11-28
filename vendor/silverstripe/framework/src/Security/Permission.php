@@ -6,10 +6,11 @@ use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Resettable;
 use SilverStripe\Dev\TestOnly;
 use SilverStripe\i18n\i18nEntityProvider;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DB;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
+use SilverStripe\ORM\DataQuery;
 use SilverStripe\View\TemplateGlobalProvider;
 
 /**
@@ -37,7 +38,10 @@ class Permission extends DataObject implements TemplateGlobalProvider, Resettabl
     ];
 
     private static $indexes = [
-        "Code" => true
+        'Code_GroupID' => [
+            'Code',
+            'GroupID',
+        ],
     ];
 
     private static $defaults = [
@@ -45,6 +49,8 @@ class Permission extends DataObject implements TemplateGlobalProvider, Resettabl
     ];
 
     private static $table_name = "Permission";
+
+    private static bool $must_use_primary_db = true;
 
     /**
      * This is the value to use for the "Type" field if a permission should be
@@ -235,15 +241,15 @@ class Permission extends DataObject implements TemplateGlobalProvider, Resettabl
         }
 
         // Raw SQL for efficiency
-        $permission = DB::prepared_query(
+        $permission = DB::withPrimary(fn() => DB::prepared_query(
             "SELECT \"ID\"
-			FROM \"Permission\"
-			WHERE (
-				\"Code\" IN ($codeClause $adminClause)
-				AND \"Type\" = ?
-				AND \"GroupID\" IN ($groupClause)
-				$argClause
-			)",
+            FROM \"Permission\"
+            WHERE (
+                \"Code\" IN ($codeClause $adminClause)
+                AND \"Type\" = ?
+                AND \"GroupID\" IN ($groupClause)
+                $argClause
+            )",
             array_merge(
                 $codeParams,
                 $adminParams,
@@ -251,7 +257,7 @@ class Permission extends DataObject implements TemplateGlobalProvider, Resettabl
                 $groupParams,
                 $argParams
             )
-        )->value();
+        )->value());
 
         if ($permission) {
             return $permission;
@@ -259,15 +265,15 @@ class Permission extends DataObject implements TemplateGlobalProvider, Resettabl
 
         // Strict checking disabled?
         if (!static::config()->strict_checking || !$strict) {
-            $hasPermission = DB::prepared_query(
+            $hasPermission = DB::withPrimary(fn() => DB::prepared_query(
                 "SELECT COUNT(*)
-				FROM \"Permission\"
-				WHERE (
-					\"Code\" IN ($codeClause) AND
-					\"Type\" = ?
-				)",
+                FROM \"Permission\"
+                WHERE (
+                    \"Code\" IN ($codeClause) AND
+                    \"Type\" = ?
+                )",
                 array_merge($codeParams, [Permission::GRANT_PERMISSION])
-            )->value();
+            )->value());
 
             if (!$hasPermission) {
                 return false;
@@ -285,32 +291,42 @@ class Permission extends DataObject implements TemplateGlobalProvider, Resettabl
      */
     public static function permissions_for_member($memberID)
     {
-        $groupList = Permission::groupList($memberID);
+        $groupIDs = Permission::groupList($memberID);
 
-        if ($groupList) {
-            $groupCSV = implode(", ", $groupList);
+        if ($groupIDs) {
+            // Get the allowed permissions for this user based on the permissions assigned
+            // directly to its groups, and the permissions assigned to roles on its groups.
+            $allowed = Permission::get()
+                ->filter([
+                    'Type' => Permission::GRANT_PERMISSION,
+                    'GroupID' => $groupIDs,
+                ])
+                ->alterDataQuery(function (DataQuery $query) use ($groupIDs) {
+                    $schema = DataObject::getSchema();
+                    // These permissions are explicitly NOT allowed and
+                    // need to be excluded from the PermissionRoleCode set
+                    $denied = Permission::get()->filter([
+                        'Type' => Permission::DENY_PERMISSION,
+                        'GroupID' => $groupIDs,
+                    ]);
 
-            $allowed = array_unique(DB::query("
-				SELECT \"Code\"
-				FROM \"Permission\"
-				WHERE \"Type\" = " . Permission::GRANT_PERMISSION . " AND \"GroupID\" IN ($groupCSV)
+                    // Get permission codes from roles these groups are assigned to, exluding the denied list above.
+                    $permissionRoleCodes = PermissionRoleCode::get()
+                        ->filter(['GroupID' => $groupIDs])
+                        ->excludeByList($denied, 'Code', 'Code')
+                        // Apply necessary joins
+                        ->applyRelation('Role.Groups.ID');
 
-				UNION
+                    // Get the SQLSelect for the query so we can set it to explicitly only fetch the "Codes" column
+                    // Then union the queries together so we have PermissionRoleCode.Code and Permission.Code together.
+                    $permissionRoleCodes = $permissionRoleCodes->dataQuery()->query()->setSelect(
+                        $schema->sqlColumnForField(PermissionRoleCode::class, 'Code')
+                    );
+                    return $query->union($permissionRoleCodes);
+                });
 
-				SELECT \"Code\"
-				FROM \"PermissionRoleCode\" PRC
-				INNER JOIN \"PermissionRole\" PR ON PRC.\"RoleID\" = PR.\"ID\"
-				INNER JOIN \"Group_Roles\" GR ON GR.\"PermissionRoleID\" = PR.\"ID\"
-				WHERE \"GroupID\" IN ($groupCSV)
-			")->column() ?? []);
-
-            $denied = array_unique(DB::query("
-				SELECT \"Code\"
-				FROM \"Permission\"
-				WHERE \"Type\" = " . Permission::DENY_PERMISSION . " AND \"GroupID\" IN ($groupCSV)
-			")->column() ?? []);
-
-            return array_diff($allowed ?? [], $denied);
+            // Return all unique allowed permission codes for this member
+            return $allowed->columnUnique('Code');
         }
 
         return [];
@@ -337,30 +353,19 @@ class Permission extends DataObject implements TemplateGlobalProvider, Resettabl
                 return $_SESSION['Permission_groupList'][$member->ID];
             }
         } else {
-            $member = DataObject::get_by_id("SilverStripe\\Security\\Member", $memberID);
+            $member = Member::get()->setUseCache(true)->byID($memberID);
         }
 
         if ($member) {
-            // Build a list of the IDs of the groups.  Most of the heavy lifting
-            // is done by Member::Groups
-            // NOTE: This isn't efficient; but it's called once per session so
-            // it's a low priority to fix.
-            $groups = $member->Groups();
-            $groupList = [];
-
-            if ($groups) {
-                foreach ($groups as $group) {
-                    $groupList[] = $group->ID;
-                }
-            }
-
+            // Build a list of the IDs of the groups.
+            $groupIDs = $member->Groups()->column();
 
             // Session caching
             if (!$memberID) {
-                $_SESSION['Permission_groupList'][$member->ID] = $groupList;
+                $_SESSION['Permission_groupList'][$member->ID] = $groupIDs;
             }
 
-            return isset($groupList) ? $groupList : null;
+            return $groupIDs;
         }
         return null;
     }
@@ -377,7 +382,7 @@ class Permission extends DataObject implements TemplateGlobalProvider, Resettabl
     public static function grant($groupID, $code, $arg = "any")
     {
         $permissions = Permission::get()->filter(['GroupID' => $groupID, 'Code' => $code]);
-        
+
         if ($permissions && $permissions->count() > 0) {
             $perm = $permissions->last();
         } else {
@@ -580,23 +585,21 @@ class Permission extends DataObject implements TemplateGlobalProvider, Resettabl
             }
         }
 
-        $flatCodeArray = [];
+        // Include other permissions from the database which aren't included above
+        $flatCodeArray = [''];
         foreach ($allCodes as $category) {
             foreach ($category as $code => $permission) {
                 $flatCodeArray[] = $code;
             }
         }
-        $otherPerms = DB::query("SELECT DISTINCT \"Code\" From \"Permission\" WHERE \"Code\" != ''")->column();
-
+        $otherPerms = Permission::get()->exclude(['Code' => $flatCodeArray])->column('Code');
         if ($otherPerms) {
             foreach ($otherPerms as $otherPerm) {
-                if (!in_array($otherPerm, $flatCodeArray ?? [])) {
-                    $allCodes['Other'][$otherPerm] = [
+                $allCodes['Other'][$otherPerm] = [
                     'name' => $otherPerm,
                     'help' => null,
                     'sort' => 0
-                    ];
-                }
+                ];
             }
         }
 
@@ -638,7 +641,7 @@ class Permission extends DataObject implements TemplateGlobalProvider, Resettabl
         }
     }
 
-    public function onBeforeWrite()
+    protected function onBeforeWrite()
     {
         parent::onBeforeWrite();
 
@@ -659,7 +662,6 @@ class Permission extends DataObject implements TemplateGlobalProvider, Resettabl
 
         // Localise all permission categories
         $keys[__CLASS__ . '.AdminGroup'] = 'Administrator';
-        $keys[__CLASS__ . '.CMS_ACCESS_CATEGORY'] = 'CMS Access';
         $keys[__CLASS__ . '.CONTENT_CATEGORY'] = 'Content permissions';
         $keys[__CLASS__ . '.PERMISSIONS_CATEGORY'] = 'Roles and access permissions';
         return $keys;

@@ -2,140 +2,135 @@
 
 namespace SilverStripe\ORM\FieldType;
 
+use SilverStripe\Core\Validation\FieldValidation\DecimalFieldValidator;
+use SilverStripe\Forms\FormField;
 use SilverStripe\Forms\NumericField;
 use SilverStripe\ORM\DB;
+use SilverStripe\Model\ModelData;
 
 /**
  * Represents a Decimal field.
  */
 class DBDecimal extends DBField
 {
+    private static array $field_validators = [
+        DecimalFieldValidator::class => [
+            'wholeSize' => 'getWholeSize',
+            'decimalSize' => 'getDecimalSize',
+        ],
+    ];
 
     /**
      * Whole number size
-     *
-     * @var int
      */
-    protected $wholeSize = 9;
+    protected int $wholeSize = 9;
 
     /**
      * Decimal scale
-     *
-     * @var int
      */
-    protected $decimalSize = 2;
-
-    /**
-     * Default value
-     *
-     * @var string
-     * @deprecated 5.4.0 Will be replaced with getDefaultValue() and setDefaultValue() in a future major release
-     */
-    protected $defaultValue = 0;
+    protected int $decimalSize = 2;
 
     /**
      * Create a new Decimal field.
-     *
-     * @param string $name
-     * @param int $wholeSize
-     * @param int $decimalSize
-     * @param float|int $defaultValue
      */
-    public function __construct($name = null, $wholeSize = 9, $decimalSize = 2, $defaultValue = 0)
+    public function __construct(?string $name = null, ?int $wholeSize = 9, ?int $decimalSize = 2, float|int $defaultValue = 0.0)
     {
         $this->wholeSize = is_int($wholeSize) ? $wholeSize : 9;
         $this->decimalSize = is_int($decimalSize) ? $decimalSize : 2;
 
-        $this->defaultValue = number_format((float) $defaultValue, $decimalSize ?? 0);
+        $this->setDefaultValue(round($defaultValue, $this->decimalSize));
 
         parent::__construct($name);
     }
 
-    /**
-     * @return float
-     */
-    public function Nice()
+    public function Nice(): string
     {
         return number_format($this->value ?? 0.0, $this->decimalSize ?? 0);
     }
 
-    /**
-     * @return int
-     */
-    public function Int()
+    public function Int(): int
     {
         return floor($this->value ?? 0.0);
     }
 
-    public function requireField()
+    public function getWholeSize(): int
+    {
+        return $this->wholeSize;
+    }
+
+    public function getDecimalSize(): int
+    {
+        return $this->decimalSize;
+    }
+
+    public function requireField(): void
+    {
+        DB::require_field($this->tableName, $this->name, $this->getFieldSpec());
+    }
+
+    /**
+     * Get the specifications which will be used to generate this column in the database.
+     */
+    public function getFieldSpec(): string|array
     {
         $parts = [
             'datatype' => 'decimal',
             'precision' => "$this->wholeSize,$this->decimalSize",
-            'default' => $this->defaultValue,
+            'default' => $this->getDefaultValue(),
             'arrayValue' => $this->arrayValue
         ];
 
-        $values = [
+        return [
             'type' => 'decimal',
             'parts' => $parts
         ];
-
-        DB::require_field($this->tableName, $this->name, $values);
     }
 
-    public function saveInto($dataObject)
+    public function setValue(mixed $value, null|array|ModelData $record = null, bool $markChanged = true): static
     {
-        $fieldName = $this->name;
-
-        if ($fieldName) {
-            if ($this->value instanceof DBField) {
-                $this->value->saveInto($dataObject);
-            } else {
-                $value = (float) preg_replace('/[^0-9.\-\+]/', '', $this->value ?? '');
-                $dataObject->__set($fieldName, $value);
-            }
-        } else {
-            throw new \UnexpectedValueException(
-                "DBField::saveInto() Called on a nameless '" . static::class . "' object"
-            );
+        // Cast ints and numeric strings to floats
+        if (is_int($value) || (is_string($value) && is_numeric($value))) {
+            $value = (float) $value;
         }
+        parent::setValue($value, $record, $markChanged);
+        return $this;
     }
 
-    /**
-     * @param string $title
-     * @param array $params
-     *
-     * @return NumericField
-     */
-    public function scaffoldFormField($title = null, $params = null)
+    public function scaffoldFormField(?string $title = null, array $params = []): ?FormField
     {
         return NumericField::create($this->name, $title)
             ->setScale($this->decimalSize);
     }
 
-    /**
-     * @return float
-     */
-    public function nullValue()
+    public function nullValue(): ?float
     {
-        return 0;
+        return 0.0;
     }
 
-    public function prepValueForDB($value)
+    public function prepValueForDB(mixed $value): array|float|int|null
     {
         if ($value === true) {
-            return 1;
+            return 1.0;
         }
 
         if (empty($value) || !is_numeric($value)) {
-            return 0;
+            return 0.0;
         }
 
         if (abs((float) $value - (int) $value) < PHP_FLOAT_EPSILON) {
-            return (int)$value;
+            return (int) $value;
         }
 
-        return (float)$value;
+        return (float) $value;
+    }
+
+    public static function getMinValue(): float
+    {
+        return PHP_FLOAT_MIN;
+    }
+
+    public static function getMaxValue(): float
+    {
+        return PHP_FLOAT_MAX;
     }
 }

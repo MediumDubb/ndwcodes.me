@@ -6,7 +6,6 @@ use DateInterval;
 use DateTime;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBDatetime;
-use SilverStripe\Dev\Deprecation;
 
 /**
  * Persists a token associated with a device for users who opted for the "Remember Me"
@@ -44,6 +43,8 @@ class RememberLoginHash extends DataObject
 
     private static $table_name = "RememberLoginHash";
 
+    private static bool $must_use_primary_db = true;
+
     /**
      * Determines if logging out on one device also clears existing login tokens
      * on all other devices owned by the member.
@@ -79,15 +80,6 @@ class RememberLoginHash extends DataObject
      * @var bool
      */
     private static $force_single_token = false;
-
-    /**
-     * If true, the token will be replaced during session renewal. This can cause unexpected
-     * logouts if the new token does not reach the client (e.g. due to a network error).
-     *
-     * This can be disabled as of CMS 5.3, and renewal will be removed entirely in CMS 6.
-     * @deprecated 5.3.0 Will be removed without equivalent functionality in a future major release
-     */
-    private static bool $replace_token_during_session_renewal = true;
 
     /**
      * The token used for the hash. Only present during the lifetime of the request
@@ -197,28 +189,6 @@ class RememberLoginHash extends DataObject
         $rememberLoginHash->extend('onAfterGenerateToken');
         $rememberLoginHash->write();
         return $rememberLoginHash;
-    }
-
-    /**
-     * Generates a new hash for this member but keeps the device ID intact
-     *
-     * @deprecated 5.3.0 Will be removed without equivalent functionality in a future major release
-     * @return RememberLoginHash
-     */
-    public function renew()
-    {
-        // Only regenerate token if configured to do so
-        Deprecation::notice('5.3.0', 'Will be removed without equivalent functionality in a future major release');
-        $replaceToken = RememberLoginHash::config()->get('replace_token_during_session_renewal');
-        if ($replaceToken) {
-            $hash = $this->getNewHash($this->Member());
-            $this->Hash = $hash;
-        }
-
-        $this->extend('onAfterRenewToken', $replaceToken);
-        $this->write();
-
-        return $this;
     }
 
     /**

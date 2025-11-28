@@ -73,10 +73,10 @@ class HasManyList extends RelationList
      *
      * @param DataObject|int $item The DataObject to be added, or its ID
      */
-    public function add($item)
+    public function add(mixed $item): void
     {
         if (is_numeric($item)) {
-            $item = DataObject::get_by_id($this->dataClass, $item);
+            $item = DataObject::get($this->dataClass)->setUseCache(true)->byID($item);
         } elseif (!($item instanceof $this->dataClass)) {
             throw new InvalidArgumentException("HasManyList::add() expecting a $this->dataClass object, or ID value");
         }
@@ -123,7 +123,7 @@ class HasManyList extends RelationList
      *
      * @param DataObject $item The DataObject to be removed
      */
-    public function remove($item)
+    public function remove(mixed $item)
     {
         if (!($item instanceof $this->dataClass)) {
             throw new InvalidArgumentException("HasManyList::remove() expecting a $this->dataClass object, or ID");

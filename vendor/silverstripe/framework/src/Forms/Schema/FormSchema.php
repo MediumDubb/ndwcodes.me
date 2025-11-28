@@ -8,7 +8,7 @@ use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\Forms\CompositeField;
 use SilverStripe\Forms\Form;
 use SilverStripe\Forms\FormField;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use LogicException;
 
 /**
@@ -55,7 +55,7 @@ class FormSchema
      * @param ValidationResult $result Required for 'error' response
      * @return array
      */
-    public function getMultipartSchema($schemaParts, $schemaID, Form $form = null, ValidationResult $result = null)
+    public function getMultipartSchema($schemaParts, $schemaID, ?Form $form = null, ?ValidationResult $result = null)
     {
         if (!is_array($schemaParts)) {
             $schemaParts = preg_split('#\s*,\s*#', $schemaParts ?? '') ?: [];

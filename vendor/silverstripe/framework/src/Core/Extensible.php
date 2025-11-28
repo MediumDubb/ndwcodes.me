@@ -5,7 +5,7 @@ namespace SilverStripe\Core;
 use InvalidArgumentException;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Injector\Injector;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 
 /**
  * Allows an object to have extensions applied to it.
@@ -43,7 +43,7 @@ trait Extensible
      * @var array
      */
     private static $unextendable_classes = [
-        ViewableData::class,
+        ModelData::class,
     ];
 
     /**
@@ -154,7 +154,6 @@ trait Extensible
      * Keep in mind that the extension will only be applied to new
      * instances, not existing ones (including all instances created through {@link singleton()}).
      *
-     * @see http://doc.silverstripe.org/framework/en/trunk/reference/dataextension
      * @param string $classOrExtension Class that should be extended - has to be a subclass of {@link Object}
      * @param string $extension Subclass of {@link Extension} with optional parameters
      *  as a string, e.g. "Versioned"
@@ -256,7 +255,7 @@ trait Extensible
      * @param string $class If omitted, will get extensions for the current class
      * @param bool $includeArgumentString Include the argument string in the return array,
      *  FALSE would return array("Versioned"), TRUE returns array("Versioned('Stage','Live')").
-     * @return array Numeric array of either {@link DataExtension} class names,
+     * @return array Numeric array of either {@link Extension} class names,
      *  or eval'ed class name strings with constructor arguments.
      */
     public static function get_extensions($class = null, $includeArgumentString = false)
@@ -501,7 +500,7 @@ trait Extensible
      *
      * This method also provides lazy-population of the extension_instances property.
      *
-     * @return Extension[] Map of {@link DataExtension} instances, keyed by classname.
+     * @return Extension[] Map of {@link Extension} instances, keyed by classname.
      */
     public function getExtensionInstances()
     {
@@ -512,7 +511,7 @@ trait Extensible
         // Setup all extension instances for this instance
         $this->extension_instances = [];
         foreach (ClassInfo::ancestry(static::class) as $class) {
-            if (in_array($class, self::$unextendable_classes)) {
+            if (in_array($class, self::class::$unextendable_classes)) {
                 continue;
             }
             $extensions = Config::inst()->get($class, 'extensions', Config::UNINHERITED | Config::EXCLUDE_EXTRA_SOURCES);

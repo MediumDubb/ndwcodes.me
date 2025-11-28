@@ -6,53 +6,266 @@ use DNADesign\Elemental\Forms\EditFormFactory;
 use DNADesign\Elemental\Models\BaseElement;
 use DNADesign\Elemental\Services\ElementTypeRegistry;
 use SilverStripe\Admin\AdminRootController;
-use SilverStripe\CMS\Controllers\CMSMain;
-use SilverStripe\Control\HTTPRequest;
-use SilverStripe\Control\HTTPResponse;
-use SilverStripe\Control\HTTPResponse_Exception;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Forms\Form;
-use SilverStripe\ORM\ValidationException;
+use SilverStripe\Core\Validation\ValidationException;
 use SilverStripe\Security\SecurityToken;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Control\Controller;
-use SilverStripe\Dev\Deprecation;
+use DNADesign\Elemental\Models\ElementalArea;
+use DNADesign\Elemental\Services\ReorderElements;
+use Exception;
+use SilverStripe\Control\HTTPResponse;
+use SilverStripe\Control\HTTPRequest;
+use InvalidArgumentException;
+use SilverStripe\Admin\FormSchemaController;
 
 /**
  * Controller for "ElementalArea" - handles loading and saving of in-line edit forms in an elemental area in admin
  */
-class ElementalAreaController extends CMSMain
+class ElementalAreaController extends FormSchemaController
 {
     const FORM_NAME_TEMPLATE = 'ElementForm_%s';
 
     private static $url_segment = 'elemental-area';
 
-    /**
-     * @deprecated 5.4.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    private static $ignore_menuitem = true;
+    private static string $required_permission_codes = 'CMS_ACCESS';
 
     private static $url_handlers = [
         'elementForm/$ItemID' => 'elementForm',
-        'POST api/saveForm/$ID' => 'apiSaveForm',
         '$FormName/field/$FieldName' => 'formAction',
+        'GET api/readElements/$elementalAreaID!' => 'apiReadElements',
+        'POST api/create' => 'apiCreate',
+        'POST api/delete' => 'apiDelete',
+        'POST api/duplicate' => 'apiDuplicate',
+        'POST api/publish' => 'apiPublish',
+        'POST api/saveForm/$ID' => 'apiSaveForm',
+        'POST api/sort' => 'apiSort',
+        'POST api/unpublish' => 'apiUnpublish',
     ];
 
     private static $allowed_actions = [
         'elementForm',
-        'apiSaveForm',
         'formAction',
+        'apiCreate',
+        'apiDelete',
+        'apiDuplicate',
+        'apiPublish',
+        'apiReadElements',
+        'apiSaveForm',
+        'apiSort',
+        'apiUnpublish',
     ];
 
-    public function getClientConfig()
+    /**
+     * JSON endpoint to create a new element in an ElementalArea
+     */
+    public function apiCreate(HTTPRequest $request): HTTPResponse
+    {
+        if (!SecurityToken::inst()->checkRequest($request)) {
+            $this->jsonError(400);
+        }
+        $elementClass = $this->getPostedJsonValue($request, 'elementClass');
+        $elementalAreaID = $this->getPostedJsonValue($request, 'elementalAreaID');
+        // $afterElementID can be null, so do not error if it's missing
+        $data = json_decode($request->getBody(), true);
+        $afterElementID = $data['insertAfterElementID'] ?? null;
+        if (!is_subclass_of($elementClass, BaseElement::class)) {
+            $this->jsonError(400);
+        }
+        $elementalArea = ElementalArea::get()->byID($elementalAreaID);
+        if (!$elementalArea) {
+            $this->jsonError(400);
+        }
+        if (!$elementalArea->canEdit()) {
+            $this->jsonError(403);
+        }
+        /** @var BaseElement $newElement */
+        $newElement = Injector::inst()->create($elementClass);
+        if (!$newElement->canCreate()) {
+            $this->jsonError(403);
+        }
+        // Assign the parent ID directly rather than via HasManyList to prevent multiple writes.
+        // See BaseElement::$has_one for the "Parent" naming.
+        $newElement->ParentID = $elementalArea->ID;
+        $newElement->ensureSortSet();
+        if ($afterElementID !== null) {
+            $this->reorderElements($newElement, $afterElementID);
+        } else {
+            $newElement->write();
+        }
+        return $this->jsonSuccess(204);
+    }
+
+    /**
+     * JSON endpoint to delete an element
+     */
+    public function apiDelete(HTTPRequest $request): HTTPResponse
+    {
+        if (!SecurityToken::inst()->checkRequest($request)) {
+            $this->jsonError(400);
+        }
+        $id = $this->getPostedJsonValue($request, 'id');
+        $element = BaseElement::get()->byID($id);
+        if (!$element) {
+            $this->jsonError(400);
+        }
+        if (!$element->canDelete()) {
+            $this->jsonError(403);
+        }
+        // Elemental does not officially support unversioned elements so always call doArchive()
+        $element->doArchive();
+        return $this->jsonSuccess(204);
+    }
+
+    /**
+     * JSON endpoint to duplicate an element
+     */
+    public function apiDuplicate(HTTPRequest $request): HTTPResponse
+    {
+        if (!SecurityToken::inst()->checkRequest($request)) {
+            $this->jsonError(400);
+        }
+        $id = $this->getPostedJsonValue($request, 'id');
+         $element = BaseElement::get()->byID($id);
+        if (!$element) {
+            $this->jsonError(400);
+        }
+        if (!$element->canCreate()) {
+            $this->jsonError(403);
+        }
+        // check can edit the elemental area
+        $areaID = $element->ParentID;
+        $area = ElementalArea::get()->byID($areaID);
+        if (!$area) {
+            $this->jsonError(400);
+        }
+        if (!$area->canEdit()) {
+            $this->jsonError(403);
+        }
+        // clone element
+        $clone = $element->duplicate(false);
+        $clone->Title = $this->getNewTitle($clone->Title ?? '');
+        $clone->Sort = 0; // must be zeroed for reorder to work
+        $area->Elements()->add($clone);
+        // reorder
+        $this->reorderElements($clone, $id);
+        return $this->jsonSuccess(204);
+    }
+
+    /**
+     * JSON endpoint to publish an element
+     */
+    public function apiPublish(HTTPRequest $request): HTTPResponse
+    {
+        if (!SecurityToken::inst()->checkRequest($request)) {
+            $this->jsonError(400);
+        }
+        $id = $this->getPostedJsonValue($request, 'id');
+        $element = BaseElement::get()->byID($id);
+        if (!$element) {
+            $this->jsonError(400);
+        }
+        if (!$element->canPublish()) {
+            $this->jsonError(403);
+        }
+        $element->publishRecursive();
+        return $this->jsonSuccess(204);
+    }
+
+    /**
+     * JSON endpoint to read elements on an ElementalArea
+     */
+    public function apiReadElements(HTTPRequest $request): HTTPResponse
+    {
+        $request = $this->getRequest();
+        $elementalAreaID = $request->param('elementalAreaID');
+        $elementalArea = ElementalArea::get()->byID($elementalAreaID);
+        if (!$elementalArea) {
+            $this->jsonError(404);
+        }
+        if (!$elementalArea->canView()) {
+            $this->jsonError(403);
+        }
+        $data = [];
+        foreach ($elementalArea->Elements() as $element) {
+            if (!$element->canView()) {
+                continue;
+            }
+            $data[] = [
+                'id' => $element->ID,
+                'title' => $element->Title,
+                'blockSchema' => $element->getBlockSchema(),
+                'obsoleteClassName' => $element->getObsoleteClassName(),
+                'version' => $element->Version,
+                'isPublished' => $element->isPublished(),
+                'isLiveVersion' => $element->isLiveVersion(),
+                'canDelete' => $element->canDelete(),
+                'canPublish' => $element->canPublish(),
+                'canUnpublish' => $element->canUnpublish(),
+                'canCreate' => $element->canCreate(),
+                'statusFlags' => $element->getStatusFlags(),
+            ];
+        }
+        $this->extend('updateApiReadElementalArea', $data, $request);
+        return $this->jsonSuccess(200, $data);
+    }
+
+    /**
+     * JSON endpoint to sort elements on an ElementalArea
+     */
+    public function apiSort(HTTPRequest $request): HTTPResponse
+    {
+        if (!SecurityToken::inst()->checkRequest($request)) {
+            $this->jsonError(400);
+        }
+        $id = $this->getPostedJsonValue($request, 'id');
+        $afterBlockID = $this->getPostedJsonValue($request, 'afterBlockID');
+        $element = BaseElement::get()->byID($id);
+        if (!$element) {
+            $this->jsonError(400);
+        }
+        if (!$element->canEdit()) {
+            $this->jsonError(403);
+        }
+        $this->reorderElements($element, $afterBlockID);
+        return $this->jsonSuccess(204);
+    }
+
+    /**
+     * JSON endpoint to unpublish an element
+     */
+    public function apiUnpublish(HTTPRequest $request): HTTPResponse
+    {
+        if (!SecurityToken::inst()->checkRequest($request)) {
+            $this->jsonError(400);
+        }
+        $id = $this->getPostedJsonValue($request, 'id');
+        $element = BaseElement::get()->byID($id);
+        if (!$element) {
+            $this->jsonError(400);
+        }
+        if (!$element->canUnpublish()) {
+            $this->jsonError(403);
+        }
+        $element->doUnpublish();
+        return $this->jsonSuccess(204);
+    }
+
+    /**
+     * Returns configuration required by the client app
+     */
+    public function getClientConfig(): array
     {
         $clientConfig = parent::getClientConfig();
         $clientConfig['form']['elementForm'] = [
             'schemaUrl' => $this->Link('schema/elementForm'),
             'formNameTemplate' => sprintf(static::FORM_NAME_TEMPLATE, '{id}'),
         ];
+        $clientConfig['controllerLink'] = $this->Link();
+
         // Configuration that is available per element type
         $clientConfig['elementTypes'] = ElementTypeRegistry::generate()->getDefinitions();
         return $clientConfig;
@@ -63,21 +276,10 @@ class ElementalAreaController extends CMSMain
      * - GET requests to get the FormSchema via getElementForm() called from LeftAndMain::schema()
      * - POST Requests to save the Form. Will be handled by to FormRequestHandler::httpSubmission()
      * /admin/linkfield/elementForm/<ElementID>
-     *
-     * @return Form
      */
-    public function elementForm(HTTPRequest $request = null)
+    public function elementForm(): Form
     {
-        $request = $request ?: $this->getRequest();
-        $id = $request->param('ItemID');
-
-        // Respect previous behaviour
-        // This should just be removed later and so that it 404's below when BaseElement::get()->byID($id) fails
-        if ($id === 0) {
-            $this->jsonError(400);
-        }
-
-        // Note that new elements are added via graphql, so only using this endpoint for editing existing
+        $id = $this->getRequest()->param('ItemID');
         $element = BaseElement::get()->byID($id);
         if (!$element) {
             $this->jsonError(404);
@@ -91,30 +293,21 @@ class ElementalAreaController extends CMSMain
     /**
      * This method is called from LeftAndMain::schema()
      * /admin/linkfield/schema/elementForm/<ElementID>
-     *
-     * @param int $elementID
-     * @return Form|null Returns null if no element exists for the given ID
      */
-    public function getElementForm($elementID)
+    public function getElementForm(): Form
     {
-        $element = BaseElement::get()->byID($elementID);
-        // This is returning null to match legacy behaviour
-        if (!$element) {
-            return null;
-        }
         return $this->elementForm();
     }
 
     /**
-     * Arrive here from FormRequestHandler::httpSubmission() during a POST request to
-     * /admin/linkfield/linkForm/<LinkID>
+     * Arrive here from FormRequestHandler::httpSubmission() during a POST request.
      * The 'save' method is called because it is the FormAction set on the Form
      */
     public function save(array $data, Form $form): HTTPResponse
     {
         $request = $this->getRequest();
 
-        // Check security token for non-view operation
+        // Check security token for non-view operation - note token is pased in POST body, not headers
         if (!SecurityToken::inst()->checkRequest($request)) {
             $this->jsonError(400);
         }
@@ -139,13 +332,15 @@ class ElementalAreaController extends CMSMain
             $this->jsonError(403);
         }
 
-        // Remove the namespace prefixes that were added by EditFormFactory
-        $dataWithoutNamespaces = static::removeNamespacesFromFields($data, $element->ID);
+        // Remove the namespace prefixes
+        $factory = Injector::inst()->get(EditFormFactory::class);
+        $factory->removeNamespaceFromFields($form->Fields(), ['Record' => $element]);
+        // Update the record
+        $form->saveInto($element);
+        // Add the namespace prefixes back - this is necessary for the response to be handled correctly
+        $factory->namespaceFields($form->Fields(), ['Record' => $element]);
 
-        // Update and write the data object which will trigger model validation.
-        // Would usually be handled by $form->saveInto($element) but since the field names
-        // in the form have been namespaced, we need to handle it ourselves.
-        $element->updateFromFormData($dataWithoutNamespaces);
+        // Write the data object which will trigger model validation
         if ($element->isChanged()) {
             try {
                 $element->write();
@@ -162,75 +357,36 @@ class ElementalAreaController extends CMSMain
         return $response;
     }
 
-    /**
-     * Remove the pseudo namespaces that were added to form fields by the form factory
-     *
-     * @param array $data
-     * @param int $elementID
-     * @return array
-     * @deprecated 5.4.0 Will be removed without equivalent functionality to replace it in a future major release.
-     */
-    public static function removeNamespacesFromFields(array $data, $elementID)
+    private function reorderElements(BaseElement $element, int $afterElementID): void
     {
-        Deprecation::noticeWithNoReplacment('5.4.0');
-        $output = [];
-        $template = sprintf(EditFormFactory::FIELD_NAMESPACE_TEMPLATE, $elementID, '');
-        foreach ($data as $key => $value) {
-            // Only look at fields that match the namespace template
-            if (substr($key ?? '', 0, strlen($template ?? '')) !== $template) {
-                continue;
-            }
-
-            $fieldName = substr($key ?? '', strlen($template ?? ''));
-            $output[$fieldName] = $value;
+        if ($afterElementID < 0) {
+            $this->jsonError(400);
         }
-        return $output;
+        /** @var ReorderElements $reorderer */
+        $reorderer = Injector::inst()->create(ReorderElements::class, $element);
+        $reorderer->reorder($afterElementID);
     }
 
-    /**
-     * This method should not be used and will be removed
-     *
-     * Save an inline edit form for a block
-     *
-     * @param HTTPRequest $request
-     * @return HTTPResponse|null JSON encoded string or null if an exception is thrown
-     * @throws HTTPResponse_Exception
-     *
-     * @deprecated 5.3.0 Send a POST request to elementForm/$ItemID instead
-     */
-    public function apiSaveForm(HTTPRequest $request)
+    private function getNewTitle(string $title = ''): ?string
     {
-        Deprecation::notice('5.3.0', 'Send a POST request to elementForm/$ItemID instead');
-        throw new HTTPResponse_Exception('This endpoint should not be used');
-    }
-
-    /**
-     * Provides action control for form fields that are request handlers when they're used in an in-line edit form.
-     *
-     * Eg. UploadField
-     *
-     * @param HTTPRequest $request
-     * @return array|HTTPResponse|\SilverStripe\Control\RequestHandler|string
-     *
-     * @deprecated 5.3.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    public function formAction(HTTPRequest $request)
-    {
-        // This method no longer appears to be needed, Form fields on blocks that use nested request handlers
-        // such as UploadField do no use this method.
-        Deprecation::notice(
-            '5.3.0',
-            'This method will be removed without equivalent functionality to replace it in a future major release'
-        );
-        $formName = $request->param('FormName');
-
-        // Get the element ID from the form name
-        $id = substr($formName ?? '', strlen(sprintf(ElementalAreaController::FORM_NAME_TEMPLATE, '')));
-        $form = $this->getElementForm($id);
-
-        $field = $form->getRequestHandler()->handleField($request);
-
-        return $field->handleRequest($request);
+        $hasCopyPattern = '/^.*(\scopy($|\s[0-9]+$))/';
+        $hasNumPattern = '/^.*(\s[0-9]+$)/';
+        $parts = [];
+        // does $title end with 'copy' (ignoring numbers for now)?
+        if (preg_match($hasCopyPattern ?? '', $title ?? '', $parts)) {
+            $copy = $parts[1];
+            // does $title end with numbers?
+            if (preg_match($hasNumPattern ?? '', $copy ?? '', $parts)) {
+                $num = trim($parts[1] ?? '');
+                $len = strlen($num ?? '');
+                $inc = (int)$num + 1;
+                return substr($title ?? '', 0, -$len) . "$inc";
+            } else {
+                return $title . ' 2';
+            }
+        } else {
+            return $title . ' copy';
+        }
     }
 
     /**
@@ -300,10 +456,10 @@ class ElementalAreaController extends CMSMain
             $messageCast = $message['messageCast'] ?? ValidationResult::CAST_TEXT;
             if ($messageFieldName) {
                 $fieldName = sprintf(EditFormFactory::FIELD_NAMESPACE_TEMPLATE, $element->ID, $messageFieldName);
-                $params = [$fieldName, $messageText, $messageType, null, $messageCast];
+                $params = [$fieldName, $messageText, $messageType, '', $messageCast];
                 $validationResultWithNameSpaces->addFieldError(...$params);
             } else {
-                $validationResultWithNameSpaces->addError($messageText, $messageType, null, $messageCast);
+                $validationResultWithNameSpaces->addError($messageText, $messageType, '', $messageCast);
             }
             $signatures[$signature] = $message;
         }

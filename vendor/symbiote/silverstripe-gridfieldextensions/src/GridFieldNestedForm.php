@@ -23,11 +23,10 @@ use SilverStripe\Forms\GridField\GridFieldStateAware;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DataObjectInterface;
-use SilverStripe\ORM\Filterable;
 use SilverStripe\ORM\Hierarchy\Hierarchy;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\Versioned\Versioned;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 use Symbiote\GridFieldExtensions\GridFieldOrderableRows;
 
 /**
@@ -246,7 +245,7 @@ class GridFieldNestedForm extends AbstractGridFieldComponent implements
 
             GridFieldExtensions::include_requirements();
 
-            return ViewableData::create()->customise([
+            return ModelData::create()->customise([
                 'Toggle' => $toggle,
                 'Link' => $this->Link($record->ID),
                 'ToggleLink' => $this->ToggleLink($record->ID),
@@ -295,22 +294,25 @@ class GridFieldNestedForm extends AbstractGridFieldComponent implements
         }
         $to = isset($move['parent']) ? (int)$move['parent'] : null;
         // should be possible either on parent or child grid field, or nested grid field from parent
-        $parent = $to ? $list->byID($to) : null;
-        if (!$parent
+        $hasParent = $to ? $list->filter('ID', $to)->exists() : false;
+        $parentID = $hasParent ? $to : 0;
+        if (!$hasParent
             && $to
             && $gridField->getForm()->getController() instanceof GridFieldNestedFormItemRequest
             && $gridField->getForm()->getController()->getRecord()->ID == $to
         ) {
-            $parent = $gridField->getForm()->getController()->getRecord();
+            $hasParent = true;
+            $parentID = $gridField->getForm()->getController()->getRecord()->ID;
         }
         $child = $list->byID($id);
         // we need either a parent or a child, or a move to top level at this stage
-        if (!($parent || $child || $to === 0)) {
+        if (!($hasParent || $child || $to === 0)) {
             throw new HTTPResponse_Exception('Invalid request', 400);
         }
         // parent or child might be from another grid field, so we need to search via DataList in some cases
-        if (!$parent && $to) {
-            $parent = DataList::create($gridField->getModelClass())->byID($to);
+        if (!$hasParent && $to && DataList::create($gridField->getModelClass())->filter('ID', $to)->exists()) {
+            $hasParent = true;
+            $parentID = $to;
         }
         if (!$child) {
             $child = DataList::create($gridField->getModelClass())->byID($id);
@@ -320,7 +322,7 @@ class GridFieldNestedForm extends AbstractGridFieldComponent implements
                 throw new HTTPResponse_Exception('Not allowed', 403);
             }
             if ($child->hasExtension(Hierarchy::class)) {
-                $child->ParentID = $parent ? $parent->ID : 0;
+                $child->ParentID = $parentID;
             }
             // validate that the record is still valid
             $validationResult = $child->validate();
@@ -356,18 +358,18 @@ class GridFieldNestedForm extends AbstractGridFieldComponent implements
     public function handleNestedItem(
         GridField $gridField,
         HTTPRequest|null $request = null,
-        ViewableData|null $record = null
+        ModelData|null $record = null
     ): HTTPResponse|RequestHandler|Form {
         if ($this->atMaxNestingLevel($gridField)) {
             throw new Exception('Max nesting level reached');
         }
         $list = $gridField->getList();
-        if (!$record && $request && $list instanceof Filterable) {
+        if (!$record && $request && $list instanceof SS_List) {
             $recordID = $request->param('RecordID');
             $record = $list->byID($recordID);
         }
         if (!$record) {
-            return '';
+            throw new HTTPResponse_Exception(statusCode: 404);
         }
         $relationName = $this->getRelationName();
         if (!$record->hasMethod($relationName)) {
@@ -408,10 +410,10 @@ class GridFieldNestedForm extends AbstractGridFieldComponent implements
     public function toggleNestedItem(
         GridField $gridField,
         HTTPRequest|null $request = null,
-        ViewableData|null $record = null
+        ModelData|null $record = null
     ) {
         $list = $gridField->getList();
-        if (!$record && $request && $list instanceof Filterable) {
+        if (!$record && $request && $list instanceof SS_List) {
             $recordID = $request->param('RecordID');
             $record = $list->byID($recordID);
         }
@@ -448,7 +450,7 @@ class GridFieldNestedForm extends AbstractGridFieldComponent implements
     public function handleSave(GridField $gridField, DataObjectInterface $record)
     {
         $postKey = GridFieldNestedForm::POST_KEY;
-        $value = $gridField->Value();
+        $value = $gridField->getValue();
         if (isset($value['GridState']) && $value['GridState']) {
             // set grid state from value, to store open/closed toggle state for nested forms
             $gridField->getState(false)->setValue($value['GridState']);
@@ -460,7 +462,7 @@ class GridFieldNestedForm extends AbstractGridFieldComponent implements
         }
         foreach ($request->postVars() as $key => $val) {
             $list = $gridField->getList();
-            if ($list instanceof Filterable
+            if ($list instanceof SS_List
                 && preg_match("/{$gridField->getName()}-{$postKey}-(\d+)/", $key, $matches)
             ) {
                 $recordID = $matches[1];
@@ -482,7 +484,7 @@ class GridFieldNestedForm extends AbstractGridFieldComponent implements
             && is_a($gridField->getModelClass(), DataObject::class, true)
             && DataObject::has_extension($gridField->getModelClass(), Hierarchy::class)
             && $gridField->getForm()->getController() instanceof ModelAdmin
-            && $dataList instanceof Filterable
+            && $dataList instanceof SS_List
         ) {
             $dataList = $dataList->filter('ParentID', 0);
         }

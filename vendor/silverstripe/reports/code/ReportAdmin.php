@@ -16,15 +16,15 @@ use SilverStripe\Forms\GridField\GridFieldPaginator;
 use SilverStripe\Forms\GridField\GridFieldSortableHeader;
 use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\HTMLEditor\HTMLEditorConfig;
+use SilverStripe\Model\List\ArrayList;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\Forms\TextField;
-use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\Filters\PartialMatchFilter;
 use SilverStripe\ORM\Search\BasicSearchContext;
-use SilverStripe\ORM\SS_List;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\PermissionProvider;
 use SilverStripe\Security\Security;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\Requirements;
 
 /**
@@ -44,10 +44,7 @@ class ReportAdmin extends LeftAndMain implements PermissionProvider
 
     private static $template_path = null; // defaults to (project)/templates/email
 
-    /**
-     * @deprecated 5.4.0 Will be renamed to model_class
-     */
-    private static $tree_class = Report::class;
+    private static $model_class = Report::class;
 
     private static $url_handlers = array(
         'show/$ReportClass/$Action' => 'handleAction'
@@ -71,11 +68,7 @@ class ReportAdmin extends LeftAndMain implements PermissionProvider
     public function init()
     {
         parent::init();
-
-        // Set custom options for TinyMCE specific to ReportAdmin
-        HTMLEditorConfig::get('cms')->setOption('content_css', project() . '/css/editor.css');
-
-        Requirements::javascript('silverstripe/reports: javascript/ReportAdmin.js');
+        Requirements::javascript('silverstripe/reports: client/dist/js/ReportAdmin.js');
     }
 
     /**
@@ -225,10 +218,10 @@ class ReportAdmin extends LeftAndMain implements PermissionProvider
     {
         return array(
             "CMS_ACCESS_ReportAdmin" => array(
-                'name' => _t('SilverStripe\\CMS\\Controllers\\CMSMain.ACCESS', "Access to '{title}' section", array(
+                'name' => _t(LeftAndMain::class . '.ACCESS', "Access to '{title}' section", array(
                     'title' => static::menu_title()
                 )),
-                'category' => _t('SilverStripe\\Security\\Permission.CMS_ACCESS_CATEGORY', 'CMS Access')
+                'category' => _t(LeftAndMain::class . '.CMS_ACCESS_CATEGORY', 'CMS Access')
             )
         );
     }

@@ -2,7 +2,7 @@
 
 namespace SilverStripe\Security\MemberAuthenticator;
 
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Authenticator as BaseAuthenticator;
 use SilverStripe\Security\Member;
 
@@ -23,7 +23,7 @@ class CMSMemberAuthenticator extends MemberAuthenticator
      * @param Member|null $member
      * @return Member
      */
-    protected function authenticateMember($data, ValidationResult &$result = null, Member $member = null)
+    protected function authenticateMember($data, ?ValidationResult &$result = null, ?Member $member = null)
     {
         // Attempt to identify by temporary ID
         if (!empty($data['tempid'])) {

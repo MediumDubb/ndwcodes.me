@@ -12,9 +12,9 @@ use Symbiote\QueuedJobs\DataObjects\QueuedJobDescriptor;
 class QueuedJobDescriptorExtension extends Extension
 {
     /**
-     * Called on dev/build by DatabaseAdmin
+     * Called by DbBuild
      */
-    public function onAfterBuild(): void
+    protected function onAfterBuild(): void
     {
         GarbageCollectionJob::singleton()->requireDefaultJob();
     }

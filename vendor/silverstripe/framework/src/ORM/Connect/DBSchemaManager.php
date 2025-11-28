@@ -19,9 +19,7 @@ abstract class DBSchemaManager
 {
 
     /**
-     *
-     * @config
-     * Check tables when running /dev/build, and repair them if necessary.
+     * Check tables when building the db, and repair them if necessary.
      * In case of large databases or more fine-grained control on how to handle
      * data corruption in tables, you can disable this behaviour and handle it
      * outside of this class, e.g. through a nightly system task with extended logging capabilities.
@@ -32,11 +30,11 @@ abstract class DBSchemaManager
 
     /**
      * For large databases you can declare a list of DataObject classes which will be excluded from
-     * CHECK TABLE and REPAIR TABLE queries during dev/build. Note that the entire inheritance chain
+     * CHECK TABLE and REPAIR TABLE queries when building the db. Note that the entire inheritance chain
      * for that class will be excluded, including both ancestors and descendants.
      *
      * Only use this configuration if you know what you are doing and have identified specific models
-     * as being problematic during your dev/build process.
+     * as being problematic when building the db.
      */
     private static array $exclude_models_from_db_checks = [];
 
@@ -353,8 +351,9 @@ abstract class DBSchemaManager
      * @param array $indexSchema A list of indexes to create. See {@link requireIndex()}
      * The values of the array can be one of:
      *   - true: Create a single column index on the field named the same as the index.
-     *   - ['fields' => ['A','B','C'], 'type' => 'index/unique/fulltext']: This gives you full
+     *   - ['columns' => ['A','B','C'], 'type' => 'index/unique/fulltext']: This gives you full
      *     control over the index.
+     *   - false to drop the index
      * @param boolean $hasAutoIncPK A flag indicating that the primary key on this table is an autoincrement type
      * @param array $options Create table options (ENGINE, etc.)
      * @param array|bool $extensions List of extensions
@@ -433,7 +432,11 @@ abstract class DBSchemaManager
         // Create custom indexes
         if ($indexSchema) {
             foreach ($indexSchema as $indexName => $indexSpec) {
-                $this->requireIndex($table, $indexName, $indexSpec);
+                if ($indexSpec === false) {
+                    $this->dontRequireIndex($table, $indexName);
+                } else {
+                    $this->requireIndex($table, $indexName, $indexSpec);
+                }
             }
         }
 
@@ -525,8 +528,30 @@ abstract class DBSchemaManager
             // Updated index
             $this->transAlterIndex($table, $index, $spec);
             $this->alterationMessage(
-                "Index $table.$index: changed to $specString <i class=\"build-info-before\">(from $oldSpecString)</i>",
+                "Index $table.$index: changed to '$specString' <i class=\"build-info-before\">(from '$oldSpecString')</i>",
                 "changed"
+            );
+        }
+    }
+
+    public function dontRequireIndex(string $table, string $index): void
+    {
+        // Skip if this is a new table, since it just won't have that index
+        $newTable = !isset($this->tableList[strtolower($table)]);
+        if ($newTable) {
+            return;
+        }
+
+        $indexKey = $this->indexKey($table, $index, []);
+        $indexList = $this->indexList($table);
+        // Drop the index if it exists
+        if (isset($indexList[$indexKey])) {
+            $oldSpec = $indexList[$indexKey];
+            $oldSpecString = $this->convertIndexSpec($oldSpec);
+            $this->transAlterIndex($table, $index, ['drop' => true]);
+            $this->alterationMessage(
+                "Index $table.$index: dropped <i class=\"build-info-before\">(from $oldSpecString)</i>",
+                "deleted"
             );
         }
     }
@@ -561,6 +586,30 @@ abstract class DBSchemaManager
             return '';
         }
         return '"' . implode('","', $columns) . '"';
+    }
+
+    /**
+     * Like implodeColumnList() but allows for a direction to come after the quoted column for some index types.
+     */
+    protected function implodeIndexColumnList(array $columns, string $indexType): string
+    {
+        if (empty($columns)) {
+            return '';
+        }
+        if (!in_array($indexType, ['index', 'unique'])) {
+            return $this->implodeColumnList($columns);
+        }
+        $result = [];
+        foreach ($columns as $col) {
+            if (preg_match('/^(.*) (asc|desc)$/i', $col ?? '', $matches)) {
+                $column = trim($matches[1] ?? '');
+                $direction = strtoupper($matches[2] ?? '');
+                $result[] = "\"$column\" $direction";
+            } else {
+                $result[] = "\"$col\" ASC";
+            }
+        }
+        return implode(',', $result);
     }
 
     /**
@@ -601,7 +650,7 @@ abstract class DBSchemaManager
      * Some indexes may be arrays, such as fulltext and unique indexes, and this allows database-specific
      * arrays to be created. See {@link requireTable()} for details on the index format.
      *
-     * @see http://dev.mysql.com/doc/refman/5.0/en/create-index.html
+     * @see https://dev.mysql.com/doc/refman/8.4/en/create-index.html
      * @see parseIndexSpec() for approximate inverse
      *
      * @param string|array $indexSpec
@@ -625,7 +674,7 @@ abstract class DBSchemaManager
         }
 
         // Combine elements into standard string format
-        return sprintf('%s (%s)', $indexSpec['type'], $this->implodeColumnList($indexSpec['columns']));
+        return sprintf('%s (%s)', $indexSpec['type'], $this->implodeIndexColumnList($indexSpec['columns'], $indexSpec['type']));
     }
 
     /**
@@ -679,8 +728,6 @@ abstract class DBSchemaManager
             $spec = $this->{$spec['type']}($spec['parts'], true);
         }
 
-        // Collations didn't come in until MySQL 4.1.  Anything earlier will throw a syntax error if you try and use
-        // collations.
         if (!$this->database->supportsCollations()) {
             $spec = preg_replace('/ *character set [^ ]+( collate [^ ]+)?( |$)/', '\\2', $spec ?? '');
         }
@@ -714,13 +761,21 @@ abstract class DBSchemaManager
         // Get the version of the field as we would create it. This is used for comparison purposes to see if the
         // existing field is different to what we now want
         if (is_array($spec_orig)) {
-            $spec_orig = $this->{$spec_orig['type']}($spec_orig['parts']);
+            $specArray = $spec_orig;
+            $generated = $specArray['generated'] ?? false;
+            $spec_orig = $this->{$specArray['type']}($specArray['parts']);
+            // Update the spec to include the generation expression and storage type
+            if ($generated !== false) {
+                $specValue = $this->makeGenerated($specValue, $specArray, $generated['expression'], $generated['type']);
+                $spec_orig = $this->makeGenerated($spec_orig, $specArray, $generated['expression'], $generated['type']);
+            }
+            unset($specArray);
         }
 
         if ($newTable || $fieldValue == '') {
             $this->transCreateField($table, $field, $spec_orig);
             $this->alterationMessage("Field $table.$field: created as $spec_orig", "created");
-        } elseif ($fieldValue != $specValue) {
+        } elseif ($fieldValue !== $specValue) {
             // If enums/sets are being modified, then we need to fix existing data in the table.
             // Update any records where the enum is set to a legacy value to be set to the default.
             $enumValuesExpr = "/^(enum|set)\\s*\\(['\"](?<values>[^'\"]+)['\"]\\).*/i";
@@ -753,11 +808,33 @@ abstract class DBSchemaManager
                 }
             }
             $this->transAlterField($table, $field, $spec_orig);
+            if ($this->needRebuildColumn($fieldValue, $spec_orig)) {
+                if (!isset($this->schemaUpdateTransaction[$table]['advancedOptions'])) {
+                    $this->schemaUpdateTransaction[$table]['advancedOptions'] = [];
+                }
+                $this->schemaUpdateTransaction[$table]['advancedOptions'] = array_merge(
+                    $this->schemaUpdateTransaction[$table]['advancedOptions'],
+                    ['rebuildCols' => [$field => true]],
+                );
+            }
             $this->alterationMessage(
-                "Field $table.$field: changed to $specValue <i class=\"build-info-before\">(from {$fieldValue})</i>",
+                "Field $table.$field: changed to '$specValue' <i class=\"build-info-before\">(from '$fieldValue')</i>",
                 "changed"
             );
         }
+    }
+
+    /**
+     * Check whether a column needs to be rebuilt by comparing the existing column spec and the new column spec.
+     *
+     * Subclasses should implement this method to match logic for their SQL server.
+     * For example some servers may have different rules about whether a generated column
+     * can swap between stored and virtual using CHANGE COLUMN
+     */
+    protected function needRebuildColumn(string $existingSpec, string $newSpec): bool
+    {
+        // Assume columns don't need rebuilding for BC. A future major release will make this method abstract.
+        return false;
     }
 
     /**
@@ -838,6 +915,17 @@ abstract class DBSchemaManager
                 echo "<li class=\"$class\">$message</li>";
             }
         }
+    }
+
+    /**
+     * Take the column spec and convert it into the spec for a generated column.
+     */
+    public function makeGenerated(string $spec, array $origSpec, string $expression, string $generationType): string
+    {
+        // Just return the original spec, for BC. A future major release will make this method abstract.
+        // No value will actually get generated if subclasses don't implement this method, so this will just
+        // be taking space in the DB for no value but at least the site won't just fail to build altogether.
+        return $spec;
     }
 
     /**

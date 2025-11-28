@@ -70,10 +70,6 @@ sl:
     Summary: Povzetek
     Title: Naslov
     Type: 'Tip gradnika'
-  DNADesign\Elemental\TopPage\DataExtension:
-    has_one_TopPage: 'Vrhnja stran'
-  DNADesign\Elemental\TopPage\FluentExtension:
-    db_TopPageLocale: 'Lokalizacija vrhnje strani '
   SilverStripe\CMS\Controllers\CMSPageHistoryController:
     PREVIEW: Predogled
   SilverStripe\Versioned\VersionedGridFieldState\VersionedGridFieldState:

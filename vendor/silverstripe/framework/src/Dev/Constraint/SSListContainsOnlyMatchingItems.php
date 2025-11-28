@@ -4,9 +4,8 @@ namespace SilverStripe\Dev\Constraint;
 
 use PHPUnit\Framework\Constraint\Constraint;
 use PHPUnit\Framework\ExpectationFailedException;
-use SilverStripe\Dev\SSListExporter;
 use SilverStripe\Dev\TestOnly;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 
 /**
  * Constraint for checking if every item in a SS_List matches a given match,
@@ -20,20 +19,13 @@ class SSListContainsOnlyMatchingItems extends Constraint implements TestOnly
     private $match;
 
     /**
-     * @deprecated 5.4.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    protected SSListExporter $exporter;
-
-    /**
-     * @var ViewableDataContains
+     * @var ModelDataContains
      */
     private $constraint;
 
     public function __construct($match)
     {
-        $this->exporter = new SSListExporter();
-
-        $this->constraint = new ViewableDataContains($match);
+        $this->constraint = new ModelDataContains($match);
         $this->match = $match;
     }
 

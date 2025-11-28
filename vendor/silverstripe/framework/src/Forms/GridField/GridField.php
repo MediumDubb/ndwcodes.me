@@ -16,18 +16,14 @@ use SilverStripe\Core\Convert;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Forms\Form;
 use SilverStripe\Forms\FormField;
-use SilverStripe\Forms\GridField\FormAction\SessionStore;
 use SilverStripe\Forms\GridField\FormAction\StateStore;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObjectInterface;
 use SilverStripe\ORM\FieldType\DBField;
-use SilverStripe\ORM\Filterable;
-use SilverStripe\ORM\Limitable;
-use SilverStripe\ORM\Sortable;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\View\HTML;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 use SilverStripe\Security\SudoMode\SudoModeServiceInterface;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Forms\GridField\GridFieldViewButton;
@@ -90,7 +86,7 @@ class GridField extends FormField
     /**
      * Data source.
      *
-     * @var SS_List&Filterable&Sortable&Limitable
+     * @var SS_List
      */
     protected $list = null;
 
@@ -138,9 +134,6 @@ class GridField extends FormField
      */
     protected $customDataFields = [];
 
-    /**
-     * @var string
-     */
     protected $name = '';
 
     /**
@@ -149,6 +142,17 @@ class GridField extends FormField
      * @var array
      */
     protected $readonlyComponents = [];
+
+    /**
+     * Intentionally not set to FormField::SCHEMA_DATA_TYPE_STRUCTURAL even though there is no corresponding
+     * react component because we want a hard exception thrown for devleopers to see rather than have
+     * them wonder why the field is not rendering.
+     *
+     * Marked as @interal to allow change in a minor release as a react GridField may be implemented in the future
+     *
+     * @internal
+     */
+    protected $schemaDataType;
 
     /**
      * Pattern used for looking up
@@ -161,7 +165,7 @@ class GridField extends FormField
      * @param SS_List $dataList
      * @param GridFieldConfig $config
      */
-    public function __construct($name, $title = null, SS_List $dataList = null, GridFieldConfig $config = null)
+    public function __construct($name, $title = null, ?SS_List $dataList = null, ?GridFieldConfig $config = null)
     {
         parent::__construct($name, $title, null);
 
@@ -272,8 +276,8 @@ class GridField extends FormField
         $hadEditButton = $copyConfig->getComponentByType(GridFieldEditButton::class) !== null;
 
         // get the whitelist for allowable readonly components
-        $allowedComponents = $this->getReadonlyComponents();
-        foreach ($this->getConfig()->getComponents() as $component) {
+        $allowedComponents = $copy->getReadonlyComponents();
+        foreach ($copy->getConfig()->getComponents() as $component) {
             // if a component doesn't exist, remove it from the readonly version.
             if (!in_array(get_class($component), $allowedComponents ?? [])) {
                 $copyConfig->removeComponent($component);
@@ -294,7 +298,7 @@ class GridField extends FormField
             }
         }
 
-        $copy->extend('afterPerformReadonlyTransformation', $this);
+        $copy->extend('afterPerformReadonlyTransformation', $copy);
 
         return $copy;
     }
@@ -390,7 +394,7 @@ class GridField extends FormField
     /**
      * Set the data source.
      *
-     * @param SS_List&Filterable&Sortable&Limitable $list
+     * @param SS_List $list
      *
      * @return $this
      */
@@ -404,7 +408,7 @@ class GridField extends FormField
     /**
      * Get the data source.
      *
-     * @return SS_List&Filterable&Sortable&Limitable
+     * @return SS_List
      */
     public function getList()
     {
@@ -414,7 +418,7 @@ class GridField extends FormField
     /**
      * Get the data source after applying every {@link GridField_DataManipulator} to it.
      *
-     * @return SS_List&Filterable&Sortable&Limitable
+     * @return SS_List
      */
     public function getManipulatedList()
     {
@@ -474,7 +478,7 @@ class GridField extends FormField
     private function addStateFromRequest(): void
     {
         $request = $this->getRequest();
-        if (($request instanceof NullHTTPRequest) && Controller::has_curr()) {
+        if (($request instanceof NullHTTPRequest) && Controller::curr()) {
             $request = Controller::curr()->getRequest();
         }
 
@@ -484,7 +488,7 @@ class GridField extends FormField
             // Create a dummy state so that we can merge the current state with the request state.
             $newState = new GridState($this, $stateStr);
             // Put the current state on top of the request state.
-            $newState->setValue($oldState->Value());
+            $newState->setValue($oldState->getValue());
             $this->state = $newState;
         }
     }
@@ -544,7 +548,8 @@ class GridField extends FormField
                 if ($session) {
                     $service = Injector::inst()->get(SudoModeServiceInterface::class);
                     if (!$service->check($session)) {
-                        $this->performReadonlyTransformation();
+                        $copy = $this->performReadonlyTransformation();
+                        $this->setConfig($copy->getConfig());
                         $this->setReadonly(true);
                         $this->addSudoModeComponent();
                         $sudoModeTransformation = true;
@@ -683,6 +688,12 @@ class GridField extends FormField
         if ($total > 0) {
             $rows = [];
 
+            if (is_a($list, DataList::class)) {
+                // This will call Versioned::prepopulateVersionNumberCache() which reduces
+                // the number of database requests needed to do the canView() checks below
+                $list->prepopulateCaches();
+            }
+
             foreach ($list as $index => $record) {
                 if ($record->hasMethod('canView') && !$record->canView()) {
                     continue;
@@ -804,7 +815,7 @@ class GridField extends FormField
     /**
      * @param int $total
      * @param int $index
-     * @param ViewableData $record
+     * @param ModelData $record
      * @param array $attributes
      * @param string $content
      *
@@ -822,7 +833,7 @@ class GridField extends FormField
     /**
      * @param int $total
      * @param int $index
-     * @param ViewableData $record
+     * @param ModelData $record
      * @param array $attributes
      * @param string $content
      *
@@ -840,7 +851,7 @@ class GridField extends FormField
     /**
      * @param int $total
      * @param int $index
-     * @param ViewableData $record
+     * @param ModelData $record
      *
      * @return array
      */
@@ -858,7 +869,7 @@ class GridField extends FormField
     /**
      * @param int $total
      * @param int $index
-     * @param ViewableData $record
+     * @param ModelData $record
      *
      * @return array
      */
@@ -929,7 +940,7 @@ class GridField extends FormField
     /**
      * Get the value from a column.
      *
-     * @param ViewableData $record
+     * @param ModelData $record
      * @param string $column
      *
      * @return string
@@ -982,7 +993,7 @@ class GridField extends FormField
      * Use of this method ensures that any special rules around the data for this gridfield are
      * followed.
      *
-     * @param ViewableData $record
+     * @param ModelData $record
      * @param string $fieldName
      *
      * @return mixed
@@ -1009,7 +1020,7 @@ class GridField extends FormField
     /**
      * Get extra columns attributes used as HTML attributes.
      *
-     * @param ViewableData $record
+     * @param ModelData $record
      * @param string $column
      *
      * @return array
@@ -1346,6 +1357,14 @@ class GridField extends FormField
             if ($component instanceof GridField_SaveHandler) {
                 $component->handleSave($this, $record);
             }
+        }
+    }
+
+    public function __clone(): void
+    {
+        $this->config = clone $this->config;
+        if ($this->state !== null) {
+            $this->state = clone $this->state;
         }
     }
 

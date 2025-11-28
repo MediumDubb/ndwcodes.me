@@ -3,14 +3,14 @@
 namespace InnisMaggiore\SilverstripeContentExtensions;
 
 use SilverStripe\ErrorPage\ErrorPage;
-use Silverstripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\TextField;
 use SilverStripe\Forms\TextareaField;
 use SilverStripe\CMS\Model\SiteTree;
 use SilverStripe\CMS\Model\RedirectorPage;
 
-class IMExtendedPage extends DataExtension
+class IMExtendedPage extends Extension
 {
     private static $db = array(
         'H1'            => 'Varchar(250)',

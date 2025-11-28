@@ -5,15 +5,21 @@ namespace SilverStripe\ORM;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Dev\Debug;
 use SilverStripe\ORM\Queries\SQLConditionGroup;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 use Exception;
 use InvalidArgumentException;
 use LogicException;
 use BadMethodCallException;
+use SilverStripe\Core\ClassInfo;
+use SilverStripe\Core\Resettable;
+use SilverStripe\Dev\Deprecation;
 use SilverStripe\ORM\Connect\Query;
 use Traversable;
 use SilverStripe\ORM\DataQuery;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
+use SilverStripe\Model\List\Map;
+use SilverStripe\Model\List\SS_List;
+use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\Filters\SearchFilterable;
 
 /**
@@ -38,11 +44,8 @@ use SilverStripe\ORM\Filters\SearchFilterable;
  *
  * @template T of DataObject
  * @implements SS_List<T>
- * @implements Filterable<T>
- * @implements Sortable<T>
- * @implements Limitable<T>
  */
-class DataList extends ViewableData implements SS_List, Filterable, Sortable, Limitable
+class DataList extends ModelData implements SS_List, Resettable
 {
     use SearchFilterable;
 
@@ -90,6 +93,47 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      * Eagerly loaded relational data
      */
     private array $eagerLoadedData = [];
+
+    /**
+     * Whether the query result should be cached or not
+     */
+    private bool $useCache = false;
+
+    /**
+     * @internal
+     */
+    private static array $cachedQueries = [];
+
+    public static function reset(string $class = ''): void
+    {
+        if ($class) {
+            // Reset for all superclasses as well, since superclass queries
+            // include records from subclasses
+            $classHierarchy = ClassInfo::ancestry($class);
+            foreach ($classHierarchy as $currentClass) {
+                unset(DataList::$cachedQueries[$currentClass]);
+            }
+        } else {
+            DataList::$cachedQueries = [];
+        }
+        // DataQuery::reset will go through the ancestry too
+        DataQuery::reset($class);
+    }
+
+    /**
+     * Reset the query cache and destroy associated objects.
+     */
+    public static function resetAndDestroyCache(): void
+    {
+        foreach (DataList::$cachedQueries as $cache) {
+            foreach ($cache as $data) {
+                foreach ($data['records'] as $record) {
+                    $record->destroy();
+                }
+            }
+        }
+        static::reset();
+    }
 
     /**
      * Create a new DataList.
@@ -167,6 +211,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
             $res = call_user_func($callback, $list->dataQuery, $list);
             if ($res) {
                 $list->dataQuery = $res;
+                $list->dataQuery->setUseCache($list->useCache);
             }
 
             return $list;
@@ -179,6 +224,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
             $res = $callback($list->dataQuery, $list);
             if ($res) {
                 $list->dataQuery = $res;
+                $list->dataQuery->setUseCache($list->useCache);
             }
         } catch (Exception $e) {
             $list->inAlterDataQueryCall = false;
@@ -200,6 +246,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
         $clone = clone $this;
         $clone->dataQuery = $dataQuery;
         $clone->dataClass = $dataQuery->dataClass();
+        $dataQuery->setUseCache($clone->useCache);
         return $clone;
     }
 
@@ -233,7 +280,22 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      */
     public function sql(&$parameters = [])
     {
-        return $this->dataQuery->query()->sql($parameters);
+        return $this->dataQuery->sql($parameters);
+    }
+
+    /**
+     * Set whether to cache the result of this query or not.
+     * Query uniqueness is based on the query itself (tables, joins, sort, filter, etc) and eagerloading relations.
+     * That means a query with eagerloaded relations won't match an otherwise identical query with no eagerloading,
+     * though that implementation detail is subject to change.
+     *
+     * @return static<T>
+     */
+    public function setUseCache(bool $useCache): static
+    {
+        $this->useCache = $useCache;
+        $this->dataQuery->setUseCache($useCache);
+        return $this;
     }
 
     /**
@@ -282,11 +344,8 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
 
     /**
      * Returns true if this DataList can be sorted by the given field.
-     *
-     * @param string $fieldName
-     * @return boolean
      */
-    public function canSortBy($fieldName)
+    public function canSortBy(string $fieldName): bool
     {
         return $this->dataQuery()->query()->canSortBy($fieldName);
     }
@@ -295,9 +354,8 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      * Returns true if this DataList can be filtered by the given field.
      *
      * @param string $fieldName (May be a related field in dot notation like Member.FirstName)
-     * @return boolean
      */
-    public function canFilterBy($fieldName)
+    public function canFilterBy(string $fieldName): bool
     {
         $model = singleton($this->dataClass);
         $relations = explode(".", $fieldName ?? '');
@@ -470,7 +528,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      *
      * Raw SQL is not accepted, only actual field names can be passed
      *
-     * @see Filterable::filter()
+     * @see SS_List::filter()
      *
      * @example $list = $list->filter('Name', 'bob'); // only bob in the list
      * @example $list = $list->filter('Name', array('aziz', 'bob'); // aziz and bob in list
@@ -486,17 +544,16 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      * @param string|array Escaped SQL statement. If passed as array, all keys and values will be escaped internally
      * @return static<T>
      */
-    public function filter()
+    public function filter(...$args): static
     {
         // Validate and process arguments
-        $arguments = func_get_args();
-        switch (sizeof($arguments ?? [])) {
+        switch (sizeof($args ?? [])) {
             case 1:
-                $filters = $arguments[0];
+                $filters = $args[0];
 
                 break;
             case 2:
-                $filters = [$arguments[0] => $arguments[1]];
+                $filters = [$args[0] => $args[1]];
 
                 break;
             default:
@@ -548,15 +605,15 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      * @param string|array See {@link filter()}
      * @return static<T>
      */
-    public function filterAny()
+    public function filterAny(...$args): static
     {
-        $numberFuncArgs = count(func_get_args());
+        $numberFuncArgs = count($args);
         $whereArguments = [];
 
-        if ($numberFuncArgs == 1 && is_array(func_get_arg(0))) {
-            $whereArguments = func_get_arg(0);
+        if ($numberFuncArgs == 1 && is_array($args[0])) {
+            $whereArguments = $args[0];
         } elseif ($numberFuncArgs == 2) {
-            $whereArguments[func_get_arg(0)] = func_get_arg(1);
+            $whereArguments[$args[0]] = $args[1];
         } else {
             throw new InvalidArgumentException('Incorrect number of arguments passed to filterAny()');
         }
@@ -587,20 +644,12 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
     /**
      * Note that, in the current implementation, the filtered list will be an ArrayList, but this may change in a
      * future implementation.
-     * @see Filterable::filterByCallback()
      *
      * @example $list = $list->filterByCallback(function($item, $list) { return $item->Age == 9; })
-     * @param callable $callback
      * @return ArrayList<T>
      */
-    public function filterByCallback($callback)
+    public function filterByCallback(callable $callback): SS_List
     {
-        if (!is_callable($callback)) {
-            throw new LogicException(sprintf(
-                "SS_Filterable::filterByCallback() passed callback must be callable, '%s' given",
-                gettype($callback)
-            ));
-        }
         $output = ArrayList::create();
         foreach ($this as $item) {
             if (call_user_func($callback, $item, $this)) {
@@ -608,6 +657,22 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
             }
         }
         return $output;
+    }
+
+    /**
+     * Return a copy of this list which only includes items where $fieldToFilterBy matches values in $fieldFromOtherList from $list.
+     *
+     * If both fields are ID, the $list dataclass must be in the same class hierarchy as the dataclass in this list
+     *
+     * @param SS_List<DataObject> $list
+     * @param string $fieldToFilterBy The name of the field in $this to filter by
+     * @param string $fieldFromOtherList The name of the field in $list to get filter values from
+     * @return static<T>
+     * @throws InvalidArgumentException
+     */
+    public function filterByList(SS_List $list, string $fieldToFilterBy = 'ID', string $fieldFromOtherList = 'ID'): static
+    {
+        return $this->filterOrExcludeByList($list, $fieldToFilterBy, $fieldFromOtherList, false);
     }
 
     /**
@@ -689,15 +754,15 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      * @param string [optional]
      * @return static<T>
      */
-    public function exclude()
+    public function exclude(...$args): static
     {
-        $numberFuncArgs = count(func_get_args());
+        $numberFuncArgs = count($args);
         $whereArguments = [];
 
-        if ($numberFuncArgs == 1 && is_array(func_get_arg(0))) {
-            $whereArguments = func_get_arg(0);
+        if ($numberFuncArgs == 1 && is_array($args[0])) {
+            $whereArguments = $args[0];
         } elseif ($numberFuncArgs == 2) {
-            $whereArguments[func_get_arg(0)] = func_get_arg(1);
+            $whereArguments[$args[0]] = $args[1];
         } else {
             throw new InvalidArgumentException('Incorrect number of arguments passed to exclude()');
         }
@@ -729,15 +794,15 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      *
      * @return static<T>
      */
-    public function excludeAny()
+    public function excludeAny(...$args): static
     {
-        $numberFuncArgs = count(func_get_args());
+        $numberFuncArgs = count($args);
         $whereArguments = [];
 
-        if ($numberFuncArgs == 1 && is_array(func_get_arg(0))) {
-            $whereArguments = func_get_arg(0);
+        if ($numberFuncArgs == 1 && is_array($args[0])) {
+            $whereArguments = $args[0];
         } elseif ($numberFuncArgs == 2) {
-            $whereArguments[func_get_arg(0)] = func_get_arg(1);
+            $whereArguments[$args[0]] = $args[1];
         } else {
             throw new InvalidArgumentException('Incorrect number of arguments passed to excludeAny()');
         }
@@ -752,6 +817,22 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
     }
 
     /**
+     * Return a copy of this list which does not include items where $fieldToFilterBy matches values in $fieldFromOtherList from $list.
+     *
+     * If both fields are ID, the $list dataclass must be in the same class hierarchy as the dataclass in this list
+     *
+     * @param SS_List<DataObject> $list
+     * @param string $fieldToFilterBy The name of the field in $this to exclude by
+     * @param string $fieldFromOtherList The name of the field in $list to get exclude values from
+     * @return static<T>
+     * @throws InvalidArgumentException
+     */
+    public function excludeByList(SS_List $list, string $fieldToFilterBy = 'ID', string $fieldFromOtherList = 'ID'): static
+    {
+        return $this->filterOrExcludeByList($list, $fieldToFilterBy, $fieldFromOtherList, true);
+    }
+
+    /**
      * This method returns a copy of this list that does not contain any DataObjects that exists in $list
      *
      * The $list passed needs to contain the same dataclass as $this
@@ -759,16 +840,12 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      * @param DataList<DataObject> $list
      * @return static<T>
      * @throws InvalidArgumentException
+     * @deprecated 6.1.0 use excludeByList() instead.
      */
     public function subtract(DataList $list)
     {
-        if ($this->dataClass() != $list->dataClass()) {
-            throw new InvalidArgumentException('The list passed must have the same dataclass as this class');
-        }
-
-        return $this->alterDataQuery(function (DataQuery $query) use ($list) {
-            $query->subtract($list->dataQuery());
-        });
+        Deprecation::notice('6.1.0', 'Use excludeByList() instead.');
+        return $this->excludeByList($list);
     }
 
     /**
@@ -833,7 +910,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      * This is when the query is actually executed.
      * @return array<T>
      */
-    public function toArray()
+    public function toArray(): array
     {
         $results = [];
 
@@ -846,10 +923,8 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
 
     /**
      * Return this list as an array and every object it as an sub array as well
-     *
-     * @return array
      */
-    public function toNestedArray()
+    public function toNestedArray(): array
     {
         $result = [];
 
@@ -860,7 +935,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
         return $result;
     }
 
-    public function each($callback)
+    public function each(callable $callback): static
     {
         foreach ($this as $row) {
             $callback($row);
@@ -869,7 +944,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
         return $this;
     }
 
-    public function debug()
+    public function debug(): string
     {
         $val = "<h2>" . static::class . "</h2><ul>";
         foreach ($this->toNestedArray() as $item) {
@@ -884,9 +959,8 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      *
      * @param string $keyField - the 'key' field of the result array
      * @param string $titleField - the value field of the result array
-     * @return Map
      */
-    public function map($keyField = 'ID', $titleField = 'Title')
+    public function map(string $keyField = 'ID', string $titleField = 'Title'): Map
     {
         return new Map($this, $keyField, $titleField);
     }
@@ -925,7 +999,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
 
     private function setDataObjectEagerLoadedData(DataObject $item): void
     {
-        // cache $item->ID at the top of this method to reduce calls to ViewableData::__get()
+        // cache $item->ID at the top of this method to reduce calls to ModelData::__get()
         $itemID = $item->ID;
         foreach (array_keys($this->eagerLoadedData) as $relation) {
             if (array_key_exists($itemID, $this->eagerLoadedData[$relation])) {
@@ -952,8 +1026,27 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      */
     public function getIterator(): Traversable
     {
+        $dataClass = $this->dataClass();
+        $key = null;
         foreach ($this->getFinalisedQuery() as $row) {
-            yield $this->createDataObject($row);
+            $record = null;
+
+            // Cache the instantiated record if we're caching the query and there's an ID key
+            if ($this->useCache && isset($row['ID'])) {
+                if ($key === null) {
+                    $key = $this->getCacheKey();
+                }
+                if (isset(DataList::$cachedQueries[$dataClass][$key]['records'][$row['ID']])) {
+                    $record = DataList::$cachedQueries[$dataClass][$key]['records'][$row['ID']];
+                } else {
+                    $record = $this->createDataObject($row);
+                    DataList::$cachedQueries[$dataClass][$key]['records'][$row['ID']] = $record;
+                }
+            } else {
+                $record = $this->createDataObject($row);
+            }
+
+            yield $record;
         }
 
         // Re-set the finaliseQuery so that it can be re-executed
@@ -1034,9 +1127,17 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
         throw new InvalidArgumentException("Invalid relation passed to eagerLoad() - $relationChain");
     }
 
+    /**
+     * Get the key that will be used to identify this query for caching purposes.
+     */
+    protected function getCacheKey(): string
+    {
+        return $this->dataQuery->getCacheKey() . '_' . sha1(serialize($this->eagerLoadRelationChains));
+    }
+
     private function executeQuery(): Query
     {
-        $query = $this->dataQuery->query()->execute();
+        $query = $this->dataQuery->execute();
         $this->fetchEagerLoadRelations($query);
         return $query;
     }
@@ -1046,11 +1147,21 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
         if (empty($this->eagerLoadRelationChains)) {
             return;
         }
-        $topLevelIDs = $query->column('ID');
-        if (empty($topLevelIDs)) {
+        if ($query->numRecords() < 1) {
             return;
         }
 
+        // Used cached data if we have it
+        if ($this->useCache) {
+            $dataClass = $this->dataClass();
+            $cacheKey = $this->getCacheKey();
+            if (isset(DataList::$cachedQueries[$dataClass][$cacheKey])) {
+                $this->eagerLoadedData = DataList::$cachedQueries[$dataClass][$cacheKey]['eagerloadedData'];
+                return;
+            }
+        }
+
+        $topLevelIDs = $query->column('ID');
         foreach ($this->eagerLoadRelationChains as $relationChain) {
             $parentDataClass = $this->dataClass();
             $parentIDs = $topLevelIDs;
@@ -1125,6 +1236,11 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
                 }
                 $parentDataClass = $relationDataClass;
             }
+        }
+
+        // Cached data if we need it
+        if ($this->useCache) {
+            DataList::$cachedQueries[$this->dataClass()][$cacheKey]['eagerloadedData'] = $this->eagerLoadedData;
         }
     }
 
@@ -1383,7 +1499,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
                 // Only get joins relevant for the parent list
                 . '" WHERE "' . $parentIDField . '" IN (' . implode(',', $parentIDs) . ')'
                 // Exclude any children that got filtered out
-                . ' AND ' . $childIDField . ' IN (' . implode(',', $fetchedIDs) . ')'
+                . ' AND "' . $childIDField . '" IN (' . implode(',', $fetchedIDs) . ')'
                 // Respect sort order of fetched items
                 . ' ORDER BY ' . $orderByClause;
 
@@ -1446,6 +1562,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
                     // Reset the query if we can - but if not, we have to iterate over the whole result set
                     // so that we will be starting from the beginning again on the next iteration
                     if (method_exists($parents, 'rewind')) {
+                        /** @var Query $parents */
                         $parents->rewind();
                         break;
                     }
@@ -1682,11 +1799,9 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
 
     /**
      * Returns the first item in this DataList
-     *
-     * The object returned is not cached, unlike {@link DataObject::get_one()}
      * @return T|null
      */
-    public function first()
+    public function first(): ?DataObject
     {
         // We need to trigger eager loading by iterating over the list, rather than just fetching
         // the first row from the dataQuery.
@@ -1701,11 +1816,9 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
 
     /**
      * Returns the last item in this DataList
-     *
-     * The object returned is not cached, unlike {@link DataObject::get_one()}
      * @return T|null
      */
-    public function last()
+    public function last(): ?DataObject
     {
         // We need to trigger eager loading by iterating over the list, rather than just fetching
         // the last row from the dataQuery.
@@ -1721,10 +1834,8 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
 
     /**
      * Returns true if this DataList has items
-     *
-     * @return bool
      */
-    public function exists()
+    public function exists(): bool
     {
         return $this->dataQuery->exists();
     }
@@ -1732,13 +1843,9 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
     /**
      * Find the first DataObject of this DataList where the given key = value
      *
-     * The object returned is not cached, unlike {@link DataObject::get_one()}
-     *
-     * @param string $key
-     * @param string $value
      * @return T|null
      */
-    public function find($key, $value)
+    public function find(string $key, mixed $value): ?DataObject
     {
         return $this->filter($key, $value)->first();
     }
@@ -1756,7 +1863,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
         });
     }
 
-    public function byIDs($ids)
+    public function byIDs(array $ids): static
     {
         return $this->filter('ID', $ids);
     }
@@ -1764,21 +1871,17 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
     /**
      * Return the first DataObject with the given ID
      *
-     * The object returned is not cached, unlike {@link DataObject::get_by_id()}
      * @return T|null
      */
-    public function byID($id)
+    public function byID(mixed $id): ?DataObject
     {
         return $this->filter('ID', $id)->first();
     }
 
     /**
      * Returns an array of a single field value for all items in the list.
-     *
-     * @param string $colName
-     * @return array
      */
-    public function column($colName = "ID")
+    public function column(string $colName = "ID"): array
     {
         if ($this->finalisedQuery) {
             $finalisedQuery = clone $this->finalisedQuery;
@@ -1795,7 +1898,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      * @param string $colName
      * @return array
      */
-    public function columnUnique($colName = "ID")
+    public function columnUnique(string $colName = "ID"): array
     {
         return $this->dataQuery->distinct(true)->column($colName);
     }
@@ -1868,7 +1971,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
         return $relation;
     }
 
-    public function dbObject($fieldName)
+    public function dbObject(string $fieldName): ?DBField
     {
         return singleton($this->dataClass)->dbObject($fieldName);
     }
@@ -1944,10 +2047,10 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      *
      * @param DataObject|int $item
      */
-    public function add($item)
+    public function add(mixed $item): void
     {
         // Nothing needs to happen by default
-        // TO DO: If a filter is given to this data list then
+        // Some subclasses (e.g. relation lists) may implement this method.
     }
 
     /**
@@ -1967,14 +2070,18 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      *
      * @param DataObject $item
      */
-    public function remove($item)
+    public function remove(mixed $item)
     {
+        if (!is_a($item, $this->dataClass)) {
+            throw new InvalidArgumentException('Item must be an instance of ' . $this->dataClass);
+        }
         // By default, we remove an item from a DataList by deleting it.
         $this->removeByID($item->ID);
     }
 
     /**
      * Remove an item from this DataList by ID
+     * There is no return type defined as different subclasses may return different types
      *
      * @param int $itemID The primary ID
      */
@@ -1992,7 +2099,7 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
      *
      * @return static<T>
      */
-    public function reverse()
+    public function reverse(): static
     {
         return $this->alterDataQuery(function (DataQuery $query) {
             $query->reverseSort();
@@ -2009,8 +2116,6 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
 
     /**
      * Returns item stored in list with index $key
-     *
-     * The object returned is not cached, unlike {@link DataObject::get_one()}
      *
      * @return T|null
      */
@@ -2077,5 +2182,66 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
 
             $currentChunk++;
         }
+    }
+
+    /**
+     * Prepopulate any extension caches with the current dataclass and IDs of records
+     *
+     * Note that because this calls column() and may result in other database queries based on
+     * the IDs that returns, this should be called after all filtering, sorting, etc has already
+     * been set for this list.
+     */
+    public function prepopulateCaches(): void
+    {
+        $ids = $this->column('ID');
+        $this->extend('onPrepopulateCaches', $ids);
+    }
+
+    /**
+     * Shared logic for filterByList() and excludeByList()
+     */
+    private function filterOrExcludeByList(SS_List $list, string $fieldToFilterBy, string $fieldFromOtherList, bool $isExclude): static
+    {
+        $thisDataClass = $this->dataClass();
+        $listDataClass = $this->getDataClassFromList($list);
+        if ($fieldToFilterBy === 'ID'
+            && $fieldFromOtherList === 'ID'
+            && !is_a($thisDataClass, $listDataClass, true)
+            && !is_a($listDataClass, $thisDataClass, true)
+        ) {
+            throw new InvalidArgumentException('If both columns are ID, the $list dataclass must be in the same class hierarchy as the dataclass in this list');
+        }
+        // Try to filter/exclude by the list with a subquery for best performance
+        if ($list instanceof DataList) {
+            return $this->alterDataQuery(function (DataQuery $query) use ($list, $fieldToFilterBy, $fieldFromOtherList, $isExclude) {
+                if ($isExclude) {
+                    $query->excludeByQuery($list->dataQuery(), $fieldToFilterBy, $fieldFromOtherList);
+                } else {
+                    $query->filterByQuery($list->dataQuery(), $fieldToFilterBy, $fieldFromOtherList);
+                }
+            });
+        }
+        // Fall back to regular filtering/excluding
+        $columnFromList = $list->columnUnique($fieldFromOtherList);
+        if ($isExclude) {
+            return $this->exclude($fieldToFilterBy, $columnFromList);
+        }
+        return $this->filter($fieldToFilterBy, $columnFromList);
+    }
+
+    /**
+     * Get the class of items that the list holds, or null for lists with non-objects
+     */
+    private function getDataClassFromList(SS_List $list): ?string
+    {
+        if (ClassInfo::hasMethod($list, 'dataClass')) {
+            return $list->dataClass();
+        }
+        // Assume all items in the list have the same class, like ArrayList does.
+        $item = $list->first();
+        if (is_object($item)) {
+            return get_class($item);
+        }
+        return null;
     }
 }

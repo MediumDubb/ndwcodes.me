@@ -32,7 +32,7 @@ class LogOutAuthenticationHandler implements AuthenticationHandler
      * @param bool $persistent
      * @param HTTPRequest $request|null
      */
-    public function logIn(Member $member, $persistent = false, HTTPRequest $request = null)
+    public function logIn(Member $member, $persistent = false, ?HTTPRequest $request = null)
     {
         // noop
     }
@@ -41,17 +41,18 @@ class LogOutAuthenticationHandler implements AuthenticationHandler
      * @param HTTPRequest $request|null
      * @throws InvalidArgumentException
      */
-    public function logOut(HTTPRequest $request = null)
+    public function logOut(?HTTPRequest $request = null)
     {
         // Fall back to retrieving request from current Controller if available
         if ($request === null) {
-            if (!Controller::has_curr()) {
+            $controller = Controller::curr();
+            if (!$controller) {
                 throw new InvalidArgumentException(
                     "Authentication with SessionManager enabled requires an active HTTPRequest."
                 );
             }
 
-            $request = Controller::curr()->getRequest();
+            $request = $controller->getRequest();
         }
 
         $loginHandler = Injector::inst()->get(LogInAuthenticationHandler::class);

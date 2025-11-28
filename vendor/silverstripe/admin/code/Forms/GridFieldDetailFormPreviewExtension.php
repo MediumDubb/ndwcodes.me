@@ -17,7 +17,7 @@ use SilverStripe\View\SSViewer;
  */
 class GridFieldDetailFormPreviewExtension extends Extension
 {
-    public function updateItemEditForm(Form $form): void
+    protected function updateItemEditForm(Form $form): void
     {
         $record = $this->owner->getRecord();
         // See LeftAndMain::getEditForm()
@@ -35,7 +35,6 @@ class GridFieldDetailFormPreviewExtension extends Extension
     {
         $navigator = SilverStripeNavigator::create($this->owner->getRecord());
         $templates = SSViewer::get_templates_by_class(LeftAndMain::class, '_SilverStripeNavigator', LeftAndMain::class);
-        $renderWith = SSViewer::chooseTemplate($templates);
-        return $navigator->renderWith($renderWith);
+        return $navigator->renderWith($templates);
     }
 }

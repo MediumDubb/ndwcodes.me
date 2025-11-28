@@ -2,7 +2,7 @@
 
 namespace SilverStripe\Security;
 
-use SilverStripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\ORM\ManyManyList;
 
 /**
@@ -15,9 +15,9 @@ use SilverStripe\ORM\ManyManyList;
  * @method ManyManyList<Group> ViewerGroups()
  * @method ManyManyList<Member> ViewerMembers()
  *
- * @extends DataExtension<DataObject>
+ * @extends Extension<DataObject>
  */
-class InheritedPermissionsExtension extends DataExtension
+class InheritedPermissionsExtension extends Extension
 {
     private static array $db = [
         'CanViewType' => "Enum('Anyone, LoggedInUsers, OnlyTheseUsers, OnlyTheseMembers, Inherit', 'Inherit')",
@@ -41,5 +41,22 @@ class InheritedPermissionsExtension extends DataExtension
         'EditorGroups',
         'ViewerMembers',
         'EditorMembers',
+    ];
+
+    /**
+     * These fields will need to be added manually, since SiteTree wants it in the special settings tab
+     * and nothing else in code that uses these fields is scaffolded.
+     */
+    private static array $scaffold_cms_fields_settings = [
+        'ignoreFields' => [
+            'CanViewType',
+            'CanEditType',
+        ],
+        'ignoreRelations' => [
+            'ViewerGroups',
+            'EditorGroups',
+            'ViewerMembers',
+            'EditorMembers',
+        ],
     ];
 }

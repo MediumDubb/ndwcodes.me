@@ -10,9 +10,9 @@ use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\PasswordField;
-use SilverStripe\Forms\RequiredFields;
+use SilverStripe\Forms\Validation\RequiredFieldsValidator;
 use SilverStripe\Forms\TextField;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\LoginForm as BaseLoginForm;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\RememberLoginHash;
@@ -23,9 +23,9 @@ use SilverStripe\View\Requirements;
  * Log-in form for the "member" authentication method.
  *
  * Available extension points:
- * - "authenticationFailed": Called when login was not successful.
+ * - "onAuthenticationFailed": Called when login was not successful.
  *    Arguments: $data containing the form submission
- * - "forgotPassword": Called before forgot password logic kicks in,
+ * - "onForgotPassword": Called before forgot password logic kicks in,
  *    allowing extensions to "veto" execution by returning FALSE.
  *    Arguments: $member containing the detected Member record
  */
@@ -111,7 +111,7 @@ class MemberLoginForm extends BaseLoginForm
         if (isset($logoutAction)) {
             $this->setFormAction($logoutAction);
         }
-        $this->setValidator(RequiredFields::create(static::config()->get('required_fields')));
+        $this->setValidator(RequiredFieldsValidator::create(static::config()->get('required_fields')));
     }
 
     /**

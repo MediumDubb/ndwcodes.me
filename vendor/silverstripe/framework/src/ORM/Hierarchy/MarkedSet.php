@@ -5,12 +5,13 @@ namespace SilverStripe\ORM\Hierarchy;
 use InvalidArgumentException;
 use LogicException;
 use SilverStripe\Core\Injector\Injectable;
-use SilverStripe\ORM\ArrayLib;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Core\ArrayLib;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBField;
-use SilverStripe\ORM\SS_List;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\List\SS_List;
+use SilverStripe\Model\ArrayData;
+use SilverStripe\ORM\Hierarchy\Hierarchy;
 
 /**
  * Contains a set of hierarchical objects generated from a marking compilation run.
@@ -47,12 +48,12 @@ class MarkedSet
     public $markingFilter;
 
     /**
-     * @var DataObject
+     * @var DataObject&Hierarchy
      */
     protected $rootNode = null;
 
     /**
-     * Method to use for getting children. Defaults to 'AllChildrenIncludingDeleted'
+     * Method to use for getting children. Defaults to Hierarchy.tree_children_method config
      *
      * @var string
      */
@@ -180,7 +181,11 @@ class MarkedSet
      */
     public function getChildrenMethod()
     {
-        return $this->childrenMethod ?: 'AllChildrenIncludingDeleted';
+        if ($this->childrenMethod) {
+            return $this->childrenMethod;
+        }
+        $baseClass = $this->rootNode->getHierarchyBaseClass();
+        return $baseClass::config()->get('tree_children_method');
     }
 
     /**
@@ -453,9 +458,18 @@ class MarkedSet
         $nodeCountThreshold = $this->getNodeCountThreshold();
 
         // Add root node, not-expanded by default
+        /** @var DataObject&Hierarchy $rootNode */
         $rootNode = $this->rootNode;
         $this->clearMarks();
         $this->markUnexpanded($rootNode);
+
+        $baseClass = $rootNode->getHierarchyBaseClass();
+        if (!Hierarchy::numChildrenCacheIsPopulated($baseClass)) {
+            $rootNode->prepopulateTreeDataCache(null, [
+                'childrenMethod' => $this->getChildrenMethod(),
+                'numChildMethod' => $this->getNumChildrenMethod(),
+            ]);
+        }
 
         // Build markedNodes for this subtree until we reach the threshold
         // foreach can't handle an ever-growing $nodes list

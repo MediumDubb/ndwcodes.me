@@ -3,6 +3,7 @@
 namespace SilverStripe\Forms;
 
 use SilverStripe\ORM\FieldType\DBCurrency;
+use SilverStripe\Core\Validation\ValidationResult;
 
 /**
  * Renders a text field, validating its input as a currency.
@@ -29,6 +30,7 @@ class CurrencyField extends TextField
             . number_format((double)preg_replace('/[^0-9.\-]/', '', $value ?? ''), 2);
         return $this;
     }
+
     /**
      * Overwrite the datavalue before saving to the db ;-)
      * return 0.00 if no value, or value is non-numeric
@@ -54,21 +56,20 @@ class CurrencyField extends TextField
         return $this->castedCopy(CurrencyField_Readonly::class);
     }
 
-    public function validate($validator)
+    public function validate(): ValidationResult
     {
-        $result = true;
-        $currencySymbol = preg_quote(DBCurrency::config()->uninherited('currency_symbol') ?? '');
-        $regex = '/^\s*(\-?' . $currencySymbol . '?|' . $currencySymbol . '\-?)?(\d{1,3}(\,\d{3})*|(\d+))(\.\d{2})?\s*$/';
-        if (!empty($this->value) && !preg_match($regex ?? '', $this->value ?? '')) {
-            $validator->validationError(
-                $this->name,
-                _t('SilverStripe\\Forms\\Form.VALIDCURRENCY', "Please enter a valid currency"),
-                "validation"
-            );
-            $result = false;
-        }
-
-        return $this->extendValidationResult($result, $validator);
+        $this->beforeExtending('updateValidate', function (ValidationResult $result) {
+            $currencySymbol = preg_quote(DBCurrency::config()->uninherited('currency_symbol') ?? '');
+            $regex = '/^\s*(\-?' . $currencySymbol . '?|' . $currencySymbol . '\-?)?(\d{1,3}(\,\d{3})*|(\d+))(\.\d{2})?\s*$/';
+            if (!empty($this->value) && !preg_match($regex ?? '', $this->value ?? '')) {
+                $result->addFieldError(
+                    $this->name,
+                    _t('SilverStripe\\Forms\\Form.VALIDCURRENCY', "Please enter a valid currency"),
+                    "validation"
+                );
+            }
+        });
+        return parent::validate();
     }
 
     public function getSchemaValidation()

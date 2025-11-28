@@ -7,6 +7,7 @@ use InvalidArgumentException;
 use SilverStripe\Admin\CMSBatchActionHandler;
 use SilverStripe\Admin\LeftAndMain;
 use SilverStripe\Admin\LeftAndMainFormRequestHandler;
+use SilverStripe\Admin\ModalController;
 use SilverStripe\AssetAdmin\BatchAction\DeleteAssets;
 use SilverStripe\AssetAdmin\Forms\AssetFormFactory;
 use SilverStripe\AssetAdmin\Forms\FileFormFactory;
@@ -23,18 +24,15 @@ use SilverStripe\Assets\Folder;
 use SilverStripe\Assets\Image;
 use SilverStripe\Assets\Storage\AssetNameGenerator;
 use SilverStripe\Assets\Upload;
-use SilverStripe\CampaignAdmin\AddToCampaignHandler;
 use SilverStripe\Control\Controller;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Core\Injector\Injector;
-use SilverStripe\Dev\Deprecation;
 use SilverStripe\Forms\Form;
 use SilverStripe\Forms\FormFactory;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\FieldType\DBHTMLText;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Permission;
 use SilverStripe\Security\PermissionProvider;
@@ -44,12 +42,18 @@ use SilverStripe\Versioned\Versioned;
 use SilverStripe\View\Requirements;
 use SilverStripe\View\SSViewer;
 use SilverStripe\VersionedAdmin\Extensions\FileArchiveExtension;
+use SilverStripe\AssetAdmin\Controller\AssetAdminFile;
+use stdClass;
+use SilverStripe\ORM\DataList;
+use SilverStripe\Forms\DateField;
+use SilverStripe\ORM\DataQuery;
+use SilverStripe\Core\ArrayLib;
 
 /**
  * AssetAdmin is the 'file store' section of the CMS.
  * It provides an interface for manipulating the File and Folder objects in the system.
  */
-class AssetAdmin extends LeftAndMain implements PermissionProvider
+class AssetAdmin extends AssetAdminOpen implements PermissionProvider
 {
     private static $url_segment = 'assets';
 
@@ -59,20 +63,13 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
 
     private static $menu_icon_class = 'font-icon-image';
 
-    /**
-     * @deprecated 5.4.0 Will be renamed to model_class
-     */
-    private static $tree_class = Folder::class;
+    private static $model_class = Folder::class;
 
     private static $url_handlers = [
         // Legacy redirect for SS3-style detail view
         'EditForm/field/File/item/$FileID/$Action' => 'legacyRedirectForEditView',
         // Pass all URLs to the index, for React to unpack
         'show/$FolderID/edit/$FileID' => 'index',
-        // API access points with structured data
-        'POST api/createFile' => 'apiCreateFile',
-        'POST api/uploadFile' => 'apiUploadFile',
-        'GET api/history' => 'apiHistory',
         'fileEditForm/$ID' => 'fileEditForm',
         'fileInsertForm/$ID' => 'fileInsertForm',
         'fileEditorLinkForm/$ID' => 'fileEditorLinkForm',
@@ -80,15 +77,43 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
         'folderCreateForm/$ParentID' => 'folderCreateForm',
         'fileSelectForm/$ID' => 'fileSelectForm',
         'moveForm/$ID' => 'moveForm',
+        'GET api/history' => 'apiHistory',
+        'GET api/readDescendantCounts' => 'apiReadDescendantCounts',
+        'GET api/readLiveOwnerCounts' => 'apiReadLiveOwnerCounts',
+        'GET api/readUsage/$ID!' => 'apiReadUsage',
+        'POST api/delete' => 'apiDelete',
+        'POST api/createFile' => 'apiCreateFile',
+        'POST api/move' => 'apiMove',
+        'POST api/publish' => 'apiPublish',
+        'POST api/unpublish' => 'apiUnpublish',
+        'POST api/uploadFile' => 'apiUploadFile',
     ];
 
     /**
-     * Amount of results showing on a single page.
-     *
-     * @config
-     * @var int
+     * @var array
      */
-    private static $page_length = 50;
+    private static array $allowed_actions = [
+        'legacyRedirectForEditView',
+        'folderCreateForm',
+        'fileEditForm',
+        'fileHistoryForm',
+        'fileInsertForm',
+        'fileEditorLinkForm',
+        'schema',
+        'fileSelectForm',
+        'fileSearchForm',
+        'moveForm',
+        'apiCreateFile',
+        'apiDelete',
+        'apiHistory',
+        'apiReadDescendantCounts',
+        'apiReadLiveOwnerCounts',
+        'apiReadUsage',
+        'apiMove',
+        'apiPublish',
+        'apiUnpublish',
+        'apiUploadFile',
+    ];
 
     /**
      * @config
@@ -131,27 +156,6 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
      */
     private static $image_retry_failure_expiry = 300;
 
-
-    /**
-     * @var array
-     */
-    private static $allowed_actions = array(
-        'legacyRedirectForEditView',
-        'apiCreateFile',
-        'apiUploadFile',
-        'apiHistory',
-        'folderCreateForm',
-        'fileEditForm',
-        'fileHistoryForm',
-        'addToCampaignForm',
-        'fileInsertForm',
-        'fileEditorLinkForm',
-        'schema',
-        'fileSelectForm',
-        'fileSearchForm',
-        'moveForm',
-    );
-
     private static $required_permission_codes = 'CMS_ACCESS_AssetAdmin';
 
     /**
@@ -170,7 +174,6 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
      */
     private static $thumbnail_height = 264;
 
-
     /**
      * Whatever the front end should try to bust cache by appending the version id to the image URL.
      * @config
@@ -179,9 +182,9 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
     private static $bust_cache = true;
 
     /**
-     * @var ThumbnailGenerator
+     * Show this controller in the CMS menu
      */
-    protected $thumbnailGenerator;
+    private static $ignore_menuitem = false;
 
     /**
      * Set up the controller
@@ -189,43 +192,81 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
     public function init()
     {
         parent::init();
-
-        Requirements::add_i18n_javascript('silverstripe/asset-admin:client/lang', false);
-        Requirements::javascript('silverstripe/asset-admin:client/dist/js/bundle.js');
-        Requirements::css('silverstripe/asset-admin:client/dist/styles/bundle.css');
-
         CMSBatchActionHandler::register('delete', DeleteAssets::class, Folder::class);
     }
 
-    public function getClientConfig()
+    /**
+     * Returns configuration required by the client app
+     */
+    public function getClientConfig(): array
     {
         $baseLink = $this->Link();
         $validator = $this->getUpload()->getValidator();
 
-        return array_merge(parent::getClientConfig(), [
+        $parentClientConfig = parent::getClientConfig();
+        $modalController = ModalController::singleton();
+        return ArrayLib::array_merge_recursive($parentClientConfig, [
             'reactRouter' => true,
             'bustCache' => static::config()->get('bust_cache'),
-            'createFileEndpoint' => [
-                'url' => Controller::join_links($baseLink, 'api/createFile'),
-                'method' => 'post',
-                'payloadFormat' => 'urlencoded',
-            ],
-            'uploadFileEndpoint' => [
-                'url' => Controller::join_links($baseLink, 'api/uploadFile'),
-                'method' => 'post',
-                'payloadFormat' => 'urlencoded',
-            ],
-            'historyEndpoint' => [
-                'url' => Controller::join_links($baseLink, 'api/history'),
-                'method' => 'get',
-                'responseFormat' => 'json',
-            ],
+            'endpoints' => array_merge($parentClientConfig['endpoints'], [
+                'createFile' => [
+                    'url' => Controller::join_links($baseLink, 'api/createFile'),
+                    'method' => 'post',
+                    'payloadFormat' => 'urlencoded',
+                ],
+                'delete' => [
+                    'url' => Controller::join_links($baseLink, 'api/delete'),
+                    'method' => 'post',
+                    'payloadFormat' => 'json',
+                ],
+                'history' => [
+                    'url' => Controller::join_links($baseLink, 'api/history'),
+                    'method' => 'get',
+                    'responseFormat' => 'json',
+                ],
+                'move' => [
+                    'url' => Controller::join_links($baseLink, 'api/move'),
+                    'method' => 'post',
+                    'payloadFormat' => 'json',
+                ],
+                'publish' => [
+                    'url' => Controller::join_links($baseLink, 'api/publish'),
+                    'method' => 'post',
+                    'payloadFormat' => 'json',
+                ],
+                'readDescendantCounts' => [
+                    'url' => Controller::join_links($baseLink, 'api/readDescendantCounts'),
+                    'method' => 'get',
+                    'responseFormat' => 'json',
+                ],
+                'readLiveOwnerCounts' => [
+                    'url' => Controller::join_links($baseLink, 'api/readLiveOwnerCounts'),
+                    'method' => 'get',
+                    'responseFormat' => 'json',
+                ],
+                'readUsage' => [
+                    'url' => Controller::join_links($baseLink, 'api/readUsage'),
+                    'method' => 'get',
+                    'responseFormat' => 'json',
+                ],
+                'unpublish' => [
+                    'url' => Controller::join_links($baseLink, 'api/unpublish'),
+                    'method' => 'post',
+                    'payloadFormat' => 'json',
+                ],
+                'uploadFile' => [
+                    'url' => Controller::join_links($baseLink, 'api/uploadFile'),
+                    'method' => 'post',
+                    'payloadFormat' => 'urlencoded',
+                ],
+            ]),
             'limit' => $this->config()->page_length,
             'imageRetry' => [
                 'minRetry' => $this->config()->image_retry_min,
                 'maxRetry' => $this->config()->image_retry_max,
                 'expiry' => $this->config()->image_retry_failure_expiry,
             ],
+            'filesAreVersioned' => File::singleton()->has_extension(Versioned::class),
             'form' => [
                 'fileEditForm' => [
                     'schemaUrl' => $this->Link('schema/fileEditForm')
@@ -234,18 +275,13 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
                     'schemaUrl' => $this->Link('schema/fileInsertForm')
                 ],
                 'remoteEditForm' => [
-                    'schemaUrl' => LeftAndMain::singleton()
-                        ->Link('Modals/remoteEditFormSchema'),
+                    'schemaUrl' => $modalController->Link('remoteEditFormSchema'),
                 ],
                 'remoteCreateForm' => [
-                    'schemaUrl' => LeftAndMain::singleton()
-                        ->Link('methodSchema/Modals/remoteCreateForm')
+                    'schemaUrl' => $modalController->Link('schema/remoteCreateForm')
                 ],
                 'fileSelectForm' => [
                     'schemaUrl' => $this->Link('schema/fileSelectForm')
-                ],
-                'addToCampaignForm' => [
-                    'schemaUrl' => $this->Link('schema/addToCampaignForm')
                 ],
                 'fileHistoryForm' => [
                     'schemaUrl' => $this->Link('schema/fileHistoryForm')
@@ -278,12 +314,185 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
     }
 
     /**
+     * JSON endpoint to get a count of decentant files for multiple folders
+     */
+    public function apiReadDescendantCounts(HTTPRequest $request): HTTPResponse
+    {
+        $data = [];
+        $ids = $this->getQueryStringValue($request, 'ids');
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            /* @var File&AssetAdminFile $file */
+            $file = $this->getFileByID($id, false, 404);
+            if (!$file->canView()) {
+                $this->jsonError(403);
+            }
+            $count = 0;
+            $type = 'file';
+            if (is_a($file, Folder::class)) {
+                $count = $file->getDescendantFileCount();
+                $type = 'folder';
+            }
+            $data[] = [
+                'id' => $id,
+                'type' => $type,
+                'count' => $count
+            ];
+        }
+        $this->extend('updateApiReadDescendantCounts', $data, $request);
+        return $this->jsonSuccess(200, $data);
+    }
+
+    /**
+     * JSON endpoint to get a count of live owners for multiple files
+     */
+    public function apiReadLiveOwnerCounts(HTTPRequest $request): HTTPResponse
+    {
+        $ids = $this->getQueryStringValue($request, 'ids');
+        $data = [];
+        $files = $this->getFilesByIDs($ids, true, 404);
+        $fileIDs = $files->column('ID');
+        if (count($fileIDs) > 0) {
+            $liveFiles = Versioned::get_by_stage(File::class, Versioned::LIVE)
+                ->filter(['ID' => $fileIDs]);
+            /** @var Versioned|File $liveFile */
+            foreach ($liveFiles as $liveFile) {
+                $count = $liveFile->findOwners(false)->count();
+                $data[] = [
+                    'id' => $liveFile->ID,
+                    'count' => $count,
+                    'message' => _t(
+                        AssetAdmin::class . '.OWNER_WARNING',
+                        'File "{file}" is used in {count} place|File "{file}" is used in {count} places.',
+                        [
+                            'file' => $liveFile->Title,
+                            'count' => $count
+                        ]
+                    ),
+                ];
+            }
+        }
+        $this->extend('updateApiReadLiveOwnerCounts', $data, $request);
+        return $this->jsonSuccess(200, $data);
+    }
+
+    /**
+     * JSON endpoint to get a count of file usage for a single file
+     */
+    public function apiReadUsage(HTTPRequest $request): HTTPResponse
+    {
+        $id = (int) $request->param('ID');
+        /* @var File&AssetAdminFile $file */
+        $file = $this->getFileByID($id, false, 404);
+        if (!$file->canView()) {
+            $this->jsonError(403);
+        }
+        $count = $file->getFilesInUse()->count();
+        $data = ['count' => $count];
+        $this->extend('updateApiReadUsage', $data, $request);
+        return $this->jsonSuccess(200, $data);
+    }
+
+    /**
+     * JSON endpoint to delete multiple files
+     */
+    public function apiDelete(HTTPRequest $request): HTTPResponse
+    {
+        if (!SecurityToken::inst()->checkRequest($request)) {
+            $this->jsonError(400);
+        }
+        $ids = $this->getPostedJsonValue($request, 'ids');
+        $files = $this->getFilesByIDs($ids, true, 400);
+        foreach ($files as $file) {
+            if (!$file->canDelete()) {
+                $this->jsonError(403);
+            }
+        }
+        foreach ($files as $file) {
+            if ($file->has_extension(Versioned::class)) {
+                $file->doArchive();
+            } else {
+                $file->delete();
+            }
+        }
+        return $this->jsonSuccess(204);
+    }
+
+    /**
+     * JSON endpoint to multiple files to a new folder
+     */
+    public function apiMove(HTTPRequest $request): HTTPResponse
+    {
+        if (!SecurityToken::inst()->checkRequest($request)) {
+            $this->jsonError(400);
+        }
+        $ids = $this->getPostedJsonValue($request, 'ids');
+        $folderID = $this->getPostedJsonValue($request, 'folderID');
+        $folder = null;
+        if ($folderID !== 0) {
+            $folder = $this->getFileByID($folderID, true, 400);
+        }
+        $files = $this->getFilesByIDs($ids, true, 400);
+        foreach ($files as $file) {
+            if (!$file->canEdit()) {
+                $this->jsonError(403);
+            }
+        }
+        foreach ($files as $file) {
+            $file->ParentID = $folder ? $folder->ID : 0;
+            $file->write();
+        }
+        return $this->jsonSuccess(204);
+    }
+
+    /**
+     * JSON endpoint that publishes multiple files
+     */
+    public function apiPublish(HTTPRequest $request): HTTPResponse
+    {
+        if (!SecurityToken::inst()->checkRequest($request)) {
+            $this->jsonError(400);
+        }
+        $ids = $this->getPostedJsonValue($request, 'ids');
+        $files = $this->getFilesByIDs($ids, false, 400);
+        foreach ($files as $file) {
+            if (!$file->canPublish()) {
+                $this->jsonError(403);
+            }
+        }
+        foreach ($files as $file) {
+            $file->publishRecursive();
+        }
+        return $this->jsonSuccess(204);
+    }
+
+    /**
+     * JSON endpoint that unpublishes multiple files
+     */
+    public function apiUnpublish(HTTPRequest $request): HTTPResponse
+    {
+        if (!SecurityToken::inst()->checkRequest($request)) {
+            $this->jsonError(400);
+        }
+        $ids = $this->getPostedJsonValue($request, 'ids');
+        $files = $this->getFilesByIDs($ids, false, 400);
+        foreach ($files as $file) {
+            if (!$file->canUnpublish()) {
+                $this->jsonError(403);
+            }
+        }
+        foreach ($files as $file) {
+            $file->doUnpublish();
+        }
+        return $this->jsonSuccess(204);
+    }
+
+    /**
      * Creates a single file based on a form-urlencoded upload.
      *
      * @param HTTPRequest $request
-     * @return HTTPRequest|HTTPResponse
      */
-    public function apiCreateFile(HTTPRequest $request)
+    public function apiCreateFile(HTTPRequest $request): HTTPResponse
     {
         $data = $request->postVars();
 
@@ -291,11 +500,10 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
         $upload = $this->getUpload();
         $upload->setReplaceFile(false);
 
-        // CSRF check
+        // CSRF check - note that token is sent in POST body, not header
         $token = SecurityToken::inst();
         if (empty($data[$token->getName()]) || !$token->check($data[$token->getName()])) {
             $this->jsonError(400);
-            return null;
         }
 
         // Check parent record
@@ -310,7 +518,6 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
             $errors = $upload->getErrors();
             $message = array_shift($errors);
             $this->jsonError(400, $message);
-            return null;
         }
 
         $fileClass = File::get_class_for_file_extension(File::get_file_extension($tmpFile['name']));
@@ -323,7 +530,6 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
                 403,
                 _t(__CLASS__.'.CreatePermissionDenied', 'You do not have permission to add files')
             );
-            return null;
         }
 
         $uploadResult = $upload->loadIntoFile($tmpFile, $file, $parentRecord ? $parentRecord->getFilename() : '/');
@@ -332,7 +538,6 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
                 400,
                 _t(__CLASS__.'.LoadIntoFileFailed', 'Failed to load file')
             );
-            return null;
         }
 
         $file->ParentID = $parentRecord ? $parentRecord->ID : 0;
@@ -357,9 +562,8 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
      *
      * @param HTTPRequest $request Request containing vars 'ID' of parent record ID,
      * and 'Name' as form filename value
-     * @return HTTPRequest|HTTPResponse
      */
-    public function apiUploadFile(HTTPRequest $request)
+    public function apiUploadFile(HTTPRequest $request): HTTPResponse
     {
         $data = $request->postVars();
 
@@ -367,23 +571,21 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
         $upload = $this->getUpload();
         $upload->setReplaceFile(true);
 
-        // CSRF check
+        // CSRF check - note that token is sent in POST body, not header
         $token = SecurityToken::inst();
         if (empty($data[$token->getName()]) || !$token->check($data[$token->getName()])) {
             $this->jsonError(400);
-            return null;
         }
+
         $tmpFile = $data['Upload'];
         if (empty($data['ID']) || empty($tmpFile['name']) || !array_key_exists('Name', $data ?? [])) {
             $this->jsonError(400, _t(__CLASS__.'.INVALID_REQUEST', 'Invalid request'));
-            return null;
         }
 
         // Check parent record
         $file = File::get()->byID($data['ID']);
         if (!$file) {
             $this->jsonError(404, _t(__CLASS__.'.FILE_NOT_FOUND', 'File not found'));
-            return null;
         }
         $folder = $file->ParentID ? $file->Parent()->getFilename() : '/';
 
@@ -407,20 +609,17 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
             $errors = $upload->getErrors();
             $message = array_shift($errors);
             $this->jsonError(400, $message);
-            return null;
         }
 
         try {
             $tuple = $upload->load($tmpFile, $folder);
         } catch (Exception $e) {
             $this->jsonError(400, $e->getMessage());
-            return null;
         }
 
         if ($upload->isError()) {
             $errors = implode(' ' . PHP_EOL, $upload->getErrors());
             $this->jsonError(400, $errors);
-            return null;
         }
 
         $tuple['Name'] = basename($tuple['Filename'] ?? '');
@@ -430,18 +629,13 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
 
     /**
      * Returns a JSON array for history of a given file ID. Returns a list of all the history.
-     *
-     * @param HTTPRequest $request
-     * @return HTTPResponse
      */
-    public function apiHistory(HTTPRequest $request)
+    public function apiHistory(HTTPRequest $request): HTTPResponse
     {
-        // CSRF check not required as the GET request has no side effects.
         $fileId = $request->getVar('fileId');
 
         if (!$fileId || !is_numeric($fileId)) {
             $this->jsonError(400);
-            return null;
         }
 
         $class = File::class;
@@ -449,12 +643,10 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
 
         if (!$file) {
             $this->jsonError(404);
-            return null;
         }
 
         if (!$file->canView()) {
             $this->jsonError(403);
-            return null;
         }
 
         $versions = Versioned::get_all_versions($class, $fileId)
@@ -509,8 +701,8 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
 
                 $output[] = array(
                     'versionid' => (int) $version->Version,
-                    'date_ago' => $version->dbObject('LastEdited')->Ago(),
-                    'date_formatted' => $version->dbObject('LastEdited')->Nice(),
+                    'date_ago' => $version->dbObject('LastEdited')?->Ago(),
+                    'date_formatted' => $version->dbObject('LastEdited')?->Nice(),
                     'status' => ($version->WasPublished) ? _t(__CLASS__.'.PUBLISHED', 'Published') : '',
                     'author' => ($author)
                         ? $author->Name
@@ -524,6 +716,40 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
 
         $response = new HTTPResponse(json_encode($output));
         return $response->addHeader('Content-Type', 'application/json');
+    }
+
+    /**
+     * Retrieves a list of files by their IDs
+     */
+    private function getFilesByIDs(array $ids, bool $includeFolders, int $missingFileErrorCode): ArrayList
+    {
+        $files = File::get()->filter(['ID' => $ids]);
+        if ($files->count() !== count($ids)) {
+            $this->jsonError($missingFileErrorCode);
+        }
+        return $files->filterByCallback(function (File $file) use ($includeFolders) {
+            if (!$includeFolders && is_a($file, Folder::class)) {
+                return false;
+            }
+            if (!$file->canView()) {
+                $this->jsonError(403);
+            }
+            return true;
+        });
+    }
+
+    /**
+     * Get a data value from the POST request, ensuring it exists and is valid
+     */
+    protected function getPostedJsonValue(HTTPRequest $request, string $key): mixed
+    {
+        $value = parent::getPostedJsonValue($request, $key);
+        if ($key === 'ids') {
+            if (!is_array($value) || empty($value)) {
+                $this->jsonError(400);
+            }
+        }
+        return $value;
     }
 
     /**
@@ -589,10 +815,10 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
     {
         return array(
             "CMS_ACCESS_AssetAdmin" => array(
-                'name' => _t('SilverStripe\\CMS\\Controllers\\CMSMain.ACCESS', "Access to '{title}' section", array(
+                'name' => _t(LeftAndMain::class . '.ACCESS', "Access to '{title}' section", array(
                     'title' => static::menu_title()
                 )),
-                'category' => _t('SilverStripe\\Security\\Permission.CMS_ACCESS_CATEGORY', 'CMS Access')
+                'category' => _t(LeftAndMain::class . '.CMS_ACCESS_CATEGORY', 'CMS Access')
             )
         );
     }
@@ -992,7 +1218,7 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
         }
 
         $id = (int) $data['ID'];
-        $record = DataObject::get_by_id(File::class, $id);
+        $record = DataObject::get(File::class)->setUseCache(true)->byID($id);
 
         if (!$record) {
             $this->jsonError(404);
@@ -1045,7 +1271,7 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
         }
 
         $id = (int) $data['ID'];
-        $record = DataObject::get_by_id(File::class, $id);
+        $record = DataObject::get(File::class)->setUseCache(true)->byID($id);
 
         if (!$record) {
             $this->jsonError(404);
@@ -1075,7 +1301,7 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
     {
         $object = $this->getMinimalistObjectFromData($file, $thumbnailLinks);
 
-        // Slightly more accurate than graphql bulk-usage lookup, but more expensive
+        // Slightly more accurate than bulk-usage lookup, but more expensive
         $object['inUseCount'] = ($file->hasMethod('findOwners')) ? $file->findOwners()->count() : 0;
         $object['created'] = $file->Created;
         $object['lastUpdated'] = $file->LastEdited;
@@ -1085,9 +1311,7 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
         $object['filename'] = $file->Filename;
         $object['url'] = $file->AbsoluteURL;
         $object['canEdit'] = $file->canEdit();
-        $object['canDelete'] = ($file->hasMethod('canArchive'))
-            ? Deprecation::withSuppressedNotice(fn() => $file->canArchive())
-            : $file->canDelete();
+        $object['canDelete'] = $file->canDelete();
 
         $owner = $file->Owner();
 
@@ -1193,93 +1417,6 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
     }
 
     /**
-     * Action handler for adding pages to a campaign
-     *
-     * @deprecated 2.4.0 Will moved to SilverStripe\CampaignAdmin\Extensions\AddToCampaignExtension
-     */
-    public function addtocampaign(array $data, Form $form): HTTPResponse
-    {
-        Deprecation::noticeWithNoReplacment(
-            '2.4.0',
-            'Will moved to SilverStripe\CampaignAdmin\Extensions\AddToCampaignExtension in a future major release'
-        );
-        $id = $data['ID'];
-        $record = File::get()->byID($id);
-
-        $handler = AddToCampaignHandler::create($this, $record, 'addToCampaignForm');
-        $response = $handler->addToCampaign($record, $data);
-        $message = $response->getBody();
-        if (empty($message)) {
-            return $response;
-        }
-
-        // Send extra "message" data with schema response
-        $extraData = ['message' => $message];
-        $schemaId = Controller::join_links($this->Link('schema/addToCampaignForm'), $id);
-        return $this->getSchemaResponse($schemaId, $form, null, $extraData);
-    }
-
-    /**
-     * Url handler for add to campaign form
-     *
-     * @param HTTPRequest $request
-     * @return Form
-     * @deprecated 2.4.0 Will moved to SilverStripe\CampaignAdmin\Extensions\AddToCampaignExtension
-     */
-    public function addToCampaignForm($request)
-    {
-        Deprecation::noticeWithNoReplacment(
-            '2.4.0',
-            'Will moved to SilverStripe\CampaignAdmin\Extensions\AddToCampaignExtension in a future major release'
-        );
-        // Get ID either from posted back value, or url parameter
-        $id = $request->param('ID') ?: $request->postVar('ID');
-        return $this->getAddToCampaignForm($id);
-    }
-
-    /**
-     * @param int $id
-     * @return Form|HTTPResponse
-     * @deprecated 2.4.0 Will moved to SilverStripe\CampaignAdmin\Extensions\AddToCampaignExtension
-     */
-    public function getAddToCampaignForm($id)
-    {
-        Deprecation::noticeWithNoReplacment(
-            '2.4.0',
-            'Will moved to SilverStripe\CampaignAdmin\Extensions\AddToCampaignExtension in a future major release'
-        );
-        // Get record-specific fields
-        $record = File::get()->byID($id);
-
-        if (!$record) {
-            $this->jsonError(404, _t(
-                __CLASS__.'.ErrorNotFound',
-                "That {Type} couldn't be found",
-                ['Type' => File::singleton()->i18n_singular_name()]
-            ));
-            return null;
-        }
-        if (!$record->canView()) {
-            $this->jsonError(403, _t(
-                __CLASS__.'.ErrorItemPermissionDenied',
-                "You don't have the necessary permissions to modify {ObjectTitle}",
-                ['ObjectTitle' => $record->i18n_singular_name()]
-            ));
-            return null;
-        }
-
-        $handler = AddToCampaignHandler::create($this, $record, 'addToCampaignForm');
-        $form = $handler->Form($record);
-
-        $form->setValidationResponseCallback(function (ValidationResult $errors) use ($form, $id) {
-            $schemaId = Controller::join_links($this->Link('schema/addToCampaignForm'), $id);
-            return $this->getSchemaResponse($schemaId, $form, $errors);
-        });
-
-        return $form;
-    }
-
-    /**
      * @return Upload
      */
     protected function getUpload()
@@ -1351,7 +1488,6 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
     /**
      * Scaffold a search form.
      * Note: This form does not submit to itself, but rather uses the apiReadFolder endpoint
-     * (to be replaced with graphql)
      *
      * @return Form
      */
@@ -1371,24 +1507,6 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
         return $this->fileSearchForm();
     }
 
-    /**
-     * @return ThumbnailGenerator
-     */
-    public function getThumbnailGenerator()
-    {
-        return $this->thumbnailGenerator;
-    }
-
-    /**
-     * @param ThumbnailGenerator $generator
-     * @return $this
-     */
-    public function setThumbnailGenerator(ThumbnailGenerator $generator)
-    {
-        $this->thumbnailGenerator = $generator;
-        return $this;
-    }
-
     public function canView($member = null)
     {
         // Since admin/assets is used as the endpoint for various other CMS modals,
@@ -1406,10 +1524,9 @@ class AssetAdmin extends LeftAndMain implements PermissionProvider
     public function PreviewPanel()
     {
         $templates = SSViewer::get_templates_by_class(get_class($this), '_PreviewPanel', __CLASS__);
-        $template = SSViewer::chooseTemplate($templates);
         // Only render preview panel if a template specifically for the asset admin has been provided
-        if ($template) {
-            return $this->renderWith($template);
+        if ($this->getTemplateEngine()->hasTemplate($templates)) {
+            return $this->renderWith($templates);
         }
         return null;
     }

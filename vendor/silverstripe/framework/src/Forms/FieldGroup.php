@@ -3,7 +3,7 @@
 namespace SilverStripe\Forms;
 
 use InvalidArgumentException;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 
 /**
  * Lets you include a nested group of fields inside a template.
@@ -106,7 +106,7 @@ class FieldGroup extends CompositeField
      * In some cases the FieldGroup doesn't have a title, but we still want
      * the ID / name to be set. This code, generates the ID from the nested children
      */
-    public function getName()
+    public function getName(): string
     {
         if ($this->name) {
             return $this->name;
@@ -154,7 +154,7 @@ class FieldGroup extends CompositeField
         /** @var FormField $subfield */
         $messages = [];
         foreach ($dataFields as $subfield) {
-            $message = $subfield->obj('Message')->forTemplate();
+            $message = $subfield->obj('Message')?->forTemplate();
             if ($message) {
                 $messages[] = rtrim($message ?? '', ".");
             }

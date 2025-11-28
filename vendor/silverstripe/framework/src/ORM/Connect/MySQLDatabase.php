@@ -6,11 +6,10 @@ use SilverStripe\Assets\File;
 use SilverStripe\CMS\Model\SiteTree;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Convert;
-use SilverStripe\ORM\PaginatedList;
+use SilverStripe\Model\List\PaginatedList;
 use SilverStripe\ORM\DataList;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\Queries\SQLSelect;
 use Exception;
 
 /**
@@ -31,7 +30,7 @@ class MySQLDatabase extends Database implements TransactionManager
      * @config
      * @var String
      */
-    private static $connection_charset = 'utf8';
+    private static $connection_charset = 'utf8mb4';
 
     /**
      * Default connection collation
@@ -39,7 +38,7 @@ class MySQLDatabase extends Database implements TransactionManager
      * @config
      * @var string
      */
-    private static $connection_collation = 'utf8_general_ci';
+    private static $connection_collation = 'utf8mb4_unicode_ci';
 
     /**
      * Default charset
@@ -47,7 +46,7 @@ class MySQLDatabase extends Database implements TransactionManager
      * @config
      * @var string
      */
-    private static $charset = 'utf8';
+    private static $charset = 'utf8mb4';
 
     /**
      * SQL Mode used on connections to MySQL. Defaults to ANSI. For basic ORM
@@ -73,7 +72,7 @@ class MySQLDatabase extends Database implements TransactionManager
      * @config
      * @var string
      */
-    private static $collation = 'utf8_general_ci';
+    private static $collation = 'utf8mb4_unicode_ci';
 
     public function connect($parameters)
     {
@@ -208,16 +207,9 @@ class MySQLDatabase extends Database implements TransactionManager
             }
         }
 
-        // Always ensure that only pages with ShowInSearch = 1 can be searched
+        // Always ensure that only pages/files with ShowInSearch = 1 can be searched
         $extraFilters[$pageClass] .= " AND ShowInSearch <> 0";
-
-        // File.ShowInSearch was added later, keep the database driver backwards compatible
-        // by checking for its existence first
-        $fileTable = DataObject::getSchema()->tableName($fileClass);
-        $fields = $this->getSchemaManager()->fieldList($fileTable);
-        if (array_key_exists('ShowInSearch', $fields ?? [])) {
-            $extraFilters[$fileClass] .= " AND ShowInSearch <> 0";
-        }
+        $extraFilters[$fileClass] .= " AND ShowInSearch <> 0";
 
         $limit = (int)$start . ", " . (int)$pageLength;
 
@@ -437,6 +429,11 @@ class MySQLDatabase extends Database implements TransactionManager
         }
     }
 
+    public function nullSafeEqualsClause(string $field1, string $field2): string
+    {
+        return "$field1 <=> $field2";
+    }
+
     public function comparisonClause(
         $field,
         $value,
@@ -529,9 +526,8 @@ class MySQLDatabase extends Database implements TransactionManager
     {
         $id = $this->getLockIdentifier($name);
 
-        // MySQL 5.7.4 and below auto-releases existing locks on subsequent GET_LOCK() calls.
-        // MySQL 5.7.5 and newer allow multiple locks per sessions even with the same name.
-        // https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_get-lock
+        // MySQL 8.0.0 and newer allow multiple locks per sessions even with the same name.
+        // https://dev.mysql.com/doc/refman/8.4/en/locking-functions.html#function_get-lock
         return (bool) $this->query(sprintf("SELECT GET_LOCK('%s', %d)", $id, $timeout))->value();
     }
 

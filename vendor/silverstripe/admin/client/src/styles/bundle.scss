@@ -11,6 +11,7 @@
 @import "bootstrap-override";
 @import "bootstrap-extend";
 @import "bootstrap-mixins";
+@import "bootstrap-form";
 @import "typography";
 @import "fonts";
 
@@ -29,6 +30,8 @@
 @import "legacy/popover-actions-simulate";
 @import "legacy/GridField";
 @import "legacy/SelectionGroup";
+@import "legacy/badges";
+@import "legacy/ConfirmedPasswordField";
 
 // Components
 @import "../components/Accordion/Accordion";
@@ -74,6 +77,7 @@
 @import "../components/PopoverOptionSet/PopoverOptionSet";
 @import "../components/FileStatusIcon/FileStatusIcon";
 @import "../components/SearchableDropdownField/SearchableDropdownField";
+@import "../components/Paginator/Paginator";
 
 // Layout and sections
 @import "layout";

@@ -5,7 +5,7 @@ namespace SilverStripe\Forms\GridField;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Extensible;
 use SilverStripe\Core\Injector\Injectable;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 
 /**
  * Encapsulates a collection of components following the
@@ -154,5 +154,14 @@ class GridFieldConfig
             }
         }
         return null;
+    }
+
+    public function __clone(): void
+    {
+        $components = $this->components;
+        $this->components = ArrayList::create();
+        foreach ($components as $component) {
+            $this->components->add(clone $component);
+        }
     }
 }

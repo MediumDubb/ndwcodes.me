@@ -2,12 +2,9 @@
 
 namespace SilverStripe\SiteConfig;
 
-use SilverStripe\CMS\Model\SiteTree;
 use SilverStripe\Forms\FieldList;
-use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\ListboxField;
-use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\OptionsetField;
 use SilverStripe\Forms\Tab;
 use SilverStripe\Forms\TabSet;
@@ -21,7 +18,6 @@ use SilverStripe\Security\Permission;
 use SilverStripe\Security\PermissionProvider;
 use SilverStripe\Security\Security;
 use SilverStripe\View\TemplateGlobalProvider;
-use SilverStripe\CMS\Controllers\CMSMain;
 use SilverStripe\Forms\SearchableMultiDropdownField;
 use SilverStripe\Security\InheritedPermissions;
 
@@ -140,8 +136,7 @@ class SiteConfig extends DataObject implements PermissionProvider, TemplateGloba
                         _t(SiteConfig::class . '.VIEWERMEMBERS', "Viewer Users"),
                         Member::get()
                     )
-                        ->setIsLazyLoaded(true)
-                        ->setUseSearchContext(true),
+                        ->setIsLazyLoaded(true),
                     $editorsOptionsField = OptionsetField::create(
                         "CanEditType",
                         _t(SiteConfig::class . '.EDITHEADER', "Who can edit pages on this site?")
@@ -160,8 +155,7 @@ class SiteConfig extends DataObject implements PermissionProvider, TemplateGloba
                         _t(SiteConfig::class . '.EDITORMEMBERS', "Editor Users"),
                         Member::get(),
                     )
-                        ->setIsLazyLoaded(true)
-                        ->setUseSearchContext(true),
+                        ->setIsLazyLoaded(true),
                     $topLevelCreatorsOptionsField = OptionsetField::create(
                         "CanCreateTopLevelType",
                         _t(SiteConfig::class . '.TOPLEVELCREATE', "Who can create pages in the root of the site?")
@@ -181,7 +175,6 @@ class SiteConfig extends DataObject implements PermissionProvider, TemplateGloba
                         Member::get()
                     )
                         ->setIsLazyLoaded(true)
-                        ->setUseSearchContext(true)
                 )
             ),
             HiddenField::create('ID')
@@ -277,20 +270,6 @@ class SiteConfig extends DataObject implements PermissionProvider, TemplateGloba
             }
         }
 
-        if (file_exists(BASE_PATH . '/install.php')) {
-            $fields->addFieldToTab(
-                'Root.Main',
-                LiteralField::create(
-                    'InstallWarningHeader',
-                    '<div class="alert alert-warning">' . _t(
-                        'SilverStripe\\CMS\\Model\\SiteTree.REMOVE_INSTALL_WARNING',
-                        'Warning: You should remove install.php from this SilverStripe install for security reasons.'
-                    ) . '</div>'
-                ),
-                'Title'
-            );
-        }
-
         $tabMain->setTitle(_t(SiteConfig::class . '.TABMAIN', "Main"));
         $tabAccess->setTitle(_t(SiteConfig::class . '.TABACCESS', "Access"));
         $this->extend('updateCMSFields', $fields);
@@ -298,35 +277,7 @@ class SiteConfig extends DataObject implements PermissionProvider, TemplateGloba
         return $fields;
     }
 
-    /**
-     * Get the actions that are sent to the CMS.
-     *
-     * In your extensions: updateEditFormActions($actions)
-     *
-     * @return FieldList
-     */
-    public function getCMSActions()
-    {
-        if (Permission::check('ADMIN') || Permission::check('EDIT_SITECONFIG')) {
-            $actions = FieldList::create(
-                FormAction::create(
-                    'save_siteconfig',
-                    _t('SilverStripe\\CMS\\Controllers\\CMSMain.SAVE', 'Save')
-                )->addExtraClass('btn-primary font-icon-save')
-            );
-        } else {
-            $actions = FieldList::create();
-        }
-
-        $this->extend('updateCMSActions', $actions);
-
-        return $actions;
-    }
-
-    /**
-     * @return string
-     */
-    public function CMSEditLink()
+    public function CMSEditLink(): ?string
     {
         return SiteConfigLeftAndMain::singleton()->Link();
     }
@@ -334,18 +285,13 @@ class SiteConfig extends DataObject implements PermissionProvider, TemplateGloba
     /**
      * Get the current sites SiteConfig, and creates a new one through
      * {@link make_site_config()} if none is found.
-     *
-     * @return SiteConfig
      */
-    public static function current_site_config()
+    public static function current_site_config(): SiteConfig
     {
-        $siteConfig = DataObject::get_one(SiteConfig::class);
+        $siteConfig = SiteConfig::get()->setUseCache(true)->first();
         if (!$siteConfig) {
             $siteConfig = SiteConfig::make_site_config();
         }
-
-        static::singleton()->extend('updateCurrentSiteConfig', $siteConfig);
-
         return $siteConfig;
     }
 
@@ -356,7 +302,7 @@ class SiteConfig extends DataObject implements PermissionProvider, TemplateGloba
     {
         parent::requireDefaultRecords();
 
-        $config = DataObject::get_one(SiteConfig::class);
+        $config = SiteConfig::get()->setUseCache(true)->first();
 
         if (!$config) {
             SiteConfig::make_site_config();
@@ -505,6 +451,15 @@ class SiteConfig extends DataObject implements PermissionProvider, TemplateGloba
         }
 
         return Permission::checkMember($member, "EDIT_SITECONFIG");
+    }
+
+    public function canDelete($member = null)
+    {
+        $extended = $this->extendedCan(__FUNCTION__, $member);
+        if ($extended !== null) {
+            return $extended;
+        }
+        return false;
     }
 
     /**

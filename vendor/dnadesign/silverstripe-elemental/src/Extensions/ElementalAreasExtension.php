@@ -11,14 +11,12 @@ use SilverStripe\CMS\Model\VirtualPage;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Extensible;
-use SilverStripe\Dev\Deprecation;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\LiteralField;
-use SilverStripe\ORM\DataExtension;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\RelatedData\StandardRelatedDataService;
+use SilverStripe\Core\Extension;
+use DNADesign\Elemental\Extensions\TopPageElementExtension;
 use SilverStripe\Versioned\Versioned;
-use SilverStripe\View\ViewableData;
 
 /**
  * This extension handles most of the relationships between pages and element
@@ -45,9 +43,9 @@ use SilverStripe\View\ViewableData;
  * );
  *
  * @template T of DataObject
- * @extends DataExtension<T&static>
+ * @extends Extension<T&static>
  */
-class ElementalAreasExtension extends DataExtension
+class ElementalAreasExtension extends Extension
 {
     use Extensible;
 
@@ -176,7 +174,7 @@ class ElementalAreasExtension extends DataExtension
      *
      * @param FieldList
      */
-    public function updateCMSFields(FieldList $fields)
+    protected function updateCMSFields(FieldList $fields)
     {
         if (!$this->supportsElemental()) {
             return;
@@ -219,31 +217,27 @@ class ElementalAreasExtension extends DataExtension
     /**
      * Make sure there is always an ElementalArea for adding Elements
      */
-    public function onBeforeWrite()
+    protected function onBeforeWrite()
     {
-        parent::onBeforeWrite();
-
         if (!$this->supportsElemental()) {
             return;
         }
-
-        $elementalAreaRelations = $this->owner->getElementalRelations();
-
+        $owner = $this->getOwner();
+        $elementalAreaRelations = $owner->getElementalRelations();
         $this->ensureElementalAreasExist($elementalAreaRelations);
 
-        $ownerClassName = get_class($this->owner);
-
-        // Update the OwnerClassName on EA if the class has changed
-        foreach ($elementalAreaRelations as $eaRelation) {
-            $ea = $this->owner->$eaRelation();
-            if ($ea->OwnerClassName !== $ownerClassName) {
-                $ea->OwnerClassName = $ownerClassName;
-                $ea->write();
+        if ($this->allowAlteringElementalArea()) {
+            $ownerClassName = $owner->ClassName;
+            foreach ($elementalAreaRelations as $relation) {
+                $area = $owner->$relation();
+                if ($area->OwnerClassName !== $ownerClassName) {
+                    $area->OwnerClassName = $ownerClassName;
+                    $area->write();
+                }
             }
         }
-
         if (Config::inst()->get(ElementalAreasExtension::class, 'clear_contentfield')) {
-            $this->owner->Content = '';
+            $owner->Content = '';
         }
     }
 
@@ -281,28 +275,37 @@ class ElementalAreasExtension extends DataExtension
      */
     public function ensureElementalAreasExist($elementalAreaRelations)
     {
-        foreach ($elementalAreaRelations as $eaRelationship) {
-            $areaID = $eaRelationship . 'ID';
-
-            if (!$this->owner->$areaID) {
-                $area = ElementalArea::create();
-                $area->OwnerClassName = get_class($this->owner);
-                $area->write();
-                $this->owner->$areaID = $area->ID;
-            }
+        $owner = $this->getOwner();
+        if (!$this->allowAlteringElementalArea()) {
+            return $owner;
         }
-        return $this->owner;
+        foreach ($elementalAreaRelations as $relation) {
+            $field = "{$relation}ID";
+            if ($owner->$field) {
+                continue;
+            }
+            $area = ElementalArea::create();
+            $area->OwnerClassName = $owner->ClassName;
+            // Do not attempt to set the ElementalArea.TopPageID if the owner (e.g. Page)
+            // has not yet been persisted to the database, as this will cause a potentially
+            // large number of unneccessary database queries
+            if (!$owner->isInDB() && $area::has_extension(TopPageElementExtension::class)) {
+                /** @var ElementalArea&TopPageElementExtension $area */
+                $area->withoutCallingSetTopPage(fn() => $area->write());
+            } else {
+                $area->write();
+            }
+            $owner->$relation = $area;
+        }
     }
 
     /**
      * Extension hook {@see DataObject::requireDefaultRecords}
      *
      * @return void
-     * @deprecated 5.4.0 Will be renamed to onRequireDefaultRecords()
      */
-    public function requireDefaultRecords()
+    protected function onRequireDefaultRecords()
     {
-        Deprecation::noticeWithNoReplacment('5.4.0', 'Will be renamed to onRequireDefaultRecords()');
         if (!$this->supportsElemental()) {
             return;
         }
@@ -339,5 +342,14 @@ class ElementalAreasExtension extends DataExtension
         }
 
         $this->owner->extend('onAfterRequireDefaultElementalRecords');
+    }
+
+    /**
+     * Whether it's OK to alter the ElementalArea based the current versioned reading mode
+     * This is check is done to ensure that duplicate ElementalAreas are not created
+     */
+    private function allowAlteringElementalArea(): bool
+    {
+        return Versioned::get_stage() === Versioned::DRAFT;
     }
 }

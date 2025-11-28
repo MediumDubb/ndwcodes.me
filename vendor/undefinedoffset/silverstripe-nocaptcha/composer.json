@@ -12,8 +12,9 @@
         }
     ],
     "require": {
-        "silverstripe/framework": "^4 | ^5",
-        "silverstripe/spamprotection": "^3 | ^4"
+        "silverstripe/framework": "^6",
+        "silverstripe/spamprotection": "^5",
+        "ext-curl": "*"
     },
     "prefer-stable": true,
     "minimum-stability": "dev",
@@ -28,9 +29,6 @@
     "extra": {
         "expose": [
             "javascript"
-        ],
-		"branch-alias": {
-			"dev-master": "2.0.x-dev"
-		}
+        ]
     }
 }

@@ -7,9 +7,11 @@ use SilverStripe\Core\Convert;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\ReadonlyTransformation;
+use SilverStripe\Forms\TextareaField;
+use SilverStripe\Forms\TextField;
 use SilverStripe\Forms\TreeDropdownField;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Member;
 use SilverStripe\Versioned\Versioned;
 use SilverStripe\View\HTML;
@@ -26,17 +28,9 @@ use SilverStripe\View\HTML;
  */
 class VirtualPage extends Page
 {
-    /**
-     * @deprecated 5.4.0 use class_description instead.
-     */
-    private static $description = 'Displays the content of another page';
-
     private static string $class_description = 'Displays the content of another page';
 
-    /**
-     * @deprecated 5.4.0 Will be renamed to cms_icon_class
-     */
-    private static $icon_class = 'font-icon-p-virtual';
+    private static $cms_icon_class = 'font-icon-p-virtual';
 
     public static $virtualFields;
 
@@ -85,7 +79,22 @@ class VirtualPage extends Page
 
     private static $db = [
         "VersionID" => "Int",
+        'CustomMetaDescription' => 'Text',
+        'CustomExtraMeta' => 'HTMLText'
     ];
+
+    private static array $scaffold_cms_fields_settings = [
+        'ignoreFields' => [
+            'VersionID',
+            'CustomMetaDescription',
+            'CustomExtraMeta',
+        ],
+    ];
+
+    /**
+     * Whether to allow overriding the meta description and extra meta tags.
+     */
+    private static bool $allow_meta_overrides = true;
 
     private static $table_name = 'VirtualPage';
 
@@ -125,7 +134,7 @@ class VirtualPage extends Page
     public function setCopyContentFromID($val)
     {
         // Sanity check to prevent pages virtualising other virtual pages
-        if ($val && DataObject::get_by_id(SiteTree::class, $val) instanceof VirtualPage) {
+        if ($val && SiteTree::get()->setUseCache(true)->byID($val) instanceof VirtualPage) {
             $val = 0;
         }
         return $this->setField("CopyContentFromID", $val);
@@ -168,6 +177,18 @@ class VirtualPage extends Page
             return $copy->allowedChildren();
         }
         return [];
+    }
+
+    /**
+     * Get the record to check against for allowed children check in validation.
+     */
+    public function getRecordForAllowedChildrenValidation(): SiteTree
+    {
+        $copyFrom = $this->CopyContentFrom();
+        if ($copyFrom && $copyFrom->exists()) {
+            return $copyFrom;
+        }
+        return $this;
     }
 
     public function syncLinkTracking()
@@ -224,21 +245,18 @@ class VirtualPage extends Page
     public function getCMSFields()
     {
         $this->beforeUpdateCMSFields(function (FieldList $fields) {
-            // Setup the linking to the original page.
-            $copyContentFromField = TreeDropdownField::create(
-                'CopyContentFromID',
-                _t(VirtualPage::class . '.CHOOSE', "Linked Page"),
-                SiteTree::class
-            );
+            $copyContentFromField = $fields->dataFieldByName('CopyContentFromID');
+            $fields->addFieldToTab('Root.Main', $copyContentFromField, 'Title');
 
             // Setup virtual fields
             if ($virtualFields = $this->getVirtualFields()) {
                 $roTransformation = new ReadonlyTransformation();
-                foreach ($virtualFields as $virtualField) {
-                    if ($fields->dataFieldByName($virtualField)) {
+                foreach ($virtualFields as $virtualFieldName) {
+                    $virtualField = $fields->dataFieldByName($virtualFieldName);
+                    if ($virtualField) {
                         $fields->replaceField(
-                            $virtualField,
-                            $fields->dataFieldByName($virtualField)->transform($roTransformation)
+                            $virtualFieldName,
+                            $virtualField->transform($roTransformation)
                         );
                     }
                 }
@@ -246,15 +264,13 @@ class VirtualPage extends Page
 
             $msgs = [];
 
-            $fields->addFieldToTab('Root.Main', $copyContentFromField, 'Title');
-
             // Create links back to the original object in the CMS
             if ($this->CopyContentFrom()->exists()) {
                 $link = HTML::createTag(
                     'a',
                     [
                         'class' => 'cmsEditlink',
-                        'href' => $this->CopyContentFrom()->CMSEditLink(),
+                        'href' => $this->CopyContentFrom()->getCMSEditLink(),
                     ],
                     _t(VirtualPage::class . '.EditLink', 'edit')
                 );
@@ -288,12 +304,31 @@ class VirtualPage extends Page
                 'VirtualPageMessage',
                 '<div class="alert alert-info">' . implode('. ', $msgs) . '.</div>'
             ), 'CopyContentFromID');
+
+            if (static::config()->get('allow_meta_overrides')) {
+                $fields->addFieldToTab(
+                    'Root.Main',
+                    TextareaField::create(
+                        'CustomMetaDescription',
+                        $this->fieldLabel('CustomMetaDescription')
+                    )->setDescription(_t(__CLASS__ . '.OverrideNote', 'Overrides inherited value from the source')),
+                    'MetaDescription'
+                );
+                $fields->addFieldToTab(
+                    'Root.Main',
+                    TextField::create(
+                        'CustomExtraMeta',
+                        $this->fieldLabel('CustomExtraMeta')
+                    )->setDescription(_t(__CLASS__ . '.OverrideNote', 'Overrides inherited value from the source')),
+                    'ExtraMeta'
+                );
+            }
         });
 
         return parent::getCMSFields();
     }
 
-    public function onBeforeWrite()
+    protected function onBeforeWrite()
     {
         $this->refreshFromCopied();
         parent::onBeforeWrite();
@@ -346,7 +381,7 @@ class VirtualPage extends Page
         return $fields;
     }
 
-    public function validate()
+    public function validate(): ValidationResult
     {
         $result = parent::validate();
 
@@ -367,22 +402,23 @@ class VirtualPage extends Page
         return $result;
     }
 
-    public function CMSTreeClasses()
+    /**
+     * Update the CSS classes to apply to this node in the CMS tree.
+     */
+    public function updateCMSTreeClasses(string &$classes): void
     {
+        parent::updateCMSTreeClasses($classes);
         $parentClass = sprintf(
             ' VirtualPage-%s',
             Convert::raw2htmlid($this->CopyContentFrom()->ClassName)
         );
-        return parent::CMSTreeClasses() . $parentClass;
+        $classes .= $parentClass;
     }
 
     /**
      * Use the target page's class name for fetching templates - as we need to take on its appearance
-     *
-     * @param string $suffix
-     * @return array
      */
-    public function getViewerTemplates($suffix = '')
+    public function getViewerTemplates(string $suffix = ''): array
     {
         $copy = $this->CopyContentFrom();
         if ($copy && $copy->exists()) {
@@ -395,11 +431,8 @@ class VirtualPage extends Page
     /**
      * Allow attributes on the master page to pass
      * through to the virtual page
-     *
-     * @param string $field
-     * @return mixed
      */
-    public function __get($field)
+    public function __get(string $field): mixed
     {
         if (parent::hasMethod($funcName = "get$field")) {
             return $this->$funcName();
@@ -413,7 +446,7 @@ class VirtualPage extends Page
         return null;
     }
 
-    public function getField($field)
+    public function getField(string $field): mixed
     {
         if ($this->isFieldVirtualised($field)) {
             return $this->CopyContentFrom()->getField($field);
@@ -454,24 +487,21 @@ class VirtualPage extends Page
      */
     public function __call($method, $args)
     {
-        if (parent::hasMethod($method)) {
+        if (parent::hasMethod($method) || !$this->CopyContentFromID) {
             return parent::__call($method, $args);
         } else {
-            return call_user_func_array([$this->CopyContentFrom(), $method], $args ?? []);
+            $record = $this->CopyContentFrom();
+            return $record->$method(...$args);
         }
     }
 
-    /**
-     * @param string $field
-     * @return bool
-     */
-    public function hasField($field)
+    public function hasField(string $fieldName): bool
     {
-        if (parent::hasField($field)) {
+        if (parent::hasField($fieldName)) {
             return true;
         }
         $copy = $this->CopyContentFrom();
-        return $copy && $copy->exists() && $copy->hasField($field);
+        return $copy && $copy->exists() && $copy->hasField($fieldName);
     }
 
     /**
@@ -490,17 +520,14 @@ class VirtualPage extends Page
     /**
      * Return the "casting helper" (a piece of PHP code that when evaluated creates a casted value object) for a field
      * on this object.
-     *
-     * @param string $field
-     * @return string
      */
-    public function castingHelper($field)
+    public function castingHelper(string $field, bool $useFallback = true): ?string
     {
         $copy = $this->CopyContentFrom();
-        if ($copy && $copy->exists() && ($helper = $copy->castingHelper($field))) {
+        if ($copy && $copy->exists() && ($helper = $copy->castingHelper($field, $useFallback))) {
             return $helper;
         }
-        return parent::castingHelper($field);
+        return parent::castingHelper($field, $useFallback);
     }
 
     /**

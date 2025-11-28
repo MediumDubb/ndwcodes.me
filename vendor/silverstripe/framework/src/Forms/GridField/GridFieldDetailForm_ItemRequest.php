@@ -3,7 +3,7 @@
 namespace SilverStripe\Forms\GridField;
 
 use LogicException;
-use SilverStripe\Admin\LeftAndMain;
+use SilverStripe\Admin\AdminController;
 use SilverStripe\Control\Controller;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse;
@@ -17,7 +17,7 @@ use SilverStripe\Forms\Form;
 use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\LiteralField;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DataObjectInterface;
 use SilverStripe\ORM\FieldType\DBHTMLText;
@@ -25,13 +25,14 @@ use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\ManyManyList;
 use SilverStripe\ORM\PolymorphicHasManyList;
 use SilverStripe\ORM\RelationList;
-use SilverStripe\ORM\SS_List;
-use SilverStripe\ORM\ValidationException;
-use SilverStripe\ORM\ValidationResult;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\List\SS_List;
+use SilverStripe\Core\Validation\ValidationException;
+use SilverStripe\Core\Validation\ValidationResult;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\HTML;
 use SilverStripe\View\SSViewer;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
+use SilverStripe\ORM\FieldType\DBField;
 
 class GridFieldDetailForm_ItemRequest extends RequestHandler
 {
@@ -68,7 +69,7 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
     protected $component;
 
     /**
-     * @var ViewableData
+     * @var ModelData
      */
     protected $record;
 
@@ -105,7 +106,7 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
      *
      * @param GridField $gridField
      * @param GridFieldDetailForm $component
-     * @param ViewableData&DataObjectInterface $record
+     * @param ModelData&DataObjectInterface $record
      * @param RequestHandler $requestHandler
      * @param string $popupFormName
      */
@@ -290,7 +291,7 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
         }
 
         $toplevelController = $this->getToplevelController();
-        if ($toplevelController && $toplevelController instanceof LeftAndMain) {
+        if ($toplevelController && $toplevelController instanceof AdminController) {
             // Always show with base template (full width, no other panels),
             // regardless of overloaded CMS controller templates.
             $form->setTemplate([
@@ -365,11 +366,11 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
     protected function getRightGroupField()
     {
         $rightGroup = CompositeField::create()->setName('RightGroup');
-        $rightGroup->addExtraClass('ml-auto');
+        $rightGroup->addExtraClass('ms-auto');
         $rightGroup->setFieldHolderTemplate(get_class($rightGroup) . '_holder_buttongroup');
 
         $previousAndNextGroup = CompositeField::create()->setName('PreviousAndNextGroup');
-        $previousAndNextGroup->addExtraClass('btn-group--circular mr-2');
+        $previousAndNextGroup->addExtraClass('btn-group--circular me-2');
         $previousAndNextGroup->setFieldHolderTemplate(CompositeField::class . '_holder_buttongroup');
 
         $component = $this->gridField->getConfig()->getComponentByType(GridFieldDetailForm::class);
@@ -518,7 +519,7 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
     {
         $backlink = '';
         $toplevelController = $this->getToplevelController();
-        if ($toplevelController && $toplevelController instanceof LeftAndMain) {
+        if ($toplevelController && $toplevelController instanceof AdminController) {
             if ($toplevelController->hasMethod('Backlink')) {
                 $backlink = $toplevelController->Backlink();
             } elseif ($this->popupController->hasMethod('Breadcrumbs')) {
@@ -542,7 +543,7 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
      * Handles detection of falsey values explicitly saved into the
      * record by formfields
      *
-     * @param ViewableData $record
+     * @param ModelData $record
      * @param SS_List $list
      * @return array List of data to write to the relation
      */
@@ -695,7 +696,7 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
 
         if ($position === 0 && $currentPage > 1) {
             $page = $currentPage - 1;
-        } elseif ($hasMorePages && $position >= $itemsPerPage + 1) {
+        } elseif ($hasMorePages && $position >= $itemsPerPage) {
             $page = $currentPage + 1;
         }
         $state->GridFieldPaginator->currentPage = (int)$page;
@@ -780,7 +781,7 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
         $controller = $this->getToplevelController();
         if ($isNewRecord) {
             return $controller->redirect($this->Link());
-        } elseif ($this->gridField->getList()->byID($this->record->ID)) {
+        } elseif ($this->gridField->getList()->filter('ID', $this->record->ID)->exists()) {
             // Return new view, as we can't do a "virtual redirect" via the CMS Ajax
             // to the same URL (it assumes that its content is already current, and doesn't reload)
             $message = $controller->getResponse()->getHeader('X-Status') ?? rawurlencode(_t(__CLASS__ . '.SAVEDUP', 'Saved successfully') ?? '');
@@ -813,7 +814,7 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
      * @param array $data
      * @param Form $form
      * @throws ValidationException On error
-     * @return ViewableData&DataObjectInterface Saved record
+     * @return ModelData&DataObjectInterface Saved record
      */
     protected function saveFormIntoRecord($data, $form)
     {
@@ -838,7 +839,7 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
         $this->extend('onAfterSave', $this->record);
 
         $extraData = $this->getExtraSavedData($this->record, $list);
-        $list->add($this->record, $extraData);
+        $list->add($this->record, $extraData ?: []);
 
         return $this->record;
     }
@@ -868,7 +869,7 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
         );
 
         $toplevelController = $this->getToplevelController();
-        if ($toplevelController && $toplevelController instanceof LeftAndMain) {
+        if ($toplevelController && $toplevelController instanceof AdminController) {
             $backForm = $toplevelController->getEditForm();
             $backForm->sessionMessage($message, 'good', ValidationResult::CAST_HTML);
         } else {
@@ -933,7 +934,7 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
     }
 
     /**
-     * @return ViewableData
+     * @return ModelData
      */
     public function getRecord()
     {
@@ -958,11 +959,13 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
         $items = $this->popupController->Breadcrumbs($unlinked);
 
         if (!$items) {
+            /** @var ArrayList<ArrayData> $items */
             $items = ArrayList::create();
         }
 
-        if ($this->record && $this->record->ID) {
-            $title = ($this->record->Title) ? $this->record->Title : "#{$this->record->ID}";
+        $record = $this->getRecord();
+        if ($record && $record->ID) {
+            $title = ($record->Title) ? $record->Title : "#{$record->ID}";
             $items->push(ArrayData::create([
                 'Title' => $title,
                 'Link' => $this->Link()
@@ -978,6 +981,11 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
             if ($item->Link) {
                 $item->Link = $this->gridField->addAllStateToUrl($item->Link);
             }
+        }
+
+        $statusFlags = $record->getStatusFlagMarkup('badge--breadcrumbs');
+        if ($statusFlags) {
+            $items->last()->setField('Extra', DBField::create_field('HTMLFragment', $statusFlags));
         }
 
         $this->extend('updateBreadcrumbs', $items);
@@ -996,7 +1004,7 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
      * Get Pjax response negotiator so form submission mirrors other form submission in the CMS.
      * See LeftAndMain::getResponseNegotiator()
      */
-    private function getResponseNegotiator(DBHTMLText $renderedForm): PjaxResponseNegotiator
+    private function getResponseNegotiator(string $renderedForm): PjaxResponseNegotiator
     {
         return new PjaxResponseNegotiator([
             'default' => function () use ($renderedForm) {

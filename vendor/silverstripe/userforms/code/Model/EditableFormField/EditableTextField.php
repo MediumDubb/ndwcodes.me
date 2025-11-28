@@ -11,7 +11,7 @@ use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\NumericField;
 use SilverStripe\Forms\TextareaField;
 use SilverStripe\Forms\TextField;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\UserForms\Model\EditableFormField;
 
 /**
@@ -106,10 +106,7 @@ class EditableTextField extends EditableFormField
         return parent::getCMSFields();
     }
 
-    /**
-     * @return ValidationResult
-     */
-    public function validate()
+    public function validate(): ValidationResult
     {
         $result = parent::validate();
 

@@ -6,7 +6,7 @@ use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Control\HTTPResponse_Exception;
 use SilverStripe\Core\Injector\Injector;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Authenticator;
 use SilverStripe\Security\Security;
 use SilverStripe\Security\SecurityToken;
@@ -15,14 +15,9 @@ use SilverStripe\Security\SudoMode\SudoModeServiceInterface;
 /**
  * Responsible for checking and verifying whether sudo mode is enabled
  */
-class SudoModeController extends LeftAndMain
+class SudoModeController extends AdminController
 {
     private static string $url_segment = 'sudomode';
-
-    /**
-     * @deprecated 2.4.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    private static bool $ignore_menuitem = true;
 
     private static array $allowed_actions = [
         'check',
@@ -37,7 +32,7 @@ class SudoModeController extends LeftAndMain
      * A user help documentation link to find out more about sudo mode
      */
     // phpcs:ignore Generic.Files.LineLength.TooLong
-    private static string $help_link = 'https://userhelp.silverstripe.org/en/5/managing_your_website/logging_in/#sudo-mode';
+    private static string $help_link = 'https://userhelp.silverstripe.org/en/6/managing_your_website/logging_in/#sudo-mode';
 
     private ?SudoModeServiceInterface $sudoModeService = null;
 
@@ -46,7 +41,7 @@ class SudoModeController extends LeftAndMain
      */
     private static bool $required_permission_codes = false;
 
-    public function getClientConfig()
+    public function getClientConfig(): array
     {
         $request = Injector::inst()->get(HTTPRequest::class);
 
@@ -84,7 +79,6 @@ class SudoModeController extends LeftAndMain
 
         if (!SecurityToken::inst()->checkRequest($request)) {
             return $this->jsonResponse([
-                'result' => false,
                 'message' => _t(__CLASS__ . '.TIMEOUT', 'Session timed out, please refresh and try again.'),
             ], 403);
         }
@@ -92,14 +86,13 @@ class SudoModeController extends LeftAndMain
         // Validate password
         if (!$this->checkPassword($request)) {
             return $this->jsonResponse([
-                'result' => false,
                 'message' => _t(__CLASS__ . '.INVALID', 'Incorrect password'),
-            ]);
+            ], 401);
         }
 
         // Activate sudo mode and return successful result
         $this->getSudoModeService()->activate($request->getSession());
-        return $this->jsonResponse(['result' => true]);
+        return $this->jsonResponse([]);
     }
 
     /**

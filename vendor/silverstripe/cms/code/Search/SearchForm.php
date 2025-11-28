@@ -12,7 +12,7 @@ use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\TextField;
 use SilverStripe\ORM\DB;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 
 /**
  * Standard basic search form which conducts a fulltext search on all {@link SiteTree}
@@ -52,10 +52,10 @@ class SearchForm extends Form
      * @param FieldList $actions Optional, defaults to a single field named "Go".
      */
     public function __construct(
-        RequestHandler $controller = null,
+        ?RequestHandler $controller = null,
         $name = 'SearchForm',
-        FieldList $fields = null,
-        FieldList $actions = null
+        ?FieldList $fields = null,
+        ?FieldList $actions = null
     ) {
         if (!$fields) {
             $fields = new FieldList(

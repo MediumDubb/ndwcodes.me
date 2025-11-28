@@ -12,7 +12,7 @@ use SilverStripe\Forms\ReadonlyField;
 
 class FileHistoryFormFactory extends FileFormFactory
 {
-    public function getForm(RequestHandler $controller = null, $name = FormFactory::DEFAULT_NAME, $context = [])
+    public function getForm(?RequestHandler $controller = null, $name = FormFactory::DEFAULT_NAME, $context = [])
     {
         $context['RequireLinkText'] = false;
         $form = parent::getForm($controller, $name, $context);
@@ -27,7 +27,7 @@ class FileHistoryFormFactory extends FileFormFactory
         }
 
         $versionTag = sprintf(
-            '<span class="badge badge-info">v.%s</span>',
+            '<span class="badge badge-info text-bg-info">v.%s</span>',
             $record->Version
         );
         $agoTag = sprintf(
@@ -36,7 +36,7 @@ class FileHistoryFormFactory extends FileFormFactory
                 ? _t(__CLASS__ . '.PUBLISHED', 'Published')
                 : _t(__CLASS__ . '.SAVED', 'Saved'),
             Convert::raw2att($record->LastEdited),
-            Convert::raw2xml($record->dbObject('LastEdited')->Ago())
+            Convert::raw2xml($record->dbObject('LastEdited')?->Ago())
         );
         return sprintf(
             '<div class="editor__specs">%s %s, %s %s</div>',
@@ -47,7 +47,7 @@ class FileHistoryFormFactory extends FileFormFactory
         );
     }
 
-    protected function getFormFields(RequestHandler $controller = null, $name, $context = [])
+    protected function getFormFields(?RequestHandler $controller, $name, $context = [])
     {
         $record = $context['Record'];
 
@@ -68,7 +68,7 @@ class FileHistoryFormFactory extends FileFormFactory
     }
 
 
-    protected function getFormActions(RequestHandler $controller = null, $formName, $context = [])
+    protected function getFormActions(?RequestHandler $controller, $formName, $context = [])
     {
         $actions = new FieldList();
         // Update

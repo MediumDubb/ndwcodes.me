@@ -5,7 +5,7 @@ namespace SilverStripe\UserForms\Extension;
 use SilverStripe\Assets\File;
 use SilverStripe\Assets\Folder;
 use SilverStripe\Core\Convert;
-use SilverStripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\Queries\SQLUpdate;
 use SilverStripe\UserForms\Control\UserDefinedFormController;
@@ -15,9 +15,9 @@ use SilverStripe\UserForms\Model\Submission\SubmittedFileField;
  * @property string $UserFormUpload
  * @method SubmittedFileField SubmittedFileField()
  *
- * @extends DataExtension<File&static>
+ * @extends Extension<File&static>
  */
-class UserFormFileExtension extends DataExtension
+class UserFormFileExtension extends Extension
 {
 
     public const USER_FORM_UPLOAD_UNKNOWN = null;
@@ -44,7 +44,7 @@ class UserFormFileExtension extends DataExtension
      * @param bool $value
      * @see File::isTrackedFormUpload(), UserDefinedFormController::process()
      */
-    public function updateTrackedFormUpload(&$value): void
+    protected function updateTrackedFormUpload(&$value): void
     {
         $file = $this->owner;
         if ($file->UserFormUpload != UserFormFileExtension::USER_FORM_UPLOAD_UNKNOWN) {

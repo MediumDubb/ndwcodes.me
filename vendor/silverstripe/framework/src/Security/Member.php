@@ -15,7 +15,7 @@ use SilverStripe\Core\Convert;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Dev\TestMailer;
 use SilverStripe\Forms\CheckboxField;
-use SilverStripe\Forms\CompositeValidator;
+use SilverStripe\Forms\Validation\CompositeValidator;
 use SilverStripe\Forms\ConfirmedPasswordField;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
@@ -24,24 +24,29 @@ use SilverStripe\Forms\ListboxField;
 use SilverStripe\Forms\Tab;
 use SilverStripe\Forms\TabSet;
 use SilverStripe\i18n\i18n;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DB;
 use SilverStripe\ORM\FieldType\DBDatetime;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\ManyManyList;
-use SilverStripe\ORM\Map;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\Map;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\UnsavedRelationList;
-use SilverStripe\ORM\ValidationException;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationException;
+use SilverStripe\Core\Validation\ValidationResult;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Exception\RfcComplianceException;
 use Closure;
 use RuntimeException;
-use SilverStripe\Dev\Deprecation;
+use SilverStripe\Forms\FormField;
+use SilverStripe\Forms\SearchableDropdownField;
+use SilverStripe\Forms\SearchableMultiDropdownField;
+use SilverStripe\ORM\FieldType\DBForeignKey;
+use SilverStripe\Security\Validation\PasswordValidator;
+use SilverStripe\Security\Validation\RulesPasswordValidator;
 
 /**
  * The member class which represents the users of the system
@@ -70,12 +75,18 @@ class Member extends DataObject
     private static $db = [
         'FirstName' => 'Varchar',
         'Surname' => 'Varchar',
-        'Email' => 'Varchar(254)', // See RFC 5321, Section 4.5.3.1.3. (256 minus the < and > character)
-        'TempIDHash' => 'Varchar(160)', // Temporary id used for cms re-authentication
-        'TempIDExpired' => 'Datetime', // Expiry of temp login
+        // See RFC 5321, Section 4.5.3.1.3. (256 minus the < and > character)
+        'Email' => 'Varchar(254)',
+        // Temporary id used for cms re-authentication
+        'TempIDHash' => 'Varchar(160)',
+        // Expiry of temp login
+        'TempIDExpired' => 'Datetime',
         'Password' => 'Varchar(160)',
-        'AutoLoginHash' => 'Varchar(160)', // Used to auto-login the user on password reset
+        // Used to auto-login the user on password reset
+        'AutoLoginHash' => 'Varchar(160)',
         'AutoLoginExpired' => 'Datetime',
+        // Temporary hash used for auto-login to prevent leaking AutoLoginHash on redirect
+        'AutoLoginTempHash' => 'Varchar(64)',
         // This is an arbitrary code pointing to a PasswordEncryptor instance,
         // not an actual encryption algorithm.
         // Warning: Never change this field after its the first password hashing without
@@ -100,12 +111,16 @@ class Member extends DataObject
 
     private static $table_name = "Member";
 
+    private static bool $must_use_primary_db = true;
+
     private static $default_sort = '"Surname", "FirstName"';
 
     private static $indexes = [
         'Email' => true,
-        //Removed due to duplicate null values causing MSSQL problems
-        //'AutoLoginHash' => Array('type'=>'unique', 'value'=>'AutoLoginHash', 'ignoreNulls'=>true)
+        // Not a unique index due to duplicate null values causing MSSQL problems
+        'AutoLoginHash' => true,
+        'AutoLoginTempHash' => true,
+        'TempIDHash' => true,
     ];
 
     private static bool $require_sudo_mode = true;
@@ -157,6 +172,7 @@ class Member extends DataObject
     private static $hidden_fields = [
         'AutoLoginHash',
         'AutoLoginExpired',
+        'AutoLoginTempHash',
         'PasswordEncryption',
         'PasswordExpiry',
         'LockedOutUntil',
@@ -213,6 +229,7 @@ class Member extends DataObject
      * @config
      * @var String If this is set, then a session cookie with the given name will be set on log-in,
      * and cleared on logout.
+     * This cookie shares the same SameSite and Secure parameters as the main session cookie.
      */
     private static $login_marker_cookie = null;
 
@@ -312,7 +329,7 @@ class Member extends DataObject
      * @param ValidationResult $result Optional result to add errors to
      * @return ValidationResult
      */
-    public function validateCanLogin(ValidationResult &$result = null)
+    public function validateCanLogin(?ValidationResult &$result = null)
     {
         $result = $result ?: ValidationResult::create();
         if ($this->isLockedOut()) {
@@ -320,7 +337,7 @@ class Member extends DataObject
                 _t(
                     __CLASS__ . '.ERRORLOCKEDOUT2',
                     'Your account has been temporarily disabled because of too many failed attempts at ' . 'logging in. Please try again in {count} minutes.',
-                    null,
+                    '',
                     ['count' => static::config()->get('lock_out_delay_mins')]
                 )
             );
@@ -340,7 +357,7 @@ class Member extends DataObject
     {
         /** @var DBDatetime $lockedOutUntilObj */
         $lockedOutUntilObj = $this->dbObject('LockedOutUntil');
-        if ($lockedOutUntilObj->InFuture()) {
+        if ($lockedOutUntilObj?->InFuture()) {
             return true;
         }
 
@@ -367,7 +384,7 @@ class Member extends DataObject
         /** @var DBDatetime $firstFailureDate */
         $firstFailureDate = $attempts->first()->dbObject('Created');
         $maxAgeSeconds = $this->config()->get('lock_out_delay_mins') * 60;
-        $lockedOutUntil = $firstFailureDate->getTimestamp() + $maxAgeSeconds;
+        $lockedOutUntil = $firstFailureDate?->getTimestamp() + $maxAgeSeconds;
         $now = DBDatetime::now()->getTimestamp();
         if ($now < $lockedOutUntil) {
             return true;
@@ -378,10 +395,8 @@ class Member extends DataObject
 
     /**
      * Set a {@link PasswordValidator} object to use to validate member's passwords.
-     *
-     * @param PasswordValidator $validator
      */
-    public static function set_password_validator(PasswordValidator $validator = null)
+    public static function set_password_validator(?PasswordValidator $validator = null)
     {
         // Override existing config
         Config::modify()->remove(Injector::class, PasswordValidator::class);
@@ -394,13 +409,11 @@ class Member extends DataObject
 
     /**
      * Returns the default {@link PasswordValidator}
-     *
-     * @return PasswordValidator|null
      */
-    public static function password_validator()
+    public static function password_validator(): ?PasswordValidator
     {
         if (Injector::inst()->has(PasswordValidator::class)) {
-            return Deprecation::withSuppressedNotice(fn() => Injector::inst()->get(PasswordValidator::class));
+            return Injector::inst()->get(PasswordValidator::class);
         }
         return null;
     }
@@ -427,7 +440,7 @@ class Member extends DataObject
         $currentValue = $this->PasswordExpiry;
         $currentDate = $this->dbObject('PasswordExpiry');
 
-        if ($dataValue && (!$currentValue || $currentDate->inFuture())) {
+        if ($dataValue && (!$currentValue || $currentDate?->inFuture())) {
             // Only alter future expiries - this way an admin could see how long ago a password expired still
             $this->PasswordExpiry = DBDatetime::now()->Rfc2822();
         } elseif (!$dataValue && $this->isPasswordExpired()) {
@@ -443,7 +456,6 @@ class Member extends DataObject
         if (!$this->PasswordExpiry) {
             return false;
         }
-
         return strtotime(date('Y-m-d')) >= strtotime($this->PasswordExpiry ?? '');
     }
 
@@ -452,7 +464,7 @@ class Member extends DataObject
      */
     public function beforeMemberLoggedIn()
     {
-        $this->extend('beforeMemberLoggedIn');
+        $this->extend('onBeforeMemberLoggedIn');
     }
 
     /**
@@ -470,7 +482,7 @@ class Member extends DataObject
         $this->write();
 
         // Audit logging hook
-        $this->extend('afterMemberLoggedIn');
+        $this->extend('onAfterMemberLoggedIn');
     }
 
     /**
@@ -495,9 +507,9 @@ class Member extends DataObject
      *
      * @param HTTPRequest|null $request
      */
-    public function beforeMemberLoggedOut(HTTPRequest $request = null)
+    public function beforeMemberLoggedOut(?HTTPRequest $request = null)
     {
-        $this->extend('beforeMemberLoggedOut', $request);
+        $this->extend('onBeforeMemberLoggedOut', $request);
     }
 
     /**
@@ -505,9 +517,9 @@ class Member extends DataObject
      *
      * @param HTTPRequest|null $request
      */
-    public function afterMemberLoggedOut(HTTPRequest $request = null)
+    public function afterMemberLoggedOut(?HTTPRequest $request = null)
     {
-        $this->extend('afterMemberLoggedOut', $request);
+        $this->extend('onAfterMemberLoggedOut', $request);
     }
 
     /**
@@ -547,9 +559,7 @@ class Member extends DataObject
             $generator = new RandomGenerator();
             $token = $generator->randomToken();
             $hash = $this->encryptWithUserSettings($token);
-        } while (DataObject::get_one(Member::class, [
-            '"Member"."AutoLoginHash"' => $hash
-        ]));
+        } while (Member::get()->setUseCache(true)->filter('AutoLoginHash', $hash)->exists());
 
         $this->AutoLoginHash = $hash;
         $this->AutoLoginExpired = date('Y-m-d H:i:s', time() + $lifetime);
@@ -662,6 +672,7 @@ class Member extends DataObject
             null,
             $editingPassword
         );
+        $password->setIsOnMemberForm(true);
 
         // If editing own password, require confirmation of existing
         if ($editingPassword && $this->ID == Security::getCurrentUser()->ID) {
@@ -682,11 +693,11 @@ class Member extends DataObject
 
 
     /**
-     * Returns the {@link RequiredFields} instance for the Member object. This
+     * Returns the {@link RequiredFieldsValidator} instance for the Member object. This
      * Validator is used when saving a {@link CMSProfileController} or added to
      * any form responsible for saving a users data.
      *
-     * To customize the required fields, add a {@link DataExtension} to member
+     * To customize the required fields, add a {@link Extension} to member
      * calling the `updateValidator()` method.
      *
      * @return Member_Validator
@@ -737,7 +748,7 @@ class Member extends DataObject
 
         // Transform ID to member
         if (is_numeric($member)) {
-            $member = DataObject::get_by_id(Member::class, $member);
+            $member = Member::get()->setUseCache(true)->byID($member);
         }
         Security::setCurrentUser($member);
 
@@ -751,7 +762,7 @@ class Member extends DataObject
     /**
      * Event handler called before writing to the database.
      */
-    public function onBeforeWrite()
+    protected function onBeforeWrite()
     {
         // Remove any line-break or space characters accidentally added during a copy-paste operation
         if ($this->Email) {
@@ -764,13 +775,11 @@ class Member extends DataObject
         $identifierField = Member::config()->get('unique_identifier_field');
         if ($this->$identifierField) {
             // Note: Same logic as Member_Validator class
-            $filter = [
-                "\"Member\".\"$identifierField\"" => $this->$identifierField
-            ];
+            $filter = [$identifierField => $this->$identifierField];
             if ($this->ID) {
-                $filter[] = ['"Member"."ID" <> ?' => $this->ID];
+                $filter['ID:not'] = $this->ID;
             }
-            $existingRecord = DataObject::get_one(Member::class, $filter);
+            $existingRecord = Member::get()->setUseCache(true)->filter($filter)->first();
 
             if ($existingRecord) {
                 throw new ValidationException(_t(
@@ -786,7 +795,7 @@ class Member extends DataObject
             }
         }
 
-        // We don't send emails out on dev/tests sites to prevent accidentally spamming users.
+        // We don't send emails out during tests to prevent accidentally spamming users.
         // However, if TestMailer is in use this isn't a risk.
         if ((Director::isLive() || Injector::inst()->get(MailerInterface::class) instanceof TestMailer)
             && $this->isChanged('Password')
@@ -836,7 +845,7 @@ class Member extends DataObject
         parent::onBeforeWrite();
     }
 
-    public function onAfterWrite()
+    protected function onAfterWrite()
     {
         parent::onAfterWrite();
 
@@ -847,7 +856,7 @@ class Member extends DataObject
         }
     }
 
-    public function onAfterDelete()
+    protected function onAfterDelete()
     {
         parent::onAfterDelete();
 
@@ -933,11 +942,9 @@ class Member extends DataObject
     public function inGroup($group, $strict = false)
     {
         if (is_numeric($group)) {
-            $groupCheckObj = DataObject::get_by_id(Group::class, $group);
+            $groupCheckObj = Group::get()->setUseCache(true)->byID($group);
         } elseif (is_string($group)) {
-            $groupCheckObj = DataObject::get_one(Group::class, [
-                '"Group"."Code"' => $group
-            ]);
+            $groupCheckObj = Group::get()->setUseCache(true)->find('Code', $group);
         } elseif ($group instanceof Group) {
             $groupCheckObj = $group;
         } else {
@@ -962,9 +969,7 @@ class Member extends DataObject
      */
     public function addToGroupByCode($groupcode, $title = "")
     {
-        $group = DataObject::get_one(Group::class, [
-            '"Group"."Code"' => $groupcode
-        ]);
+        $group = Group::get()->setUseCache(true)->find('Code', $groupcode);
 
         if ($group) {
             $this->Groups()->add($group);
@@ -989,7 +994,7 @@ class Member extends DataObject
      */
     public function removeFromGroupByCode($groupcode)
     {
-        $group = Group::get()->filter(['Code' => $groupcode])->first();
+        $group = Group::get()->find('Code', $groupcode);
 
         if ($group) {
             $this->Groups()->remove($group);
@@ -1460,6 +1465,40 @@ class Member extends DataObject
         return $labels;
     }
 
+    public function scaffoldFormFieldForHasMany(
+        string $relationName,
+        ?string $fieldTitle,
+        DataObject $ownerRecord,
+        bool &$includeInOwnTab
+    ): FormField {
+        $includeInOwnTab = false;
+        return $this->scaffoldFormFieldForManyRelation($relationName, $fieldTitle);
+    }
+
+    public function scaffoldFormFieldForManyMany(
+        string $relationName,
+        ?string $fieldTitle,
+        DataObject $ownerRecord,
+        bool &$includeInOwnTab
+    ): FormField {
+        $includeInOwnTab = false;
+        return $this->scaffoldFormFieldForManyRelation($relationName, $fieldTitle);
+    }
+
+    private function scaffoldFormFieldForManyRelation(string $relationName, ?string $fieldTitle): FormField
+    {
+        $list = static::get();
+        $field = SearchableMultiDropdownField::create($relationName, $fieldTitle, $list);
+        // Use the same lazyload threshold has_one relations use
+        $threshold = DBForeignKey::config()->get('dropdown_field_threshold');
+        $overThreshold = $threshold === 0 || $list->setUseCache(true)->count() > $threshold;
+        $field->setIsLazyLoaded($overThreshold);
+        if ($threshold > 0) {
+            $field->setLazyLoadLimit($threshold);
+        }
+        return $field;
+    }
+
     /**
      * Users can view their own record.
      * Otherwise they'll need ADMIN or CMS_ACCESS_SecurityAdmin permissions.
@@ -1517,17 +1556,32 @@ class Member extends DataObject
             return false;
         }
 
-        // HACK: we should not allow for an non-Admin to edit an Admin
-        if (!Permission::checkMember($member, 'ADMIN') && Permission::checkMember($this, 'ADMIN')) {
-            return false;
-        }
         // members can usually edit their own record
         if ($this->ID == $member->ID) {
             return true;
         }
 
-        //standard check
-        return Permission::checkMember($member, 'CMS_ACCESS_SecurityAdmin');
+        // Admins have permission automatically.
+        if (Permission::checkMember($member, 'ADMIN')) {
+            return true;
+        }
+
+        // This is the main check - put this before the admin check because it gets cached and $member is
+        // usually the currently logged in user.
+        if (!Permission::checkMember($member, 'CMS_ACCESS_SecurityAdmin')) {
+            return false;
+        }
+
+        // Don't not allow for an non-Admin to edit an Admin
+        // Note the above checks against $member MUST come first, as that will usually be the current member
+        // and permissions get cached.
+        // This is important for performance when calling canEdit on multiple members.
+        if (Permission::checkMember($this, 'ADMIN')) {
+            return false;
+        }
+
+        // If we get to this point we're good to go
+        return true;
     }
 
     /**
@@ -1558,40 +1612,49 @@ class Member extends DataObject
             return false;
         }
 
-        // HACK: if you want to delete a member, you have to be a member yourself.
-        // this is a hack because what this should do is to stop a user
-        // deleting a member who has more privileges (e.g. a non-Admin deleting an Admin)
-        if (Permission::checkMember($this, 'ADMIN')) {
-            if (!Permission::checkMember($member, 'ADMIN')) {
-                return false;
-            }
+        // Admins have permission automatically.
+        if (Permission::checkMember($member, 'ADMIN')) {
+            return true;
         }
 
-        //standard check
-        return Permission::checkMember($member, 'CMS_ACCESS_SecurityAdmin');
+        // This is the main check - put this before the admin check because it gets cached and $member is
+        // usually the currently logged in user.
+        if (!Permission::checkMember($member, 'CMS_ACCESS_SecurityAdmin')) {
+            return false;
+        }
+
+        // Don't not allow for an non-Admin to delete an Admin
+        // Note the above checks against $member MUST come first, as that will usually be the current member
+        // and permissions get cached.
+        if (Permission::checkMember($this, 'ADMIN')) {
+            return false;
+        }
+
+        // If we get to this point we're good to go
+        return true;
     }
 
     /**
      * Validate this member object.
      */
-    public function validate()
+    public function validate(): ValidationResult
     {
         // If validation is disabled, skip this step
         if (!DataObject::config()->uninherited('validation_enabled')) {
             return ValidationResult::create();
         }
 
-        $valid = parent::validate();
+        $result = parent::validate();
         $validator = static::password_validator();
 
         if ($validator) {
             if ((!$this->ID && $this->Password) || $this->isChanged('Password')) {
                 $userValid = $validator->validate($this->Password, $this);
-                $valid->combineAnd($userValid);
+                $result->combineAnd($userValid);
             }
         }
 
-        return $valid;
+        return $result;
     }
 
     /**
@@ -1679,7 +1742,7 @@ class Member extends DataObject
                 $this->FailedLoginCount = 0;
             }
         }
-        $this->extend('registerFailedLogin');
+        $this->extend('onRegisterFailedLogin');
         $this->write();
     }
 
@@ -1743,11 +1806,16 @@ class Member extends DataObject
     {
         $password = '';
         $validator = Member::password_validator();
-        if ($length && $validator && $length < $validator->getMinLength()) {
-            throw new InvalidArgumentException('length argument is less than password validator minLength');
+        if ($validator instanceof RulesPasswordValidator) {
+            $validatorMinLength = $validator->getMinLength();
+            if ($length && $length < $validatorMinLength) {
+                throw new InvalidArgumentException('length argument is less than password validator minLength');
+            }
+        } else {
+            // Make sure the password is long enough to beat even very strict entropy tests
+            $validatorMinLength = 128;
         }
-        $validatorMinLength = $validator ? $validator->getMinLength() : 0;
-        $len = $length ?: max($validatorMinLength, 20);
+        $len = max($length, $validatorMinLength, 20);
         // The default PasswordValidator checks the password includes the following four character sets
         $charsets = [
             'abcdefghijklmnopqrstuvwyxz',

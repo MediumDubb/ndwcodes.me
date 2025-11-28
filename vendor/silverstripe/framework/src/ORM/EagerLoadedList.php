@@ -3,12 +3,18 @@
 namespace SilverStripe\ORM;
 
 use SilverStripe\Dev\Debug;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 use SilverStripe\ORM\Connect\DatabaseException;
 use SilverStripe\ORM\FieldType\DBField;
 use BadMethodCallException;
 use InvalidArgumentException;
 use LogicException;
+use SilverStripe\Core\ArrayLib;
+use SilverStripe\Core\ClassInfo;
+use SilverStripe\Dev\Deprecation;
+use SilverStripe\Model\List\ArrayList;
+use SilverStripe\Model\List\Map;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\Filters\SearchFilterable;
 use Traversable;
 
@@ -25,11 +31,8 @@ use Traversable;
  * @template T of DataObject
  * @implements Relation<T>
  * @implements SS_List<T>
- * @implements Filterable<T>
- * @implements Sortable<T>
- * @implements Limitable<T>
  */
-class EagerLoadedList extends ViewableData implements Relation, SS_List, Filterable, Sortable, Limitable
+class EagerLoadedList extends ModelData implements Relation, SS_List
 {
     use SearchFilterable;
 
@@ -164,7 +167,7 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
         return $this->dataClass;
     }
 
-    public function dbObject($fieldName): ?DBField
+    public function dbObject(string $fieldName): ?DBField
     {
         return singleton($this->dataClass)->dbObject($fieldName);
     }
@@ -261,7 +264,7 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
     /**
      * Not implemented - use addRow instead.
      */
-    public function add($item)
+    public function add(mixed $item): void
     {
         throw new BadMethodCallException('Cannot add a DataObject record to EagerLoadedList. Use addRow() to add database rows.');
     }
@@ -269,9 +272,14 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
     /**
      * Removes a record from the list. Note that the record will not be removed from the
      * database - this list is read-only.
+     *
+     * @param DataObject $item
      */
-    public function remove($item): static
+    public function remove(mixed $item)
     {
+        if (!is_a($item, $this->dataClass)) {
+            throw new InvalidArgumentException('Item must be an instance of ' . $this->dataClass);
+        }
         $id = $item->ID;
         if (array_key_exists($id, $this->rows)) {
             unset($this->rows[$id]);
@@ -297,12 +305,12 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
         return $this->byID(array_key_last($rows));
     }
 
-    public function map($keyField = 'ID', $titleField = 'Title'): Map
+    public function map(string $keyField = 'ID', string $titleField = 'Title'): Map
     {
         return new Map($this, $keyField, $titleField);
     }
 
-    public function column($colName = 'ID'): array
+    public function column(string $colName = 'ID'): array
     {
         $rows = $this->getFinalisedRows();
 
@@ -325,15 +333,13 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
 
     /**
      * Returns a unique array of a single field value for all the items in the list
-     *
-     * @param string $colName
      */
-    public function columnUnique($colName = 'ID'): array
+    public function columnUnique(string $colName = 'ID'): array
     {
         return array_unique($this->column($colName));
     }
 
-    public function each($callback): static
+    public function each(callable $callback): static
     {
         foreach ($this as $row) {
             $callback($row);
@@ -341,7 +347,7 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
         return $this;
     }
 
-    public function debug()
+    public function debug(): string
     {
         // Same implementation as DataList::debug()
         $val = '<h2>' . static::class . '</h2><ul>';
@@ -463,7 +469,7 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
         return $this->count() !== 0;
     }
 
-    public function canFilterBy($fieldName): bool
+    public function canFilterBy(string $fieldName): bool
     {
         if (!is_string($fieldName) || empty($this->rows)) {
             return false;
@@ -473,12 +479,12 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
         return array_key_exists($fieldName, $this->rows[$id]);
     }
 
-    public function canSortBy($fieldName): bool
+    public function canSortBy(string $fieldName): bool
     {
         return $this->canFilterBy($fieldName);
     }
 
-    public function find($key, $value): ?DataObject
+    public function find(string $key, mixed $value): ?DataObject
     {
         return $this->filter($key, $value)->first();
     }
@@ -497,6 +503,22 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
         $list = clone $this;
         $list->rows = $this->getMatches($filters, true);
         return $list;
+    }
+
+    /**
+     * Return a copy of this list which only includes items where $fieldToFilterBy matches values in $fieldFromOtherList from $list.
+     *
+     * If both fields are ID, the $list dataclass must be in the same class hierarchy as the dataclass in this list
+     *
+     * @param SS_List<DataObject> $list
+     * @param string $fieldToFilterBy The name of the field in $this to filter by
+     * @param string $fieldFromOtherList The name of the field in $list to get filter values from
+     * @return static<T>
+     * @throws InvalidArgumentException
+     */
+    public function filterByList(SS_List $list, string $fieldToFilterBy = 'ID', string $fieldFromOtherList = 'ID'): static
+    {
+        return $this->filterOrExcludeByList($list, $fieldToFilterBy, $fieldFromOtherList, false);
     }
 
     public function exclude(...$args): static
@@ -527,6 +549,22 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
     }
 
     /**
+     * Return a copy of this list which does not include items where $fieldToFilterBy matches values in $fieldFromOtherList from $list.
+     *
+     * If both fields are ID, the $list dataclass must be in the same class hierarchy as the dataclass in this list
+     *
+     * @param SS_List<DataObject> $list
+     * @param string $fieldToFilterBy The name of the field in $this to exclude by
+     * @param string $fieldFromOtherList The name of the field in $list to get exclude values from
+     * @return static<T>
+     * @throws InvalidArgumentException
+     */
+    public function excludeByList(SS_List $list, string $fieldToFilterBy = 'ID', string $fieldFromOtherList = 'ID'): static
+    {
+        return $this->filterOrExcludeByList($list, $fieldToFilterBy, $fieldFromOtherList, true);
+    }
+
+    /**
      * Return a new instance of the list with an added filter
      *
      * @param array $filterArray
@@ -546,9 +584,11 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
      *
      * @return static<T>
      * @throws InvalidArgumentException
+     * @deprecated 6.1.0 use excludeByList() instead.
      */
     public function subtract(DataList $list): static
     {
+        Deprecation::notice('6.1.0', 'Use excludeByList() instead.');
         if ($this->dataClass() != $list->dataClass()) {
             throw new InvalidArgumentException('The list passed must have the same dataclass as this class');
         }
@@ -637,15 +677,8 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
     /**
      * @return ArrayList<T>
      */
-    public function filterByCallback($callback): ArrayList
+    public function filterByCallback(callable $callback): SS_List
     {
-        if (!is_callable($callback)) {
-            throw new LogicException(sprintf(
-                "SS_Filterable::filterByCallback() passed callback must be callable, '%s' given",
-                gettype($callback)
-            ));
-        }
-
         $output = ArrayList::create();
         foreach ($this as $item) {
             if (call_user_func($callback, $item, $this)) {
@@ -655,7 +688,7 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
         return $output;
     }
 
-    public function byID($id): ?DataObject
+    public function byID(mixed $id): ?DataObject
     {
         $rows = $this->getFinalisedRows();
         if (!array_key_exists($id, $rows)) {
@@ -664,10 +697,10 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
         return $this->createDataObject($rows[$id]);
     }
 
-    public function byIDs($ids): static
+    public function byIDs(array $ids): static
     {
         $list = clone $this;
-        $ids = array_map('intval', (array) $ids);
+        $ids = array_map('intval', $ids);
         $list->rows = ArrayLib::filter_keys($list->rows, $ids);
         return $list;
     }
@@ -1028,5 +1061,42 @@ class EagerLoadedList extends ViewableData implements Relation, SS_List, Filtera
     private function isNumericNotString(mixed $value): bool
     {
         return is_numeric($value) && !is_string($value);
+    }
+
+    /**
+     * Get the class of items that the list holds, or null for lists with non-objects
+     */
+    private function getDataClassFromList(SS_List $list): ?string
+    {
+        if (ClassInfo::hasMethod($list, 'dataClass')) {
+            return $list->dataClass();
+        }
+        // Assume all items in the list have the same class, like ArrayList does.
+        $item = $list->first();
+        if (is_object($item)) {
+            return get_class($item);
+        }
+        return null;
+    }
+
+    /**
+     * Shared logic for filterByList() and excludeByList()
+     */
+    private function filterOrExcludeByList(SS_List $list, string $fieldToFilterBy, string $fieldFromOtherList, bool $isExclude): static
+    {
+        $thisDataClass = $this->dataClass();
+        $listDataClass = $this->getDataClassFromList($list);
+        if ($fieldToFilterBy === 'ID'
+            && $fieldFromOtherList === 'ID'
+            && !is_a($thisDataClass, $listDataClass, true)
+            && !is_a($listDataClass, $thisDataClass, true)
+        ) {
+            throw new InvalidArgumentException('If both columns are ID, the $list dataclass must be in the same class hierarchy as the dataclass in this list');
+        }
+        $columnFromList = $list->columnUnique($fieldFromOtherList);
+        if ($isExclude) {
+            return $this->exclude($fieldToFilterBy, $columnFromList);
+        }
+        return $this->filter($fieldToFilterBy, $columnFromList);
     }
 }

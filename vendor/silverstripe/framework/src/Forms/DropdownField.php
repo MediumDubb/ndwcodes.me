@@ -2,8 +2,8 @@
 
 namespace SilverStripe\Forms;
 
-use SilverStripe\ORM\ArrayList;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\List\ArrayList;
+use SilverStripe\Model\ArrayData;
 
 /**
  * Dropdown field, created from a select tag.
@@ -68,7 +68,7 @@ use SilverStripe\View\ArrayData;
  * DropdownField::create(
  *   'Country',
  *   'Country',
- *   singleton(MyObject::class)->dbObject('Country')->enumValues()
+ *   singleton(MyObject::class)->dbObject('Country')?->enumValues()
  * );
  * </code>
  *
@@ -97,7 +97,7 @@ class DropdownField extends SingleSelectField
     protected function getFieldOption($value, $title)
     {
         // Check selection
-        $selected = $this->isSelectedValue($value, $this->Value());
+        $selected = $this->isSelectedValue($value, $this->getValue());
 
         // Check disabled
         $disabled = false;

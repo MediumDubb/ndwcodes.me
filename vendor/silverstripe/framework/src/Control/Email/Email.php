@@ -4,24 +4,25 @@ namespace SilverStripe\Control\Email;
 
 use Exception;
 use RuntimeException;
-use Egulias\EmailValidator\EmailValidator;
-use Egulias\EmailValidator\Validation\RFCValidation;
 use SilverStripe\Control\Director;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Environment;
 use SilverStripe\Core\Extensible;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\Core\Injector\Injector;
+use SilverStripe\Core\Validation\ConstraintValidator;
 use SilverStripe\ORM\FieldType\DBField;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\Requirements;
 use SilverStripe\View\SSViewer;
 use SilverStripe\View\ThemeResourceLoader;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Address;
 use Symfony\Component\Mime\Email as SymfonyEmail;
 use Symfony\Component\Mime\Part\AbstractPart;
+use Symfony\Component\Validator\Constraints\Email as EmailConstraint;
+use Symfony\Component\Validator\Constraints\NotBlank;
 
 class Email extends SymfonyEmail
 {
@@ -45,7 +46,7 @@ class Email extends SymfonyEmail
     private static string|array $admin_email = '';
 
     /**
-     * The name of the HTML template to render the email with (without *.ss extension)
+     * The name of the HTML template to render the email with
      */
     private string $HTMLTemplate = '';
 
@@ -56,23 +57,24 @@ class Email extends SymfonyEmail
 
     /**
      * Additional data available in a template.
-     * Used in the same way than {@link ViewableData->customize()}.
+     * Used in the same way than {@link ModelData->customize()}.
      */
-    private ViewableData $data;
+    private ModelData $data;
 
     private bool $dataHasBeenSet = false;
 
     /**
-     * Checks for RFC822-valid email format.
-     *
-     * @copyright Cal Henderson <cal@iamcal.com>
-     *    This code is licensed under a Creative Commons Attribution-ShareAlike 2.5 License
-     *    http://creativecommons.org/licenses/by-sa/2.5/
+     * Checks for RFC valid email format.
      */
     public static function is_valid_address(string $address): bool
     {
-        $validator = new EmailValidator();
-        return $validator->isValid($address, new RFCValidation());
+        return ConstraintValidator::validate(
+            $address,
+            [
+                new EmailConstraint(mode: EmailConstraint::VALIDATION_MODE_STRICT),
+                new NotBlank()
+            ]
+        )->isValid();
     }
 
     public static function getSendAllEmailsTo(): array
@@ -117,7 +119,7 @@ class Email extends SymfonyEmail
         $addresses = [];
         if (is_array($config)) {
             foreach ($config as $key => $val) {
-                if (filter_var($key, FILTER_VALIDATE_EMAIL)) {
+                if (static::is_valid_address($key)) {
                     $addresses[] = new Address($key, $val);
                 } else {
                     $addresses[] = new Address($val);
@@ -194,7 +196,7 @@ class Email extends SymfonyEmail
         if ($returnPath) {
             $this->setReturnPath($returnPath);
         }
-        $this->data = ViewableData::create();
+        $this->data = ModelData::create();
     }
 
     private function getDefaultFrom(): string|array
@@ -226,7 +228,7 @@ class Email extends SymfonyEmail
     /**
      * Passing a string of HTML for $body will have no affect if you also call either setData() or addData()
      */
-    public function setBody(AbstractPart|string $body = null): static
+    public function setBody(AbstractPart|string|null $body = null): static
     {
         if ($body instanceof AbstractPart) {
             // pass to Symfony\Component\Mime\Message::setBody()
@@ -324,7 +326,7 @@ class Email extends SymfonyEmail
         return $this->attachFromPath($path, $alias, $mime);
     }
 
-    public function addAttachmentFromData(string $data, string $name, string $mime = null): static
+    public function addAttachmentFromData(string $data, string $name, ?string $mime = null): static
     {
         return $this->attach($data, $name, $mime);
     }
@@ -336,7 +338,7 @@ class Email extends SymfonyEmail
      * IsEmail: used to detect if rendering an email template rather than a page template
      * BaseUrl: used to get the base URL for the email
      */
-    public function getData(): ViewableData
+    public function getData(): ModelData
     {
         $extraData = [
             'IsEmail' => true,
@@ -357,7 +359,7 @@ class Email extends SymfonyEmail
      *
      * Calling setData() once means that any content set via text()/html()/setBody() will have no effect
      */
-    public function setData(array|ViewableData $data)
+    public function setData(array|ModelData $data)
     {
         if (is_array($data)) {
             $data = ArrayData::create($data);
@@ -396,26 +398,21 @@ class Email extends SymfonyEmail
         return $this;
     }
 
-    public function getHTMLTemplate(): string
+    public function getHTMLTemplate(): string|array
     {
         if ($this->HTMLTemplate) {
             return $this->HTMLTemplate;
         }
 
-        return ThemeResourceLoader::inst()->findTemplate(
-            SSViewer::get_templates_by_class(static::class, '', Email::class),
-            SSViewer::get_themes()
-        );
+        return SSViewer::get_templates_by_class(static::class, '', Email::class);
     }
 
     /**
-     * Set the template to render the email with
+     * Set the template to render the email with.
+     * Do not include a file extension unless you are referencing a full absolute file path.
      */
     public function setHTMLTemplate(string $template): static
     {
-        if (substr($template ?? '', -3) == '.ss') {
-            $template = substr($template ?? '', 0, -3);
-        }
         $this->HTMLTemplate = $template;
         return $this;
     }
@@ -429,13 +426,11 @@ class Email extends SymfonyEmail
     }
 
     /**
-     * Set the template to render the plain part with
+     * Set the template to render the plain part with.
+     * Do not include a file extension unless you are referencing a full absolute file path.
      */
     public function setPlainTemplate(string $template): static
     {
-        if (substr($template ?? '', -3) == '.ss') {
-            $template = substr($template ?? '', 0, -3);
-        }
         $this->plainTemplate = $template;
         return $this;
     }

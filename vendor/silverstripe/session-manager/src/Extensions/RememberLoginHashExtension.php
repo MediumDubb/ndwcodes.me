@@ -5,10 +5,10 @@ namespace SilverStripe\SessionManager\Extensions;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Core\Extension;
 use SilverStripe\Core\Injector\Injector;
-use SilverStripe\Dev\Deprecation;
 use SilverStripe\Security\RememberLoginHash;
 use SilverStripe\SessionManager\Models\LoginSession;
 use SilverStripe\SessionManager\Security\LogInAuthenticationHandler;
+use SilverStripe\SessionManager\Middleware\LoginSessionMiddleware;
 
 /**
  * @method LoginSession LoginSession()
@@ -27,20 +27,22 @@ class RememberLoginHashExtension extends Extension
     /**
      * @return void
      */
-    public function onAfterGenerateToken(): void
+    protected function onAfterGenerateToken(): void
     {
         $loginHandler = Injector::inst()->get(LogInAuthenticationHandler::class);
         $loginHandler->setRememberLoginHash($this->owner);
     }
 
     /**
-     * @deprecated 2.3.2 Will be renamed to onAfterRenewSession()
+     * Overwrites the core session variable with the LoginSession record ID
+     * during session renewal when the user selects 'remember me' (ALC).
+     * This works in tandem with LoginSessionMiddleware, and avoids the
+     * overhead of an additional DB query.
+     *
+     * @see LoginSessionMiddleware
      */
-    public function onAfterRenewToken(): void
+    protected function onAfterRenewSession(): void
     {
-        Deprecation::withNoReplacement(
-            fn () => Deprecation::notice('2.3.2', 'Will be renamed to onAfterRenewSession()')
-        );
         $loginHandler = Injector::inst()->get(LogInAuthenticationHandler::class);
         $request = Injector::inst()->get(HTTPRequest::class);
         $request->getSession()->set($loginHandler->getSessionVariable(), $this->owner->LoginSessionID);

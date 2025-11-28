@@ -9,8 +9,8 @@ use SilverStripe\Forms\DefaultFormFactory;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\HTMLEditor\HTMLEditorField;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\Forms\RequiredFields;
-use SilverStripe\Forms\CompositeValidator;
+use SilverStripe\Forms\Validation\RequiredFieldsValidator;
+use SilverStripe\Forms\Validation\CompositeValidator;
 
 class EditFormFactory extends DefaultFormFactory
 {
@@ -29,7 +29,7 @@ class EditFormFactory extends DefaultFormFactory
      */
     const FIELD_NAMESPACE_TEMPLATE = 'PageElements_%d_%s';
 
-    public function getForm(RequestHandler $controller = null, $name = EditFormFactory::DEFAULT_NAME, $context = [])
+    public function getForm(?RequestHandler $controller = null, $name = EditFormFactory::DEFAULT_NAME, $context = [])
     {
         $form = parent::getForm($controller, $name, $context);
 
@@ -44,7 +44,7 @@ class EditFormFactory extends DefaultFormFactory
         return $form;
     }
 
-    protected function getFormFields(RequestHandler $controller = null, $name, $context = [])
+    protected function getFormFields(?RequestHandler $controller, $name, $context = [])
     {
         $fields = parent::getFormFields($controller, $name, $context);
 
@@ -58,7 +58,7 @@ class EditFormFactory extends DefaultFormFactory
         return $fields;
     }
 
-    protected function getFormValidator(RequestHandler $controller = null, $name, $context = [])
+    protected function getFormValidator(?RequestHandler $controller, $name, $context = [])
     {
         /** @var CompositeValidator $compositeValidator */
         $compositeValidator = parent::getFormValidator($controller, $name, $context);
@@ -66,11 +66,11 @@ class EditFormFactory extends DefaultFormFactory
             return null;
         }
         $id = $context['Record']->ID;
-        foreach ($compositeValidator->getValidatorsByType(RequiredFields::class) as $validator) {
+        foreach ($compositeValidator->getValidatorsByType(RequiredFieldsValidator::class) as $validator) {
             $requiredFields = $validator->getRequired();
             foreach ($requiredFields as $requiredField) {
                 // Add more required fields with appendend field prefixes
-                // this is done so that front end validation works, at least for RequiredFields
+                // this is done so that front end validation works, at least for RequiredFieldsValidator
                 // you'll end up with two sets of required fields:
                 // - Title -- used for backend validation when inline saving an element
                 // - PageElements_<ElementID>_Title -- used for frontend js validation onchange()
@@ -86,11 +86,8 @@ class EditFormFactory extends DefaultFormFactory
     /**
      * Given a {@link FieldList}, give all fields a unique name so they can be used in the same context as
      * other elemental edit forms and the page (or other DataObject) that owns them.
-     *
-     * @param FieldList $fields
-     * @param array $context
      */
-    protected function namespaceFields(FieldList $fields, array $context)
+    public function namespaceFields(FieldList $fields, array $context): void
     {
         $elementID = $context['Record']->ID;
 
@@ -101,6 +98,24 @@ class EditFormFactory extends DefaultFormFactory
             }
             $namespacedName = sprintf(EditFormFactory::FIELD_NAMESPACE_TEMPLATE ?? '', $elementID, $field->getName());
             $field->setName($namespacedName);
+        }
+    }
+
+    /**
+     * Remove the pseudo namespaces that were added in namespaceFields()
+     */
+    public function removeNamespaceFromFields(FieldList $fields, array $context): void
+    {
+        $elementID = $context['Record']->ID;
+        $template = sprintf(EditFormFactory::FIELD_NAMESPACE_TEMPLATE, $elementID, '');
+
+        foreach ($fields->dataFields() as $namespacedName => $field) {
+            // Only look at fields that match the namespace template
+            if (substr($namespacedName, 0, strlen($template)) !== $template) {
+                continue;
+            }
+            $newName = substr($namespacedName, strlen($template));
+            $field->setName($newName);
         }
     }
 }

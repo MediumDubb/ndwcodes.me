@@ -8,7 +8,6 @@ use SilverStripe\Control\Controller;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Manifest\ModuleLoader;
-use SilverStripe\Dev\Deprecation;
 use SilverStripe\Forms\CheckboxField;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
@@ -28,7 +27,8 @@ use SilverStripe\ORM\DB;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBVarchar;
 use SilverStripe\ORM\HasManyList;
-use SilverStripe\ORM\ValidationException;
+use SilverStripe\Core\Validation\ValidationException;
+use SilverStripe\Forms\Validation\CompositeValidator;
 use SilverStripe\UserForms\Extension\UserFormFieldEditorExtension;
 use SilverStripe\UserForms\Model\EditableFormField\EditableFieldGroup;
 use SilverStripe\UserForms\Model\EditableFormField\EditableFieldGroupEnd;
@@ -264,7 +264,7 @@ class EditableFormField extends DataObject
                 LiteralField::create(
                     'MergeField',
                     '<div class="form-group field readonly">' .
-                        '<label class="left form__field-label" for="Form_ItemEditForm_MergeField">'
+                        '<label class="left form__field-label form-label" for="Form_ItemEditForm_MergeField">'
                             . _t(__CLASS__.'.MERGEFIELDNAME', 'Merge field')
                         . '</label>'
                         . '<div class="form__field-holder">'
@@ -321,14 +321,14 @@ class EditableFormField extends DataObject
         // Validation
         $validationFields = $this->getFieldValidationOptions();
         if ($validationFields && $validationFields->count()) {
-            $fields->addFieldsToTab('Root.Validation', $validationFields);
+            $fields->addFieldsToTab('Root.Validation', $validationFields->toArray());
             $fields->fieldByName('Root.Validation')->setTitle(_t(__CLASS__.'.VALIDATION', 'Validation'));
         }
 
         // Add display rule fields
         $displayFields = $this->getDisplayRuleFields();
         if ($displayFields && $displayFields->count()) {
-            $fields->addFieldsToTab('Root.DisplayRules', $displayFields);
+            $fields->addFieldsToTab('Root.DisplayRules', $displayFields->toArray());
         }
 
         // Placeholder
@@ -424,7 +424,7 @@ class EditableFormField extends DataObject
         );
     }
 
-    public function onBeforeWrite()
+    protected function onBeforeWrite()
     {
         parent::onBeforeWrite();
 
@@ -503,13 +503,13 @@ class EditableFormField extends DataObject
         $parent = $this->Parent();
         if ($parent && $parent->exists()) {
             return $parent->canEdit($member) && !$this->isReadonly();
-        } elseif (!$this->exists() && Controller::has_curr()) {
+        } elseif (!$this->exists() && Controller::curr()) {
             // This is for GridFieldOrderableRows support as it checks edit permissions on
             // singleton of the class. Allows editing of User Defined Form pages by
             // 'Content Authors' and those with permission to edit the UDF page. (ie. CanEditType/EditorGroups)
             // This is to restore User Forms 2.x backwards compatibility.
             $controller = Controller::curr();
-            if ($controller && $controller instanceof CMSPageEditController) {
+            if ($controller instanceof CMSPageEditController) {
                 $parent = $controller->getRecord($controller->currentRecordID());
                 // Only allow this behaviour on pages using UserFormFieldEditorExtension, such
                 // as UserDefinedForm page type.
@@ -572,8 +572,9 @@ class EditableFormField extends DataObject
             return $args[1]['Parent'];
         }
         // Hack in currently edited page if context is missing
-        if (Controller::has_curr() && Controller::curr() instanceof CMSMain) {
-            return Controller::curr()->currentRecord();
+        $controller = Controller::curr();
+        if ($controller instanceof CMSMain) {
+            return $controller->currentRecord();
         }
 
         // No page being edited
@@ -925,15 +926,11 @@ class EditableFormField extends DataObject
         return $editableFieldClasses;
     }
 
-    /**
-     * @return EditableFormField\Validator
-     * @deprecated 6.4.0 Will be replaced with getCMSCompositeValidator() in a future major release
-     */
-    public function getCMSValidator()
+    public function getCMSCompositeValidator(): CompositeValidator
     {
-        Deprecation::noticeWithNoReplacment('6.4.0', 'Will be replaced with getCMSCompositeValidator() in a future major release');
-        return EditableFormField\Validator::create()
-            ->setRecord($this);
+        $validator = parent::getCMSCompositeValidator();
+        $validator->addValidator(EditableFormField\Validator::create()->setRecord($this));
+        return $validator;
     }
 
     /**

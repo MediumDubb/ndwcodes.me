@@ -21,7 +21,7 @@ use SilverStripe\Forms\ListboxField;
 use SilverStripe\Forms\OptionsetField;
 use SilverStripe\Forms\PopoverField;
 use SilverStripe\Forms\ReadonlyField;
-use SilverStripe\Forms\RequiredFields;
+use SilverStripe\Forms\Validation\RequiredFieldsValidator;
 use SilverStripe\Forms\Tab;
 use SilverStripe\Forms\TabSet;
 use SilverStripe\Forms\TextField;
@@ -68,7 +68,7 @@ abstract class AssetFormFactory implements FormFactory
      * @param array $context
      * @return Form
      */
-    public function getForm(RequestHandler $controller = null, $name = FormFactory::DEFAULT_NAME, $context = [])
+    public function getForm(?RequestHandler $controller = null, $name = FormFactory::DEFAULT_NAME, $context = [])
     {
         // Validate context
         foreach ($this->getRequiredContext() as $required) {
@@ -108,11 +108,11 @@ abstract class AssetFormFactory implements FormFactory
      * @param RequestHandler $controller
      * @param $formName
      * @param $context
-     * @return RequiredFields
+     * @return RequiredFieldsValidator
      */
-    protected function getValidator(RequestHandler $controller = null, $formName, $context = [])
+    protected function getValidator(?RequestHandler $controller, $formName, $context = [])
     {
-        $validator = new RequiredFields('Name');
+        $validator = new RequiredFieldsValidator('Name');
 
         return $validator;
     }
@@ -199,7 +199,7 @@ abstract class AssetFormFactory implements FormFactory
      * @param array $context
      * @return FieldList
      */
-    protected function getFormActions(RequestHandler $controller = null, $formName, $context = [])
+    protected function getFormActions(?RequestHandler $controller, $formName, $context = [])
     {
         $record = isset($context['Record']) ? $context['Record'] : null;
 
@@ -224,7 +224,7 @@ abstract class AssetFormFactory implements FormFactory
      * @param array $context
      * @return FieldList
      */
-    protected function getFormFields(RequestHandler $controller = null, $formName, $context = [])
+    protected function getFormFields(?RequestHandler $controller, $formName, $context = [])
     {
         /** @var File $record */
         $record = isset($context['Record']) ? $context['Record'] : null;
@@ -395,8 +395,7 @@ abstract class AssetFormFactory implements FormFactory
                 _t(__CLASS__ . '.VIEWERMEMBERS', 'Viewer Users'),
                 Member::get()
             )
-                ->setIsLazyLoaded(true)
-                ->setUseSearchContext(true),
+                ->setIsLazyLoaded(true),
             OptionsetField::create(
                 "CanEditType",
                 _t(__CLASS__ . '.EDITHEADER', 'Who can edit this file?')
@@ -412,7 +411,6 @@ abstract class AssetFormFactory implements FormFactory
                 Member::get()
             )
                 ->setIsLazyLoaded(true)
-                ->setUseSearchContext(true)
         );
 
         return $tab;
@@ -430,17 +428,14 @@ abstract class AssetFormFactory implements FormFactory
      */
     protected function buildFileStatusIcon(string $title, string $fontClass): string
     {
-        // https://getbootstrap.com/docs/4.4/components/tooltips/
-        // Specifying data-delay as an html attribute means that show and hide must be the same value unfortunately
-        // Cannot data-delay="{show: 300, hide: 0}" as it will be interpreted as a string, not (number|object)
         return <<<EOT
             <div class="file-status-icon">
                 <span title="$title"
                       class="icon file-status-icon__icon $fontClass"
-                      data-toggle="tooltip"
-                      data-placement="top"
-                      data-delay="150"
-                      data-animation="false">
+                      data-bs-toggle="tooltip"
+                      data-bs-placement="top"
+                      data-bs-delay="150"
+                      data-bs-animation="false">
                 </span>
             </div>
 EOT;

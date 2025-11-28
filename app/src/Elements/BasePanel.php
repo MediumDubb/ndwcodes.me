@@ -7,12 +7,8 @@ use DNADesign\Elemental\Models\ElementalArea;
 use SilverStripe\AssetAdmin\Forms\UploadField;
 use SilverStripe\Assets\Image;
 use SilverStripe\Forms\CheckboxField;
-use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\LiteralField;
-use SilverStripe\Forms\TextField;
-use SilverStripe\Forms\ToggleCompositeField;
 use SilverStripe\ORM\DataList;
-use SilverStripe\View\Parsers\HTMLValue;
 
 class BasePanel extends BaseElement
 {
@@ -77,7 +73,8 @@ class BasePanel extends BaseElement
         return $fields;
     }
 
-    public function forTemplate($holder = true) {
+    public function forTemplate($holder = true): string
+    {
         if ($this->Hide) {
             return "";
         } else {

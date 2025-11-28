@@ -9,11 +9,10 @@ use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridField_FormAction;
 use SilverStripe\Forms\GridField\GridFieldPaginator;
 use SilverStripe\Forms\GridField\GridState_Data;
-use SilverStripe\ORM\ArrayList;
-use SilverStripe\ORM\Limitable;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\ArrayList;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\UnsavedRelationList;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 
 /**
  * GridFieldConfigurablePaginator paginates the {@link GridField} list and adds controls to the bottom of
@@ -46,6 +45,10 @@ class GridFieldConfigurablePaginator extends GridFieldPaginator
      */
     protected $pageSizes = array();
 
+    /**
+     * Used to make sure we only count the list once.
+     * Required because the parent class sets totalItems to 0 by default.
+     */
     private bool $haveCheckedCount = false;
 
     /**
@@ -264,13 +267,17 @@ class GridFieldConfigurablePaginator extends GridFieldPaginator
         // Assign the GridField to the class so it can be used later in the request
         $this->setGridField($gridField);
 
+        // Update item count prior to limit. This ensures filtered lists have the correct count.
+        $this->totalItems = $dataList->count();
+        $this->haveCheckedCount = true;
+
         // Retain page sizes during actions provided by other components
         $state = $this->getGridPagerState();
         if (is_numeric($state->pageSize)) {
             $this->setItemsPerPage($state->pageSize);
         }
 
-        if (!($dataList instanceof Limitable) || ($dataList instanceof UnsavedRelationList)) {
+        if (!($dataList instanceof SS_List) || ($dataList instanceof UnsavedRelationList)) {
             return $dataList;
         }
 
@@ -439,7 +446,7 @@ class GridFieldConfigurablePaginator extends GridFieldPaginator
      * @param  GridField $gridField Not used, but present for parent method compatibility
      * @return GridState_Data
      */
-    protected function getGridPagerState(GridField $gridField = null)
+    protected function getGridPagerState(?GridField $gridField = null)
     {
         if (!$this->gridFieldState) {
             $state = $this->getGridField()->State->GridFieldConfigurablePaginator;

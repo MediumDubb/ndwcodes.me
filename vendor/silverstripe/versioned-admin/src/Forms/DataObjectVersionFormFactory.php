@@ -13,6 +13,7 @@ use SilverStripe\Forms\FormFactory;
 use SilverStripe\Forms\FormField;
 use SilverStripe\Forms\Tab;
 use SilverStripe\ORM\DataObject;
+use SilverStripe\Forms\GridField\GridField;
 
 class DataObjectVersionFormFactory implements FormFactory
 {
@@ -37,7 +38,7 @@ class DataObjectVersionFormFactory implements FormFactory
         DataObjectVersionFormFactory::TYPE_HISTORY,
     ];
 
-    public function getForm(RequestHandler $controller = null, $name = FormFactory::DEFAULT_NAME, $context = [])
+    public function getForm(?RequestHandler $controller = null, $name = FormFactory::DEFAULT_NAME, $context = [])
     {
         // Validate context
         foreach ($this->getRequiredContext() as $required) {
@@ -90,7 +91,7 @@ class DataObjectVersionFormFactory implements FormFactory
         return in_array($this->getFormType($context), $this->config()->get('readonly_types') ?? []);
     }
 
-    protected function getFormFields(RequestHandler $controller = null, $name, $context = [])
+    protected function getFormFields(?RequestHandler $controller, $name, $context = [])
     {
         $record = $context['Record'];
         /** @var FieldList $fields */
@@ -98,10 +99,24 @@ class DataObjectVersionFormFactory implements FormFactory
 
         $this->removeHistoryViewerFields($fields);
         $this->removeSelectedRightTitles($fields);
+        $this->removeGridFields($fields);
 
         $this->invokeWithExtensions('updateFormFields', $fields, $controller, $name, $context);
 
         return $fields;
+    }
+
+    /**
+     * Remove all GridField instances from the form as they isn't a corresponding react
+     * field to render the GridField on the frontend.
+     */
+    private function removeGridFields(FieldList $fields)
+    {
+        $fields->recursiveWalk(function (FormField $field) {
+            if ($field instanceof GridField) {
+                $field->getContainerFieldList()->remove($field);
+            }
+        });
     }
 
     /**
@@ -142,7 +157,7 @@ class DataObjectVersionFormFactory implements FormFactory
         }
     }
 
-    protected function getFormActions(RequestHandler $controller = null, $formName, $context = [])
+    protected function getFormActions(?RequestHandler $controller, $formName, $context = [])
     {
         $actions = FieldList::create();
         $this->invokeWithExtensions('updateFormActions', $actions, $controller, $formName, $context);

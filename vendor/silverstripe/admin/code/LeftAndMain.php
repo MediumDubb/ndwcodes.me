@@ -2,19 +2,16 @@
 
 namespace SilverStripe\Admin;
 
-use BadMethodCallException;
 use InvalidArgumentException;
 use LogicException;
 use ReflectionClass;
 use SilverStripe\CMS\Controllers\CMSMain;
 use SilverStripe\Admin\Navigator\SilverStripeNavigator;
-use SilverStripe\Control\ContentNegotiator;
 use SilverStripe\Control\Controller;
 use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Control\HTTPResponse_Exception;
-use SilverStripe\Control\Middleware\HTTPCacheControlMiddleware;
 use SilverStripe\Control\PjaxResponseNegotiator;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Config\Config;
@@ -22,36 +19,30 @@ use SilverStripe\Core\Convert;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Core\Manifest\ModuleResourceLoader;
 use SilverStripe\Core\Manifest\VersionProvider;
-use SilverStripe\Dev\Deprecation;
 use SilverStripe\Dev\TestOnly;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\Form;
 use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\HiddenField;
-use SilverStripe\Forms\HTMLEditor\HTMLEditorConfig;
-use SilverStripe\Forms\HTMLEditor\TinyMCEConfig;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\PrintableTransformation;
-use SilverStripe\Forms\Schema\FormSchema;
 use SilverStripe\i18n\i18n;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\CMSPreviewable;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBHTMLText;
 use SilverStripe\ORM\Hierarchy\Hierarchy;
-use SilverStripe\ORM\SS_List;
-use SilverStripe\ORM\ValidationException;
-use SilverStripe\ORM\ValidationResult;
-use SilverStripe\Security\Member;
+use SilverStripe\Model\List\SS_List;
+use SilverStripe\Core\Validation\ValidationException;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Permission;
 use SilverStripe\Security\PermissionProvider;
 use SilverStripe\Security\Security;
 use SilverStripe\Security\SecurityToken;
 use SilverStripe\SiteConfig\SiteConfig;
-use SilverStripe\Versioned\Versioned;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\Requirements;
 use SilverStripe\View\SSViewer;
 
@@ -62,15 +53,8 @@ use SilverStripe\View\SSViewer;
  * This is essentially an abstract class which should be subclassed.
  * See {@link CMSMain} for a good example.
  */
-class LeftAndMain extends Controller implements PermissionProvider
+class LeftAndMain extends FormSchemaController implements PermissionProvider
 {
-
-    /**
-     * Form schema header identifier
-     * @deprecated 2.4.0 use SilverStripe\Forms\Schema\FormSchema::SCHEMA_HEADER instead.
-     */
-    const SCHEMA_HEADER = FormSchema::SCHEMA_HEADER;
-
     /**
      * Enable front-end debugging (increases verbosity) in dev mode.
      * Will be ignored in live environments.
@@ -78,20 +62,6 @@ class LeftAndMain extends Controller implements PermissionProvider
      * @var bool
      */
     private static $client_debugging = true;
-
-    /**
-     * The current url segment attached to the LeftAndMain instance
-     *
-     * @config
-     * @var string
-     */
-    private static $url_segment = null;
-
-    /**
-     * @config
-     * @var string Used by {@link AdminRootController} to augment Director route rules for sub-classes of LeftAndMain
-     */
-    private static $url_rule = '/$Action/$ID/$OtherID';
 
     /**
      * @config
@@ -112,12 +82,6 @@ class LeftAndMain extends Controller implements PermissionProvider
     private static $menu_priority = 0;
 
     /**
-     * @config
-     * @var int
-     */
-    private static $url_priority = 50;
-
-    /**
      * When set to true, this controller isn't given a menu item in the left panel in the CMS.
      */
     private static bool $ignore_menuitem = false;
@@ -127,12 +91,8 @@ class LeftAndMain extends Controller implements PermissionProvider
      *
      * Determines what is managed in this interface, through
      * {@link getEditForm()} and other logic.
-     *
-     * @config
-     * @var string
-     * @deprecated 2.4.0 Will be renamed to model_class
      */
-    private static $tree_class = null;
+    private static ?string $model_class = null;
 
     /**
      * @var array
@@ -142,40 +102,20 @@ class LeftAndMain extends Controller implements PermissionProvider
         'save',
         'printable',
         'show',
-        'Modals',
         'EditForm',
         'AddForm',
         'batchactions',
         'BatchActionsForm',
-        'schema',
-        'methodSchema',
-    ];
-
-    private static $url_handlers = [
-        'GET schema/$FormName/$ItemID/$OtherItemID' => 'schema',
-        'GET methodSchema/$Method/$FormName/$ItemID' => 'methodSchema',
     ];
 
     private static $dependencies = [
-        'FormSchema' => '%$' . FormSchema::class,
         'VersionProvider' => '%$' . VersionProvider::class,
     ];
 
     /**
-     * Current form schema helper
-     *
-     * @var FormSchema
-     * @deprecated 2.4.0 Will be made private.
+     * Current record ID for this request
      */
-    protected $schema = null;
-
-    /**
-     * Current pageID for this request
-     *
-     * @var null
-     * @deprecated 2.4.0 Will be renamed to recordID.
-     */
-    protected $pageID = null;
+    protected $recordID = null;
 
     /**
      * Set by {@link LeftAndMainErrorExtension} if an http error occurs
@@ -196,18 +136,6 @@ class LeftAndMain extends Controller implements PermissionProvider
      * @var array
      */
     private static $admin_themes = [];
-
-    /**
-     * Codes which are required from the current user to view this controller.
-     * If multiple codes are provided, all of them are required.
-     * All CMS controllers require "CMS_ACCESS_LeftAndMain" as a baseline check,
-     * and fall back to "CMS_ACCESS_<class>" if no permissions are defined here.
-     * See {@link canView()} for more details on permission checks.
-     *
-     * @config
-     * @var array
-     */
-    private static $required_permission_codes;
 
     /**
      * Namespace for session info, e.g. current record.
@@ -291,16 +219,35 @@ class LeftAndMain extends Controller implements PermissionProvider
     private static $frame_options = 'SAMEORIGIN';
 
     /**
-     * The configuration passed to the supporting JS for each CMS section includes a 'name' key
-     * that by default matches the FQCN of the current class. This setting allows you to change
-     * the key if necessary (for example, if you are overloading CMSMain or another core class
-     * and want to keep the core JS - which depends on the core class names - functioning, you
-     * would need to set this to the FQCN of the class you are overloading).
+     * The urls used for the links in the Help dropdown in the backend
+     *
+     * Set this to `false` via yml config if you do not want to show any help links
      *
      * @config
-     * @var string|null
+     * @var array
      */
-    private static $section_name = null;
+    private static $help_links = [
+        'CMS User help' => 'https://userhelp.silverstripe.org/en/6/',
+        'Developer docs' => 'https://docs.silverstripe.org/en/6/',
+        'Community' => 'https://www.silverstripe.org/',
+        'Feedback' => 'https://www.silverstripe.org/give-feedback/',
+    ];
+
+    /**
+     * The href for the anchor on the Silverstripe logo
+     *
+     * @config
+     * @var string
+     */
+    private static $application_link = '//www.silverstripe.org/';
+
+    /**
+     * The application name
+     *
+     * @config
+     * @var string
+     */
+    private static $application_name = 'Silverstripe';
 
     /**
      * @var PjaxResponseNegotiator
@@ -313,6 +260,13 @@ class LeftAndMain extends Controller implements PermissionProvider
     protected $versionProvider;
 
     /**
+     * Cached search filter instance for current search
+     *
+     * @var LeftAndMain_SearchFilter
+     */
+    protected $searchFilterCache = null;
+
+    /**
      * Gets the combined configuration of all LeftAndMain subclasses required by the client app.
      *
      * @return string
@@ -322,7 +276,7 @@ class LeftAndMain extends Controller implements PermissionProvider
     public function getCombinedClientConfig()
     {
         $combinedClientConfig = ['sections' => []];
-        $cmsClassNames = CMSMenu::get_cms_classes(LeftAndMain::class, true, CMSMenu::URL_PRIORITY);
+        $cmsClassNames = CMSMenu::get_cms_classes(AdminController::class, true, CMSMenu::URL_PRIORITY);
 
         // append LeftAndMain to the list as well
         $cmsClassNames[] = LeftAndMain::class;
@@ -346,475 +300,134 @@ class LeftAndMain extends Controller implements PermissionProvider
         return json_encode($combinedClientConfig);
     }
 
-    /**
-     * Returns configuration required by the client app.
-     *
-     * @return array
-     *
-     * WARNING: Experimental API
-     */
-    public function getClientConfig()
+    public function getClientConfig(): array
     {
-        // Allows the section name to be overridden in config
-        $name = $this->config()->get('section_name');
-        $url = trim($this->Link() ?? '', '/');
-
-        if (!$name) {
-            $name = static::class;
-        }
-
-        $clientConfig = [
-            // Trim leading/trailing slash to make it easier to concatenate URL
-            // and use in routing definitions.
-            'name' => $name,
-            'url' => $url,
-            'reactRoutePath' => preg_replace('/^' . preg_quote(AdminRootController::admin_url(), '/') . '/', '', $url),
-            'form' => [
-                'EditorExternalLink' => [
-                    'schemaUrl' => $this->Link('methodSchema/Modals/EditorExternalLink'),
-                ],
-                'EditorEmailLink' => [
-                    'schemaUrl' => $this->Link('methodSchema/Modals/EditorEmailLink'),
-                ],
-            ],
-        ];
-
-        $this->extend('updateClientConfig', $clientConfig);
-
-        return $clientConfig;
+        // Add WYSIWYG link form schema before extensions are applied
+        $this->beforeExtending('updateClientConfig', function (array &$clientConfig): void {
+            $modalController = ModalController::singleton();
+            foreach (array_keys(ModalController::config()->get('link_modal_form_factories')) as $name) {
+                $clientConfig['form'][$name]['schemaUrl'] = $modalController->Link('linkModalFormSchema/' . $name . '/:pageid');
+            }
+        });
+        return parent::getClientConfig();
     }
 
     /**
-     * Get form schema helper
-     *
-     * @return FormSchema
+     * Try to redirect to an appropriate admin section if we can't access this one
      */
-    public function getFormSchema()
+    public function onInitPermissionFailure(): void
     {
-        return $this->schema;
-    }
-
-    /**
-     * Set form schema helper for this controller
-     *
-     * @param FormSchema $schema
-     * @return $this
-     */
-    public function setFormSchema(FormSchema $schema)
-    {
-        $this->schema = $schema;
-        return $this;
-    }
-
-    /**
-     * Gets a JSON schema representing the current edit form.
-     */
-    public function schema(HTTPRequest $request): HTTPResponse
-    {
-        $formName = $request->param('FormName');
-        $itemID = $request->param('ItemID');
-
-        if (!$formName) {
-            $this->jsonError(400, 'Missing request params');
-        }
-
-        $formMethod = "get{$formName}";
-        if (!$this->hasMethod($formMethod)) {
-            $this->jsonError(404, 'Form not found');
-        }
-
-        if (!$this->hasAction($formName)) {
-            $this->jsonError(401, 'Form not accessible');
-        }
-
-        if ($itemID) {
-            $form = $this->{$formMethod}($itemID);
-        } else {
-            $form = $this->{$formMethod}();
-        }
-        $schemaID = $request->getURL();
-        return $this->getSchemaResponse($schemaID, $form);
-    }
-
-    /**
-     * Creates a successful json response
-     */
-    protected function jsonSuccess(int $statusCode, array $data = []): HTTPResponse
-    {
-        if ($statusCode < 200 || $statusCode >= 300) {
-            throw new InvalidArgumentException("Status code $statusCode must be between 200 and 299");
-        }
-        $body = empty($data) ? '' : json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        return $this->getResponse()
-            ->addHeader('Content-Type', 'application/json')
-            ->setStatusCode($statusCode)
-            ->setBody($body);
-    }
-
-    /**
-     * Return an error HTTPResponse encoded as json
-     *
-     * @param int $errorCode
-     * @param string $errorMessage
-     * @return HTTPResponse
-     * @throws HTTPResponse_Exception
-     */
-    public function jsonError($errorCode, $errorMessage = null)
-    {
-        // Build error from message
-        $error = [
-            'type' => 'error',
-            'code' => $errorCode,
-        ];
-        if ($errorMessage) {
-            $error['value'] = $errorMessage;
-        }
-
-        // Support explicit error handling with status = error, or generic message handling
-        // with a message of type = error
-        $result = [
-            'status' => 'error',
-            'errors' => [$error]
-        ];
-        $response = HTTPResponse::create(json_encode($result), $errorCode)
-            ->addHeader('Content-Type', 'application/json');
-
-        // Call a handler method such as onBeforeHTTPError404
-        $this->extend("onBeforeJSONError{$errorCode}", $request, $response);
-
-        // Call a handler method such as onBeforeHTTPError, passing 404 as the first arg
-        $this->extend('onBeforeJSONError', $errorCode, $request, $response);
-
-        // Throw a new exception
-        throw new HTTPResponse_Exception($response);
-    }
-
-    /**
-     * @deprecated 2.4.0 Will be replaced with SilverStripe\Admin\FormSchemaController::schema() in a future major release
-     */
-    public function methodSchema(HTTPRequest $request): HTTPResponse
-    {
-        Deprecation::noticeWithNoReplacment('2.4.0', 'Will be replaced with SilverStripe\Admin\FormSchemaController::schema() in a future major release');
-        $method = $request->param('Method');
-        $formName = $request->param('FormName');
-        $itemID = $request->param('ItemID');
-
-        if (!$formName || !$method) {
-            $this->jsonError(400, 'Missing request params');
-        }
-
-        if (!$this->hasMethod($method)) {
-            $this->jsonError(404, 'Method not found');
-        }
-        if (!$this->hasAction($method)) {
-            $this->jsonError(401, 'Method not accessible');
-        }
-
-        $methodItem = $this->{$method}();
-        if (!$methodItem->hasMethod($formName)) {
-            $this->jsonError(404, 'Form not found');
-        }
-        if (!$methodItem->hasAction($formName)) {
-            $this->jsonError(401, 'Form not accessible');
-        }
-
-        $form = $methodItem->{$formName}($itemID);
-        $schemaID = $request->getURL();
-
-        return $this->getSchemaResponse($schemaID, $form);
-    }
-
-    /**
-     * Check if the current request has a X-Formschema-Request header set.
-     * Used by conditional logic that responds to validation results
-     *
-     * @return bool
-     */
-    protected function getSchemaRequested()
-    {
-        $parts = $this->getRequest()->getHeader(FormSchema::SCHEMA_HEADER);
-        return !empty($parts);
-    }
-
-    /**
-     * Generate schema for the given form based on the X-Formschema-Request header value
-     *
-     * @param string $schemaID ID for this schema. Required.
-     * @param Form $form Required for 'state' or 'schema' response
-     * @param ValidationResult $errors Required for 'error' response
-     * @param array $extraData Any extra data to be merged with the schema response
-     */
-    protected function getSchemaResponse($schemaID, $form = null, ValidationResult $errors = null, $extraData = []): HTTPResponse
-    {
-        $parts = $this->getRequest()->getHeader(FormSchema::SCHEMA_HEADER);
-        $data = $this
-            ->getFormSchema()
-            ->getMultipartSchema($parts, $schemaID, $form, $errors);
-
-        if ($extraData) {
-            $data = array_merge($data, $extraData);
-        }
-
-        $response = new HTTPResponse(json_encode($data));
-        $response->addHeader('Content-Type', 'application/json');
-        return $response;
-    }
-
-    /**
-     * @param Member $member
-     * @return bool
-     */
-    public function canView($member = null)
-    {
-        if (!$member && $member !== false) {
-            $member = Security::getCurrentUser();
-        }
-
-        // cms menus only for logged-in members
-        if (!$member) {
-            return false;
-        }
-
-        // alternative extended checks
-        if ($this->hasMethod('alternateAccessCheck')) {
-            $alternateAllowed = $this->alternateAccessCheck($member);
-            if ($alternateAllowed === false) {
-                return false;
+        $menu = $this->MainMenu();
+        foreach ($menu as $candidate) {
+            if ($candidate->Link &&
+                $candidate->Link != $this->Link()
+                && $candidate->MenuItem->controller
+                && singleton($candidate->MenuItem->controller)->canView()
+            ) {
+                $this->redirect($candidate->Link);
+                return;
             }
         }
-
-        // Check for "CMS admin" permission
-        if (Permission::checkMember($member, "CMS_ACCESS_LeftAndMain")) {
-            return true;
-        }
-
-        // Check for LeftAndMain sub-class permissions
-        $codes = $this->getRequiredPermissions();
-        if ($codes === false) { // allow explicit FALSE to disable subclass check
-            return true;
-        }
-        foreach ((array)$codes as $code) {
-            if (!Permission::checkMember($member, $code)) {
-                return false;
-            }
-        }
-
-        return true;
+        $this->suppressAdminErrorContext = true;
     }
 
-    /**
-     * Get list of required permissions
-     *
-     * @return array|string|bool Code, array of codes, or false if no permission required
-     */
-    public static function getRequiredPermissions()
-    {
-        $class = get_called_class();
-        // If the user is accessing LeftAndMain directly, only generic permissions are required.
-        if ($class === LeftAndMain::class) {
-            return 'CMS_ACCESS';
-        }
-        $code = Config::inst()->get($class, 'required_permission_codes');
-        if ($code === false) {
-            return false;
-        }
-        if ($code) {
-            return $code;
-        }
-        return 'CMS_ACCESS_' . $class;
-    }
-
-    /**
-     * @uses LeftAndMainExtension->init()
-     * @uses LeftAndMainExtension->accessedCMS()
-     * @uses CMSMenu
-     */
     protected function init()
     {
+        $this->beforeExtending('onInit', function () {
+            // Audit logging hook
+            if (empty($_REQUEST['executeForm']) && !$this->getRequest()->isAjax()) {
+                $this->extend('accessedCMS');
+            }
+
+            Requirements::customScript("
+                window.ss = window.ss || {};
+                window.ss.config = " . $this->getCombinedClientConfig() . ";
+            ");
+
+            Requirements::javascript('silverstripe/admin: client/dist/js/vendor.js');
+            Requirements::javascript('silverstripe/admin: client/dist/js/bundle.js');
+
+            // Bootstrap components
+            Requirements::javascript('silverstripe/admin: thirdparty/popper/popper.min.js');
+            Requirements::javascript('silverstripe/admin: thirdparty/bootstrap/js/dist/collapse.js');
+            Requirements::javascript('silverstripe/admin: thirdparty/bootstrap/js/dist/tooltip.js');
+            Requirements::customScript(
+                "window.jQuery('[data-bs-toggle=tooltip]').tooltip();",
+                'bootstrap.tooltip-boot'
+            );
+
+            Requirements::css('silverstripe/admin: client/dist/styles/bundle.css');
+            Requirements::add_i18n_javascript('silverstripe/admin:client/lang');
+            Requirements::add_i18n_javascript('silverstripe/admin:client/dist/moment-locales', false);
+
+            if (LeftAndMain::config()->uninherited('session_keepalive_ping')) {
+                Requirements::javascript('silverstripe/admin: client/dist/js/LeftAndMain.Ping.js');
+            }
+
+            // Custom requirements
+            $extraJs = $this->config()->get('extra_requirements_javascript');
+
+            if ($extraJs) {
+                foreach ($extraJs as $file => $config) {
+                    if (is_numeric($file)) {
+                        $file = $config;
+                        $config = [];
+                    }
+
+                    Requirements::javascript($file, $config);
+                }
+            }
+
+            $extraI18n = $this->config()->get('extra_requirements_i18n');
+            if ($extraI18n) {
+                foreach ($extraI18n as $dir => $return) {
+                    if (is_numeric($dir)) {
+                        $dir = $return;
+                        $return = false;
+                    }
+                    Requirements::add_i18n_javascript($dir, $return);
+                }
+            }
+
+            $extraCss = $this->config()->get('extra_requirements_css');
+
+            if ($extraCss) {
+                foreach ($extraCss as $file => $config) {
+                    if (is_numeric($file)) {
+                        $file = $config;
+                        $config = [];
+                    }
+                    $media = null;
+                    if (isset($config['media'])) {
+                        $media = $config['media'];
+                        unset($config['media']);
+                    }
+
+                    Requirements::css($file, $media, $config);
+                }
+            }
+
+            $extraThemedCss = $this->config()->get('extra_requirements_themedCss');
+
+            if ($extraThemedCss) {
+                foreach ($extraThemedCss as $file => $config) {
+                    if (is_numeric($file)) {
+                        $file = $config;
+                        $config = [];
+                    }
+                    $media = null;
+                    if (isset($config['media'])) {
+                        $media = $config['media'];
+                        unset($config['media']);
+                    }
+
+                    Requirements::themedCSS($file, $media, $config);
+                }
+            }
+        });
+
+        // Run parent init and process the onInit extension hook
         parent::init();
-
-        HTTPCacheControlMiddleware::singleton()->disableCache();
-
-        SSViewer::setRewriteHashLinksDefault(false);
-        ContentNegotiator::setEnabled(false);
-
-        // set language
-        $member = Security::getCurrentUser();
-        if (!empty($member->Locale)) {
-            i18n::set_locale($member->Locale);
-        }
-
-        // Allow customisation of the access check by a extension
-        // Also all the canView() check to execute Controller::redirect()
-        if (!$this->canView() && !$this->getResponse()->isFinished()) {
-            // When access /admin/, we should try a redirect to another part of the admin rather than be locked out
-            $menu = $this->MainMenu();
-            foreach ($menu as $candidate) {
-                if ($candidate->Link &&
-                    $candidate->Link != $this->Link()
-                    && $candidate->MenuItem->controller
-                    && singleton($candidate->MenuItem->controller)->canView()
-                ) {
-                    $this->redirect($candidate->Link);
-                    return;
-                }
-            }
-
-            if (Security::getCurrentUser()) {
-                $this->getRequest()->getSession()->clear("BackURL");
-            }
-
-            // if no alternate menu items have matched, return a permission error
-            $messageSet = [
-                'default' => _t(
-                    __CLASS__ . '.PERMDEFAULT',
-                    "You must be logged in to access the administration area; please enter your credentials below."
-                ),
-                'alreadyLoggedIn' => _t(
-                    __CLASS__ . '.PERMALREADY',
-                    "I'm sorry, but you can't access that part of the CMS.  If you want to log in as someone else, do"
-                    . " so below."
-                ),
-                'logInAgain' => _t(
-                    __CLASS__ . '.PERMAGAIN',
-                    "You have been logged out of the CMS.  If you would like to log in again, enter a username and"
-                    . " password below."
-                ),
-            ];
-
-            $this->suppressAdminErrorContext = true;
-            Security::permissionFailure($this, $messageSet);
-            return;
-        }
-
-        // Don't continue if there's already been a redirection request.
-        if ($this->redirectedTo()) {
-            return;
-        }
-
-        // Audit logging hook
-        if (empty($_REQUEST['executeForm']) && !$this->getRequest()->isAjax()) {
-            $this->extend('accessedCMS');
-        }
-
-        // Set the members html editor config
-        if (Security::getCurrentUser()) {
-            HTMLEditorConfig::set_active_identifier(Security::getCurrentUser()->getHtmlEditorConfigForCMS());
-        }
-
-        // Set default values in the config if missing.  These things can't be defined in the config
-        // file because insufficient information exists when that is being processed
-        $htmlEditorConfig = HTMLEditorConfig::get_active();
-        $htmlEditorConfig->setOption('language', TinyMCEConfig::get_tinymce_lang());
-        $langUrl = TinyMCEConfig::get_tinymce_lang_url();
-        if ($langUrl) {
-            $htmlEditorConfig->setOption('language_url', $langUrl);
-        }
-
-        Requirements::customScript("
-            window.ss = window.ss || {};
-            window.ss.config = " . $this->getCombinedClientConfig() . ";
-        ");
-
-        Requirements::javascript('silverstripe/admin: client/dist/js/vendor.js');
-        Requirements::javascript('silverstripe/admin: client/dist/js/bundle.js');
-
-        // Bootstrap components
-        Requirements::javascript('silverstripe/admin: thirdparty/popper/popper.min.js');
-        Requirements::javascript('silverstripe/admin: thirdparty/bootstrap/js/dist/util.js');
-        Requirements::javascript('silverstripe/admin: thirdparty/bootstrap/js/dist/collapse.js');
-        Requirements::javascript('silverstripe/admin: thirdparty/bootstrap/js/dist/tooltip.js');
-        Requirements::customScript(
-            "window.jQuery('body').tooltip({ selector: '[data-toggle=tooltip]' });",
-            'bootstrap.tooltip-boot'
-        );
-
-        Requirements::css('silverstripe/admin: client/dist/styles/bundle.css');
-        Requirements::add_i18n_javascript('silverstripe/admin:client/lang');
-        Requirements::add_i18n_javascript('silverstripe/admin:client/dist/moment-locales', false);
-
-        if (LeftAndMain::config()->uninherited('session_keepalive_ping')) {
-            Requirements::javascript('silverstripe/admin: client/dist/js/LeftAndMain.Ping.js');
-        }
-
-        // Custom requirements
-        $extraJs = $this->config()->get('extra_requirements_javascript');
-
-        if ($extraJs) {
-            foreach ($extraJs as $file => $config) {
-                if (is_numeric($file)) {
-                    $file = $config;
-                    $config = [];
-                }
-
-                Requirements::javascript($file, $config);
-            }
-        }
-
-        $extraI18n = $this->config()->get('extra_requirements_i18n');
-        if ($extraI18n) {
-            foreach ($extraI18n as $dir => $return) {
-                if (is_numeric($dir)) {
-                    $dir = $return;
-                    $return = false;
-                }
-                Requirements::add_i18n_javascript($dir, $return);
-            }
-        }
-
-        $extraCss = $this->config()->get('extra_requirements_css');
-
-        if ($extraCss) {
-            foreach ($extraCss as $file => $config) {
-                if (is_numeric($file)) {
-                    $file = $config;
-                    $config = [];
-                }
-                $media = null;
-                if (isset($config['media'])) {
-                     $media = $config['media'];
-                     unset($config['media']);
-                }
-
-                Requirements::css($file, $media, $config);
-            }
-        }
-
-        $extraThemedCss = $this->config()->get('extra_requirements_themedCss');
-
-        if ($extraThemedCss) {
-            foreach ($extraThemedCss as $file => $config) {
-                if (is_numeric($file)) {
-                    $file = $config;
-                    $config = [];
-                }
-                $media = null;
-                if (isset($config['media'])) {
-                     $media = $config['media'];
-                     unset($config['media']);
-                }
-
-                Requirements::themedCSS($file, $media, $config);
-            }
-        }
-
-        $this->extend('init');
-
-        // Load the editor with original user themes before overwriting
-        // them with admin themes
-        $themes = HTMLEditorConfig::getThemes();
-        if (empty($themes)) {
-            HTMLEditorConfig::setThemes(SSViewer::get_themes());
-        }
-
-        // Assign default cms theme and replace user-specified themes
-        SSViewer::set_themes(LeftAndMain::config()->uninherited('admin_themes'));
-
-        // Set the current reading mode
-        Versioned::set_stage(Versioned::DRAFT);
-
-        // Set default reading mode to suppress ?stage=Stage querystring params in CMS
-        Versioned::set_default_reading_mode(Versioned::get_reading_mode());
     }
 
     public function afterHandleRequest()
@@ -880,39 +493,6 @@ class LeftAndMain extends Controller implements PermissionProvider
         return $response;
     }
 
-    /**
-     * Overloaded redirection logic to trigger a fake redirect on ajax requests.
-     * While this violates HTTP principles, its the only way to work around the
-     * fact that browsers handle HTTP redirects opaquely, no intervention via JS is possible.
-     * In isolation, that's not a problem - but combined with history.pushState()
-     * it means we would request the same redirection URL twice if we want to update the URL as well.
-     * See LeftAndMain.js for the required jQuery ajaxComplete handlers.
-     */
-    public function redirect(string $url, int $code = 302): HTTPResponse
-    {
-        if ($this->getRequest()->isAjax()) {
-            $response = $this->getResponse();
-            $response->addHeader('X-ControllerURL', $url);
-            if ($this->getRequest()->getHeader('X-Pjax') && !$response->getHeader('X-Pjax')) {
-                $response->addHeader('X-Pjax', $this->getRequest()->getHeader('X-Pjax'));
-            }
-            $newResponse = new LeftAndMain_HTTPResponse(
-                $response->getBody(),
-                $response->getStatusCode(),
-                $response->getStatusDescription()
-            );
-            foreach ($response->getHeaders() as $k => $v) {
-                $newResponse->addHeader($k, $v);
-            }
-            $newResponse->setIsFinished(true);
-            $this->setResponse($newResponse);
-            // Actual response will be re-requested by client
-            return $newResponse;
-        } else {
-            return parent::redirect($url, $code);
-        }
-    }
-
     public function index(HTTPRequest $request): HTTPResponse
     {
         return $this->getResponseNegotiator()->respond($request);
@@ -927,41 +507,6 @@ class LeftAndMain extends Controller implements PermissionProvider
     public function ShowSwitchView()
     {
         return false;
-    }
-
-
-    //------------------------------------------------------------------------------------------//
-    // Main controllers
-
-    /**
-     * You should implement a Link() function in your subclass of LeftAndMain,
-     * to point to the URL of that particular controller.
-     *
-     * @param string $action
-     * @return string
-     */
-    public function Link($action = null)
-    {
-        // LeftAndMain methods have a top-level uri access
-        if (static::class === LeftAndMain::class) {
-            $segment = '';
-        } else {
-            // Get url_segment
-            $segment = $this->config()->get('url_segment');
-            if (!$segment) {
-                throw new BadMethodCallException(
-                    sprintf('LeftAndMain subclasses (%s) must have url_segment', static::class)
-                );
-            }
-        }
-
-        $link = Controller::join_links(
-            AdminRootController::admin_url(),
-            $segment,
-            "$action"
-        );
-        $this->extend('updateLink', $link);
-        return $link;
     }
 
     /**
@@ -1032,7 +577,7 @@ class LeftAndMain extends Controller implements PermissionProvider
     public function show(HTTPRequest $request): HTTPResponse
     {
         if ($request->param('ID')) {
-            $this->setCurrentRecordID($request->param('ID'));
+            $this->setCurrentRecordID((int) $request->param('ID'));
         }
         return $this->getResponseNegotiator()->respond($request);
     }
@@ -1189,16 +734,12 @@ class LeftAndMain extends Controller implements PermissionProvider
     }
 
     /**
-     * Return appropriate template(s) for this class, with the given suffix using
+     * Return appropriate template candidates for this class, with the given suffix using
      * {@link SSViewer::get_templates_by_class()}
-     *
-     * @param string $suffix
-     * @return string|array
      */
-    public function getTemplatesWithSuffix($suffix)
+    public function getTemplatesWithSuffix(string $suffix): array
     {
-        $templates = SSViewer::get_templates_by_class(get_class($this), $suffix, __CLASS__);
-        return SSViewer::chooseTemplate($templates);
+        return SSViewer::get_templates_by_class(get_class($this), $suffix, __CLASS__);
     }
 
     public function Content()
@@ -1215,21 +756,30 @@ class LeftAndMain extends Controller implements PermissionProvider
     {
         $template = $this->getTemplatesWithSuffix('_PreviewPanel');
         // Only render sections with preview panel
-        if ($template) {
+        $engine = $this->getTemplateEngine();
+        if ($engine->hasTemplate($template)) {
             return $this->renderWith($template);
         }
         return null;
     }
 
     /**
+     * Get the class of the model which is managed by this controller.
+     * @return class-string<DataObject>
+     */
+    public function getModelClass(): string
+    {
+        return static::config()->get('model_class') ?? '';
+    }
+
+    /**
      * Get dataobject from the current ID
      *
      * @param int|DataObject $id ID or object
-     * @return DataObject
      */
-    public function getRecord($id)
+    public function getRecord($id): ?DataObject
     {
-        $className = $this->config()->get('tree_class');
+        $className = $this->getModelClass();
         if (!$className) {
             return null;
         }
@@ -1240,7 +790,7 @@ class LeftAndMain extends Controller implements PermissionProvider
             return DataObject::singleton($className);
         }
         if (is_numeric($id)) {
-            return DataObject::get_by_id($className, $id);
+            return DataObject::get($className)->setUseCache(true)->byID($id);
         }
         return null;
     }
@@ -1262,54 +812,17 @@ class LeftAndMain extends Controller implements PermissionProvider
     }
 
     /**
-     * Cached search filter instance for current search
-     *
-     * @var LeftAndMain_SearchFilter
-     */
-    protected $searchFilterCache = null;
-
-    /**
-     * Gets the current search filter for this request, if available
-     *
-     * @throws InvalidArgumentException
-     * @return LeftAndMain_SearchFilter
-     * @deprecated 2.4.0 Will be removed without equivalent functionality to replace it in a future major release.
-     */
-    protected function getSearchFilter()
-    {
-        Deprecation::noticeWithNoReplacment('2.4.0');
-        if ($this->searchFilterCache) {
-            return $this->searchFilterCache;
-        }
-
-        // Check for given FilterClass
-        $params = $this->getRequest()->getVar('q');
-        if (empty($params['FilterClass'])) {
-            return null;
-        }
-
-        // Validate classname
-        $filterClass = $params['FilterClass'];
-        $filterInfo = new ReflectionClass($filterClass);
-        if (!$filterInfo->implementsInterface(LeftAndMain_SearchFilter::class)) {
-            throw new InvalidArgumentException(sprintf('Invalid filter class passed: %s', $filterClass));
-        }
-
-        return $this->searchFilterCache = Injector::inst()->createWithArgs($filterClass, [$params]);
-    }
-
-    /**
      * Save handler
      */
     public function save(array $data, Form $form): HTTPResponse
     {
         $request = $this->getRequest();
-        $className = $this->config()->get('tree_class');
+        $className = $this->getModelClass();
 
         // Existing or new record?
         $id = $data['ID'];
         if (is_numeric($id) && $id > 0) {
-            $record = DataObject::get_by_id($className, $id);
+            $record = DataObject::get($className)->setUseCache(true)->byID($id);
             if ($record && !$record->canEdit()) {
                 return Security::permissionFailure($this);
             }
@@ -1317,7 +830,7 @@ class LeftAndMain extends Controller implements PermissionProvider
                 $this->httpError(404, "Bad record ID #" . (int)$id);
             }
         } else {
-            if (!singleton($this->config()->get('tree_class'))->canCreate()) {
+            if (!DataObject::singleton($className)->canCreate()) {
                 return Security::permissionFailure($this);
             }
             $record = $this->getNewItem($id, false);
@@ -1353,7 +866,7 @@ class LeftAndMain extends Controller implements PermissionProvider
      */
     public function getNewItem($id, $setID = true)
     {
-        $class = $this->config()->get('tree_class');
+        $class = $this->getModelClass();
         $object = Injector::inst()->create($class);
         if ($setID) {
             $object->ID = $id;
@@ -1363,10 +876,10 @@ class LeftAndMain extends Controller implements PermissionProvider
 
     public function delete(array $data, Form $form): HTTPResponse
     {
-        $className = $this->config()->get('tree_class');
+        $className = $this->getModelClass();
 
         $id = $data['ID'];
-        $record = DataObject::get_by_id($className, $id);
+        $record = DataObject::get($className)->setUseCache(true)->byID($id);
         if ($record && !$record->canDelete()) {
             return Security::permissionFailure();
         }
@@ -1393,9 +906,9 @@ class LeftAndMain extends Controller implements PermissionProvider
      *
      * This is a "pseudo-abstract" method, usually connected to a {@link getEditForm()}
      * method in an entwine subclass. This method can accept a record identifier,
-     * selected either in custom logic, or through {@link currentPageID()}.
+     * selected either in custom logic, or through {@link currentRecordID()}.
      * The form usually construct itself from {@link DataObject->getCMSFields()}
-     * for the specific managed subclass defined in {@link LeftAndMain::$tree_class}.
+     * for the specific managed subclass defined in {@link LeftAndMain::getModelClass()}.
      *
      * @param HTTPRequest $request Passed if executing a HTTPRequest directly on the form.
      * If empty, this is invoked as $EditForm in the template
@@ -1448,8 +961,8 @@ class LeftAndMain extends Controller implements PermissionProvider
             $fields->push(new HiddenField('ClassName'));
         }
 
-        $tree_class = $this->config()->get('tree_class');
-        if ($tree_class::has_extension(Hierarchy::class)
+        $modelClass = $this->getModelClass();
+        if ($modelClass::has_extension(Hierarchy::class)
             && !$fields->dataFieldByName('ParentID')
         ) {
             $fields->push(new HiddenField('ParentID'));
@@ -1470,14 +983,14 @@ class LeftAndMain extends Controller implements PermissionProvider
             if (!$actions || !$actions->count()) {
                 if ($record->hasMethod('canEdit') && $record->canEdit()) {
                     $actions->push(
-                        FormAction::create('save', _t(CMSMain::class . '.SAVE', 'Save'))
+                        FormAction::create('save', _t(__CLASS__ . '.SAVE', 'Save'))
                             ->addExtraClass('btn btn-primary')
                             ->addExtraClass('font-icon-add-circle')
                     );
                 }
                 if ($record->hasMethod('canDelete') && $record->canDelete()) {
                     $actions->push(
-                        FormAction::create('delete', _t(ModelAdmin::class . '.DELETE', 'Delete'))
+                        FormAction::create('delete', _t(__CLASS__ . '.DELETE', 'Delete'))
                             ->addExtraClass('btn btn-secondary')
                     );
                 }
@@ -1520,24 +1033,7 @@ class LeftAndMain extends Controller implements PermissionProvider
             $form->addExtraClass('cms-previewable');
         }
         $form->addExtraClass('fill-height');
-
-        if ($record->hasMethod('getCMSCompositeValidator')) {
-            // As of framework v4.7, a CompositeValidator is always available form a DataObject, but it may be
-            // empty (which is fine)
-            $form->setValidator($record->getCMSCompositeValidator());
-        } elseif ($record->hasMethod('getCMSValidator')) {
-            // BC support for framework < v4.7
-            $validator = $record->getCMSValidator();
-
-            // The clientside (mainly LeftAndMain*.js) rely on ajax responses
-            // which can be evaluated as javascript, hence we need
-            // to override any global changes to the validation handler.
-            if ($validator) {
-                $form->setValidator($validator);
-            }
-        } else {
-            $form->unsetValidator();
-        }
+        $form->setValidator($record->getCMSCompositeValidator());
 
         // Check if this form is readonly
         if (!$record->canEdit()) {
@@ -1578,21 +1074,9 @@ class LeftAndMain extends Controller implements PermissionProvider
     }
 
     /**
-     * Handler for all global modals
-     *
-     * @return ModalController
-     * @deprecated 2.4.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    public function Modals()
-    {
-        Deprecation::noticeWithNoReplacment('2.4.0');
-        return ModalController::create($this, "Modals");
-    }
-
-    /**
      * Renders a panel containing tools which apply to all displayed
      * "content" (mostly through {@link EditForm()}), for example a tree navigation or a filter panel.
-     * Auto-detects applicable templates by naming convention: "<controller classname>_Tools.ss",
+     * Auto-detects applicable templates by naming convention: "<controller classname>_Tools",
      * and takes the most specific template (see {@link getTemplatesWithSuffix()}).
      * To explicitly disable the panel in the subclass, simply create a more specific, empty template.
      *
@@ -1601,8 +1085,9 @@ class LeftAndMain extends Controller implements PermissionProvider
     public function Tools()
     {
         $templates = $this->getTemplatesWithSuffix('_Tools');
-        if ($templates) {
-            $viewer = SSViewer::create($templates);
+        $engine = $this->getTemplateEngine();
+        if ($engine->hasTemplate($templates)) {
+            $viewer = SSViewer::create($templates, $this->getTemplateEngine());
             return $viewer->process($this);
         } else {
             return false;
@@ -1623,8 +1108,9 @@ class LeftAndMain extends Controller implements PermissionProvider
     public function EditFormTools()
     {
         $templates = $this->getTemplatesWithSuffix('_EditFormTools');
-        if ($templates) {
-            $viewer = SSViewer::create($templates);
+        $engine = $this->getTemplateEngine();
+        if ($engine->hasTemplate($templates)) {
+            $viewer = SSViewer::create($templates, $this->getTemplateEngine());
             return $viewer->process($this);
         } else {
             return false;
@@ -1636,7 +1122,7 @@ class LeftAndMain extends Controller implements PermissionProvider
      */
     public function batchactions()
     {
-        return new CMSBatchActionHandler($this, 'batchactions', $this->config()->get('tree_class'));
+        return new CMSBatchActionHandler($this, 'batchactions', $this->getModelClass());
     }
 
     /**
@@ -1719,66 +1205,24 @@ class LeftAndMain extends Controller implements PermissionProvider
      * sources (in this order):
      * - GET/POST parameter named 'ID'
      * - URL parameter named 'ID'
-     * - Session value namespaced by classname, e.g. "CMSMain.currentPage"
-     *
-     * @return int
-     * @deprecated 5.4.0 use currentRecordID() instead.
-     */
-    public function currentPageID()
-    {
-        Deprecation::notice('5.4.0', 'use currentRecordID() instead.');
-        return $this->currentRecordID();
-    }
-
-    /**
-     * Identifier for the currently shown record,
-     * in most cases a database ID. Inspects the following
-     * sources (in this order):
-     * - GET/POST parameter named 'ID'
-     * - URL parameter named 'ID'
-     * - Session value namespaced by classname, e.g. "CMSMain.currentPage"
      */
     public function currentRecordID(): ?int
     {
-        if ($this->pageID) {
-            return $this->pageID;
-        }
-        if ($this->getRequest()->requestVar('ID') && is_numeric($this->getRequest()->requestVar('ID'))) {
-            return (int) $this->getRequest()->requestVar('ID');
-        }
-
-        if ($this->getRequest()->requestVar('CMSMainCurrentPageID') && is_numeric($this->getRequest()->requestVar('CMSMainCurrentPageID'))) {
+        $id = null;
+        if ($this->recordID) {
+            $id = $this->recordID;
+        } elseif ($this->getRequest()->requestVar('ID') && is_numeric($this->getRequest()->requestVar('ID'))) {
+            $id = (int) $this->getRequest()->requestVar('ID');
+        } elseif ($this->getRequest()->requestVar('CMSMainCurrentRecordID') && is_numeric($this->getRequest()->requestVar('CMSMainCurrentRecordID'))) {
             // see GridFieldDetailForm::ItemEditForm
-            return (int) $this->getRequest()->requestVar('CMSMainCurrentPageID');
+            $id = (int) $this->getRequest()->requestVar('CMSMainCurrentRecordID');
+        } elseif (isset($this->urlParams['ID']) && is_numeric($this->urlParams['ID'])) {
+            $id = (int) $this->urlParams['ID'];
+        } elseif (is_numeric($this->getRequest()->param('ID'))) {
+            $id = (int) $this->getRequest()->param('ID');
         }
-
-        if (isset($this->urlParams['ID']) && is_numeric($this->urlParams['ID'])) {
-            return (int) $this->urlParams['ID'];
-        }
-
-        if (is_numeric($this->getRequest()->param('ID'))) {
-            return (int) $this->getRequest()->param('ID');
-        }
-
-        // Using session for this is deprecated - see https://github.com/silverstripe/silverstripe-admin/pull/19
-        $session = $this->getRequest()->getSession();
-        return $session->get($this->sessionNamespace() . ".currentPage") ?: null;
-    }
-
-    /**
-     * Forces the current page to be set in session,
-     * which can be retrieved later through {@link currentPageID()}.
-     * Keep in mind that setting an ID through GET/POST or
-     * as a URL parameter will overrule this value.
-     *
-     * @param int $id
-     * @deprecated 5.4.0 use setCurrentRecordID() instead.
-     */
-    public function setCurrentPageID($id)
-    {
-        Deprecation::notice('5.4.0', 'use setCurrentRecordID() instead.');
-        $id = (int)$id;
-        $this->setCurrentRecordID($id);
+        $this->extend('updateCurrentRecordID', $id);
+        return $id;
     }
 
     /**
@@ -1787,22 +1231,7 @@ class LeftAndMain extends Controller implements PermissionProvider
      */
     public function setCurrentRecordID(?int $id): void
     {
-        $this->pageID = $id;
-        // Setting session for this is deprecated - see https://github.com/silverstripe/silverstripe-admin/pull/19
-        $this->getRequest()->getSession()->set($this->sessionNamespace() . ".currentPage", $id);
-    }
-
-    /**
-     * Uses {@link getRecord()} and {@link currentPageID()}
-     * to get the currently selected record.
-     *
-     * @return DataObject
-     * @deprecated 5.4.0 use currentRecord() instead.
-     */
-    public function currentPage()
-    {
-        Deprecation::notice('5.4.0', 'use currentRecord() instead.');
-        return $this->currentRecord();
+        $this->recordID = $id;
     }
 
     /**
@@ -1812,19 +1241,6 @@ class LeftAndMain extends Controller implements PermissionProvider
     public function currentRecord(): ?DataObject
     {
         return $this->getRecord($this->currentRecordID());
-    }
-
-    /**
-     * Compares a given record to the currently selected one (if any).
-     * Used for marking the current tree node.
-     *
-     * @return bool
-     * @deprecated 5.4.0 use isCurrentRecord() instead.
-     */
-    public function isCurrentPage(DataObject $record)
-    {
-        Deprecation::notice('5.4.0', 'use isCurrentRecord() instead.');
-        return $this->isCurrentRecord($record);
     }
 
     /**
@@ -1909,21 +1325,6 @@ class LeftAndMain extends Controller implements PermissionProvider
     }
 
     /**
-     * The urls used for the links in the Help dropdown in the backend
-     *
-     * Set this to `false` via yml config if you do not want to show any help links
-     *
-     * @config
-     * @var array
-     */
-    private static $help_links = [
-        'CMS User help' => 'https://userhelp.silverstripe.org/en/5',
-        'Developer docs' => 'https://docs.silverstripe.org/en/5/',
-        'Community' => 'https://www.silverstripe.org/',
-        'Feedback' => 'https://www.silverstripe.org/give-feedback/',
-    ];
-
-    /**
      * Returns help_links in a format readable by a template
      * @return ArrayList
      */
@@ -1949,28 +1350,12 @@ class LeftAndMain extends Controller implements PermissionProvider
     }
 
     /**
-     * The href for the anchor on the Silverstripe logo
-     *
-     * @config
-     * @var string
-     */
-    private static $application_link = '//www.silverstripe.org/';
-
-    /**
      * @return string
      */
     public function ApplicationLink()
     {
         return $this->config()->get('application_link');
     }
-
-    /**
-     * The application name
-     *
-     * @config
-     * @var string
-     */
-    private static $application_name = 'Silverstripe';
 
     /**
      * Get the application name.
@@ -2026,8 +1411,8 @@ class LeftAndMain extends Controller implements PermissionProvider
     }
 
     /**
-     * Same as {@link ViewableData->CSSClasses()}, but with a changed name
-     * to avoid problems when using {@link ViewableData->customise()}
+     * Same as {@link ModelData->CSSClasses()}, but with a changed name
+     * to avoid problems when using {@link ModelData->customise()}
      * (which always returns "ArrayData" from the $original object).
      *
      * @return string
@@ -2050,7 +1435,7 @@ class LeftAndMain extends Controller implements PermissionProvider
         $perms = [
             "CMS_ACCESS_LeftAndMain" => [
                 'name' => _t(__CLASS__ . '.ACCESSALLINTERFACES', 'Access to all CMS sections'),
-                'category' => _t(Permission::class . '.CMS_ACCESS_CATEGORY', 'CMS Access'),
+                'category' => _t(__CLASS__ . '.CMS_ACCESS_CATEGORY', 'CMS Access'),
                 'help' => _t(__CLASS__ . '.ACCESSALLINTERFACESHELP', 'Overrules more specific access settings.'),
                 'sort' => -100
             ]
@@ -2082,11 +1467,11 @@ class LeftAndMain extends Controller implements PermissionProvider
             $perms[$code] = [
                 // Item in permission selection identifying the admin section. Example: Access to 'Files & Images'
                 'name' => _t(
-                    CMSMain::class . '.ACCESS',
+                    __CLASS__ . '.ACCESS',
                     "Access to '{title}' section",
                     ['title' => $title]
                 ),
-                'category' => _t(Permission::class . '.CMS_ACCESS_CATEGORY', 'CMS Access')
+                'category' => _t(__CLASS__ . '.CMS_ACCESS_CATEGORY', 'CMS Access')
             ];
         }
 

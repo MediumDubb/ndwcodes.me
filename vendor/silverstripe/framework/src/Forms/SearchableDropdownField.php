@@ -26,4 +26,15 @@ class SearchableDropdownField extends DropdownField implements HasOneRelationFie
         $this->addExtraClass('ss-searchable-dropdown-field');
         $this->setHasEmptyDefault(true);
     }
+
+    public function getValueForValidation(): mixed
+    {
+        $arr = $this->getValueArray();
+        if (count($arr) === 0) {
+            return null;
+        } elseif (count($arr) === 1) {
+            return $arr[0];
+        }
+        return $arr;
+    }
 }

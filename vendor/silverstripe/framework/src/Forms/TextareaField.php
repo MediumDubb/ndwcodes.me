@@ -2,6 +2,7 @@
 
 namespace SilverStripe\Forms;
 
+use SilverStripe\Core\Validation\FieldValidation\StringFieldValidator;
 use SilverStripe\Dev\Deprecation;
 
 /**
@@ -20,6 +21,12 @@ use SilverStripe\Dev\Deprecation;
  */
 class TextareaField extends FormField
 {
+    private static array $field_validators = [
+        StringFieldValidator::class => [
+            'minLength' => null,
+            'maxLength' => 'getMaxLength'
+        ],
+    ];
 
     /**
      * Value should be XML
@@ -27,8 +34,10 @@ class TextareaField extends FormField
      * @var array
      */
     private static $casting = [
-        'Value' => 'Text',
-        'ValueEntities' => 'HTMLFragment([\'shortcodes\' => false])',
+        'FormattedValue' => 'Text',
+        'getFormattedValue' => 'Text',
+        'FormattedValueEntities' => 'HTMLFragment([\'shortcodes\' => false])',
+        'getFormattedValueEntities' => 'HTMLFragment([\'shortcodes\' => false])',
     ];
 
     protected $schemaDataType = FormField::SCHEMA_DATA_TYPE_TEXT;
@@ -168,31 +177,6 @@ class TextareaField extends FormField
         return $parent;
     }
 
-    /**
-     * Validate this field
-     *
-     * @param Validator $validator
-     * @return bool
-     */
-    public function validate($validator)
-    {
-        $result = true;
-        if (!is_null($this->maxLength) && mb_strlen($this->value ?? '') > $this->maxLength) {
-            $name = strip_tags($this->Title() ? $this->Title() : $this->getName());
-            $validator->validationError(
-                $this->name,
-                _t(
-                    'SilverStripe\\Forms\\TextField.VALIDATEMAXLENGTH',
-                    'The value for {name} must not exceed {maxLength} characters in length',
-                    ['name' => $name, 'maxLength' => $this->maxLength]
-                ),
-                "validation"
-            );
-            $result = false;
-        }
-        return $this->extendValidationResult($result, $validator);
-    }
-
     public function getSchemaValidation()
     {
         $rules = parent::getSchemaValidation();
@@ -208,11 +192,9 @@ class TextareaField extends FormField
      * Return value with all values encoded in html entities
      *
      * @return string Raw HTML
-     * @deprecated 5.4.0 Will be replaced by getFormattedValueEntities() in a future major release
      */
-    public function ValueEntities()
+    public function getFormattedValueEntities(): string
     {
-        Deprecation::noticeWithNoReplacment('5.4.0', 'Will be replaced by getFormattedValueEntities() in a future major release');
-        return htmlentities($this->Value() ?? '', ENT_COMPAT, 'UTF-8');
+        return htmlentities($this->getFormattedValue() ?? '', ENT_COMPAT, 'UTF-8');
     }
 }

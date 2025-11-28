@@ -3,9 +3,9 @@
 namespace SilverStripe\Dev;
 
 use SilverStripe\Core\Injector\Injectable;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 
 /**
  * Encapsulates the result of a {@link BulkLoader} import
@@ -176,7 +176,7 @@ class BulkLoader_Result implements \Countable
     {
         $set = new ArrayList();
         foreach ($arr as $arrItem) {
-            $obj = DataObject::get_by_id($arrItem['ClassName'], $arrItem['ID']);
+            $obj = DataObject::get($arrItem['ClassName'])->setUseCache(true)->byID($arrItem['ID']);
             $obj->_BulkLoaderMessage = $arrItem['Message'];
             if ($obj) {
                 $set->push($obj);

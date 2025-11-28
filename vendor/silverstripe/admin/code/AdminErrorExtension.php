@@ -16,7 +16,7 @@ class AdminErrorExtension extends Extension
     /**
      * Used by {@see RequestHandler::httpError}
      */
-    public function onBeforeHTTPError($statusCode, HTTPRequest $request, $errorMessage = null)
+    protected function onBeforeHTTPError($statusCode, HTTPRequest $request, $errorMessage = null)
     {
         $controller = $this->getAdminController();
         if (!$controller || Director::is_ajax($request) || $errorMessage === null) {
@@ -30,8 +30,9 @@ class AdminErrorExtension extends Extension
         if ($this->owner instanceof LeftAndMain) {
             return $this->owner;
         }
-        if (Controller::has_curr() && (Controller::curr() instanceof LeftAndMain)) {
-            return Controller::curr();
+        $controller = Controller::curr();
+        if ($controller instanceof LeftAndMain) {
+            return $controller;
         }
         return null;
     }

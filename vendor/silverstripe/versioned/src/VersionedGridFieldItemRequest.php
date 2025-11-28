@@ -5,7 +5,6 @@ namespace SilverStripe\Versioned;
 use SilverStripe\CMS\Controllers\CMSMain;
 use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Core\Convert;
-use SilverStripe\Dev\Deprecation;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\Form;
 use SilverStripe\Forms\FormAction;
@@ -13,11 +12,8 @@ use SilverStripe\Forms\GridField\GridFieldDetailForm_ItemRequest;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\Tab;
 use SilverStripe\Forms\TabSet;
-use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\FieldType\DBField;
-use SilverStripe\ORM\ValidationResult;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\View\SSViewer;
 
 /**
@@ -27,29 +23,6 @@ use SilverStripe\View\SSViewer;
  */
 class VersionedGridFieldItemRequest extends GridFieldDetailForm_ItemRequest
 {
-    public function Breadcrumbs($unlinked = false)
-    {
-        $items = parent::Breadcrumbs($unlinked);
-        $status = $this->getRecordStatus();
-        $badge = null;
-        if ($status) {
-            // Generate badge
-            $badge = DBField::create_field('HTMLFragment', sprintf(
-                '<span class="badge version-status version-status--%s">%s</span>',
-                $status['class'],
-                $status['title']
-            ));
-        }
-        $this->extend('updateBadge', $badge);
-
-        if ($badge) {
-            $lastItem = $items->last();
-            $lastItem->setField('Extra', $badge);
-        }
-
-        return $items;
-    }
-
     /**
      * @return FieldList
      */
@@ -119,8 +92,7 @@ class VersionedGridFieldItemRequest extends GridFieldDetailForm_ItemRequest
     {
         /** @var Versioned|DataObject $record */
         $record = $this->getRecord();
-        $canArchive = Deprecation::withSuppressedNotice(fn() => $record->canArchive());
-        if (!$canArchive) {
+        if (!$record->canDelete()) {
             return $this->httpError(403);
         }
 
@@ -247,40 +219,6 @@ class VersionedGridFieldItemRequest extends GridFieldDetailForm_ItemRequest
     }
 
     /**
-     * Return list of class / title to add on the end of record status in breadcrumbs
-     *
-     * @return array|null
-     * @deprecated 2.4.0 Will be replaced with SilverStripe\Versioned\Versioned::updateStatusFlags() in a future major release
-     */
-    protected function getRecordStatus()
-    {
-        Deprecation::noticeWithNoReplacment('2.4.0', 'Will be replaced with SilverStripe\Versioned\Versioned::updateStatusFlags() in a future major release');
-        /** @var DataObject|Versioned $record */
-        $record = $this->record;
-
-        // No status if un-versioned
-        if (!$this->record->hasExtension(Versioned::class)) {
-            return null;
-        }
-
-        if ($record->isOnDraftOnly()) {
-            return [
-                'class' => 'addedtodraft',
-                'title' => _t(__CLASS__ . '.DRAFT', 'Draft')
-            ];
-        }
-
-        if ($record->isModifiedOnDraft()) {
-            return [
-                'class' => 'modified',
-                'title' => _t(__CLASS__ . '.MODIFIED', 'Modified')
-            ];
-        }
-
-        return null;
-    }
-
-    /**
      * Getting buttons that are for versioned objects
      *
      * @param DataObject|Versioned|RecursivePublishable $record
@@ -297,7 +235,7 @@ class VersionedGridFieldItemRequest extends GridFieldDetailForm_ItemRequest
         $canPublish = $record->canPublish();
         $canUnpublish = $record->canUnpublish();
         $canEdit = $record->canEdit();
-        $canArchive = Deprecation::withSuppressedNotice(fn() => $record->canArchive());
+        $canDelete = $record->canDelete();
 
         // "save", supports an alternate state that is still clickable, but notifies the user that the action is not needed.
         $noChangesClasses = 'btn-outline-primary font-icon-tick';
@@ -381,7 +319,7 @@ class VersionedGridFieldItemRequest extends GridFieldDetailForm_ItemRequest
         }
 
         // "archive" action
-        if (($isOnDraft || $isPublished) && $canArchive) {
+        if (($isOnDraft || $isPublished) && $canDelete) {
             // Replace "delete" action
             $actions->removeByName('action_doDelete');
             $title = $isPublished

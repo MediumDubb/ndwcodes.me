@@ -13,7 +13,7 @@ use SilverStripe\Forms\GridField\GridFieldEditButton;
 use SilverStripe\Forms\GridField\GridFieldDeleteAction;
 use SilverStripe\Forms\GridField\GridFieldDetailForm;
 use SilverStripe\Forms\GridField\GridFieldToolbarHeader;
-use SilverStripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\HasManyList;
@@ -32,7 +32,7 @@ use Symbiote\GridFieldExtensions\GridFieldOrderableRows;
 /**
  * @method HasManyList<EditableFormField> Fields()
  */
-class UserFormFieldEditorExtension extends DataExtension
+class UserFormFieldEditorExtension extends Extension
 {
     /**
      * @var array
@@ -51,12 +51,18 @@ class UserFormFieldEditorExtension extends DataExtension
         'Fields'
     ];
 
+    private static array $scaffold_cms_fields_settings = [
+        'ignoreRelations' => [
+            'Fields',
+        ],
+    ];
+
     /**
      * Adds the field editor to the page.
      *
      * @return FieldList
      */
-    public function updateCMSFields(FieldList $fields)
+    protected function updateCMSFields(FieldList $fields)
     {
         $fieldEditor = $this->getFieldEditorGrid();
 
@@ -180,7 +186,7 @@ class UserFormFieldEditorExtension extends DataExtension
     /**
      * Ensure that at least one page exists at the start
      */
-    public function onAfterWrite()
+    protected function onAfterWrite()
     {
         $this->createInitialFormStep();
     }
@@ -188,7 +194,7 @@ class UserFormFieldEditorExtension extends DataExtension
     /**
      * Remove any orphaned child records on publish
      */
-    public function onAfterPublish()
+    protected function onAfterPublish()
     {
         // store IDs of fields we've published
         $seenIDs = [];
@@ -222,7 +228,7 @@ class UserFormFieldEditorExtension extends DataExtension
     /**
      * Remove all fields from the live stage when unpublishing the page
      */
-    public function onAfterUnpublish()
+    protected function onAfterUnpublish()
     {
         foreach ($this->owner->Fields() as $field) {
             $field->deleteFromStage(Versioned::LIVE);
@@ -239,7 +245,7 @@ class UserFormFieldEditorExtension extends DataExtension
      * @param bool $doWrite
      * @param null|array $manyMany
      */
-    public function onAfterDuplicate($oldPage, $doWrite, $manyMany)
+    protected function onAfterDuplicate($oldPage, $doWrite, $manyMany)
     {
         // List of EditableFieldGroups, where the key of the array is the ID of the old end group
         $fieldGroups = [];
@@ -282,7 +288,7 @@ class UserFormFieldEditorExtension extends DataExtension
     /**
      * @see Versioned::doRevertToLive
      */
-    public function onAfterRevertToLive()
+    protected function onAfterRevertToLive()
     {
         foreach ($this->owner->Fields() as $field) {
             $field->copyVersionToStage(Versioned::LIVE, Versioned::DRAFT);

@@ -2,6 +2,7 @@
 
 namespace SilverStripe\ORM;
 
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\FieldType\DBField;
 
 /**
@@ -15,11 +16,8 @@ use SilverStripe\ORM\FieldType\DBField;
  *
  * @template T
  * @extends SS_List<T>
- * @extends Filterable<T>
- * @extends Sortable<T>
- * @extends Limitable<T>
  */
-interface Relation extends SS_List, Filterable, Sortable, Limitable
+interface Relation extends SS_List
 {
 
     /**
@@ -41,9 +39,6 @@ interface Relation extends SS_List, Filterable, Sortable, Limitable
 
     /**
      * Return the DBField object that represents the given field on the related class.
-     *
-     * @param string $fieldName Name of the field
-     * @return DBField The field as a DBField object
      */
-    public function dbObject($fieldName);
+    public function dbObject(string $fieldName): ?DBField;
 }

@@ -17,14 +17,6 @@ class HTTP
     use Configurable;
 
     /**
-     * Set to true to disable all deprecated HTTP Cache settings
-     *
-     * @var bool
-     * @deprecated 5.4.0 Will be removed without equivalent functionality to replace it in a future major release.
-     */
-    private static $ignoreDeprecatedCaching = false;
-
-    /**
      * Mapping of extension to mime types
      *
      * @var array
@@ -65,7 +57,6 @@ class HTTP
      */
     public static function absoluteURLs($html)
     {
-        $html = str_replace('$CurrentPageURL', Controller::curr()->getRequest()->getURL() ?? '', $html ?? '');
         return HTTP::urlRewriter($html, function ($url) {
             //no need to rewrite, if uri has a protocol (determined here by existence of reserved URI character ":")
             if (preg_match('/^\w+:/', $url ?? '')) {
@@ -94,19 +85,12 @@ class HTTP
      * </code>
      *
      * @param string $content The HTML to search for links to rewrite.
-     * @param callable $code Either a string that can evaluate to an expression to rewrite links
-     * (depreciated), or a callable that takes a single parameter and returns the rewritten URL.
+     * @param callable $code A callable that takes a single parameter and returns the rewritten URL.
      *
      * @return string The content with all links rewritten as per the logic specified in $code.
      */
-    public static function urlRewriter($content, $code)
+    public static function urlRewriter($content, callable $code)
     {
-        if (!is_callable($code)) {
-            throw new InvalidArgumentException(
-                'HTTP::urlRewriter expects a callable as the second parameter'
-            );
-        }
-
         // Replace attributes
         $attribs = ["src", "background", "a" => "href", "link" => "href", "base" => "href"];
         $regExps = [];
@@ -147,9 +131,10 @@ class HTTP
 
     /**
      * Will try to include a GET parameter for an existing URL, preserving existing parameters and
-     * fragments. If no URL is given, falls back to $_SERVER['REQUEST_URI']. Uses parse_url() to
-     * dissect the URL, and http_build_query() to reconstruct it with the additional parameter.
-     * Converts any '&' (ampersand) URL parameter separators to the more XHTML compliant '&amp;'.
+     * fragments. If no URL is given, falls back to getting the URL from the current request.
+     * Uses parse_url() to dissect the URL, and http_build_query() to reconstruct it with the
+     * additional parameter. Converts any '&' (ampersand) URL parameter separators to the more
+     * XHTML compliant '&amp;'.
      *
      * CAUTION: If the URL is determined to be relative, it is prepended with Director::absoluteBaseURL().
      * This method will always return an absolute URL because Director::makeRelative() can lead to

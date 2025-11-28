@@ -2,8 +2,7 @@
 
 namespace SilverStripe\CMS\Controllers;
 
-use SilverStripe\CMS\Model\SiteTree;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\ORM\DataList;
 use SilverStripe\Versioned\Versioned;
 
 /**
@@ -11,25 +10,22 @@ use SilverStripe\Versioned\Versioned;
  */
 class CMSSiteTreeFilter_StatusRemovedFromDraftPages extends CMSSiteTreeFilter
 {
-
-    public static function title()
+    public static function title(): string
     {
         return _t(__CLASS__ . '.Title', 'Live but removed from draft');
     }
 
     /**
      * Filters out all pages who's status is set to "Removed from draft".
-     *
-     * @return SS_List
      */
-    public function getFilteredPages()
+    public function getFilteredPages(DataList $list): DataList
     {
-        $pages = Versioned::get_including_deleted(SiteTree::class);
-        $pages = $this->applyDefaultFilters($pages);
-        $pages = $pages->filterByCallback(function (SiteTree $page) {
-            // If page is removed from stage but not live
-            return $page->isOnLiveOnly();
-        });
-        return $pages;
+        // Get all pages removed from stage but not live
+        // Don't just use withVersionedMode - that would just get the latest live versions
+        // including records which were not removed from draft.
+        return $list->setDataQueryParam([
+            'Versioned.mode' => 'stage_unique',
+            'Versioned.stage' => Versioned::LIVE,
+        ]);
     }
 }

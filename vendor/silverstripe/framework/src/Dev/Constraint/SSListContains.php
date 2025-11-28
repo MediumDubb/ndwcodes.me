@@ -4,10 +4,9 @@ namespace SilverStripe\Dev\Constraint;
 
 use PHPUnit\Framework\Constraint\Constraint;
 use PHPUnit\Framework\ExpectationFailedException;
-use SilverStripe\Dev\SSListExporter;
 use SilverStripe\Dev\TestOnly;
-use SilverStripe\ORM\SS_List;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\List\SS_List;
+use SilverStripe\Model\ModelData;
 
 /**
  * Constraint for checking if a SS_List contains items matching the given
@@ -21,11 +20,6 @@ class SSListContains extends Constraint implements TestOnly
     protected $matches = [];
 
     /**
-     * @deprecated 5.4.0 Will be removed without equivalent functionality to replace it in a future major release
-     */
-    protected SSListExporter $exporter;
-
-    /**
      * Check if the list has left over items that don't match
      *
      * @var bool
@@ -34,8 +28,6 @@ class SSListContains extends Constraint implements TestOnly
 
     public function __construct(array $matches)
     {
-        $this->exporter = new SSListExporter();
-
         $this->matches = $matches;
     }
 
@@ -80,11 +72,11 @@ class SSListContains extends Constraint implements TestOnly
         return null;
     }
 
-    protected function checkIfItemEvaluatesRemainingMatches(ViewableData $item): bool
+    protected function checkIfItemEvaluatesRemainingMatches(ModelData $item): bool
     {
         $success = false;
         foreach ($this->matches as $key => $match) {
-            $constraint = new ViewableDataContains($match);
+            $constraint = new ModelDataContains($match);
 
             if ($constraint->evaluate($item, '', true)) {
                 $success = true;

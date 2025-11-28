@@ -2,7 +2,7 @@
 
 namespace InnisMaggiore\SilverstripeSocialMetaTags;
 
-use Silverstripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\TextareaField;
 use SilverStripe\AssetAdmin\Forms\UploadField;
@@ -14,29 +14,29 @@ use SilverStripe\Assets\Image;
 use SilverStripe\CMS\Model\SiteTree;
 use SilverStripe\CMS\Model\RedirectorPage;
 
-class SocialMetaTagsExtension extends DataExtension {
-    private static $db = array(
+class SocialMetaTagsExtension extends Extension {
+    private static $db = [
         "SocialMetaDescription" => "Text"
-    );
+    ];
 
-    private static $has_one = array(
+    private static $has_one = [
         "SocialMetaImage"   => Image::class
-    );
+    ];
 
-    private static $owns = array(
+    private static $owns = [
         "SocialMetaImage"
-    );
+    ];
 
     public function updateCMSFields(FieldList $fields) {
         $owner = $this->getOwner();
 
         if (is_subclass_of($owner, SiteTree::class) && !is_a($owner, RedirectorPage::class) && !is_a($owner, ErrorPage::class)) {
-            $fields->addFieldToTab('Root.Main.Metadata', TextareaField::create("SocialMetaDescription")->addExtraClass("stacked"));
-            $fields->addFieldToTab('Root.Main.Metadata', UploadField::create("SocialMetaImage")->addExtraClass("stacked"));
+            $fields->insertAfter('ExtraMeta', TextareaField::create("SocialMetaDescription")->addExtraClass("stacked"));
+            $fields->insertAfter('ExtraMeta', UploadField::create("SocialMetaImage")->addExtraClass("stacked"));
         }
     }
 
-    public function MetaTags(&$tags) {
+    public function updateMetaTags(&$tags) {
         $owner = $this->getOwner();
         $className = $owner->ClassName;
 

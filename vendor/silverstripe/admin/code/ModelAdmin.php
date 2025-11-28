@@ -27,11 +27,11 @@ use SilverStripe\Forms\GridField\GridFieldPaginator;
 use SilverStripe\Forms\GridField\GridFieldPrintButton;
 use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\LiteralField;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Security;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 
 /**
  * Generates a three-pane UI for editing model classes, tabular results and edit forms.
@@ -86,7 +86,6 @@ abstract class ModelAdmin extends LeftAndMain
 
     private static $allowed_actions = [
         'ImportForm',
-        'SearchForm'
     ];
 
     private static $url_handlers = [
@@ -328,21 +327,8 @@ abstract class ModelAdmin extends LeftAndMain
             ->addComponent($exportButton)
             ->addComponents(Injector::inst()->createWithArgs(GridFieldPrintButton::class, ['buttons-before-left']));
 
-        // Remove default and add our own filter header with extension points
-        // to retain API until deprecation in 5.0
-        $config->removeComponentsByType(GridFieldFilterHeader::class);
-        $config->addComponent(Injector::inst()->createWithArgs(GridFieldFilterHeader::class, [
-            false,
-            function ($context) {
-                $this->extend('updateSearchContext', $context);
-            },
-            function ($form) {
-                $this->extend('updateSearchForm', $form);
-            }
-        ]));
-
         if (!$this->showSearchForm ||
-            (is_array($this->showSearchForm) && !in_array($this->modelClass, $this->showSearchForm ?? []))
+            (is_array($this->showSearchForm) && !in_array($this->getModelClass(), $this->showSearchForm ?? []))
         ) {
             $config->removeComponentsByType(GridFieldFilterHeader::class);
         }
@@ -356,8 +342,8 @@ abstract class ModelAdmin extends LeftAndMain
         }
 
         // Validation
-        if (singleton($this->modelClass)->hasMethod('getCMSCompositeValidator')) {
-            $detailValidator = singleton($this->modelClass)->getCMSCompositeValidator();
+        if (singleton($this->getModelClass())->hasMethod('getCMSCompositeValidator')) {
+            $detailValidator = singleton($this->getModelClass())->getCMSCompositeValidator();
             $detailform = $config->getComponentByType(GridFieldDetailForm::class);
             $detailform->setValidator($detailValidator);
         }
@@ -383,7 +369,7 @@ abstract class ModelAdmin extends LeftAndMain
      */
     public function getExportFields()
     {
-        return singleton($this->modelClass)->summaryFields();
+        return singleton($this->getModelClass())->summaryFields();
     }
 
     /**
@@ -395,7 +381,7 @@ abstract class ModelAdmin extends LeftAndMain
      * Archived flag is set to false. That would be best done as an extension, for example:
      *
      * <code>
-     * public function updateList(\SilverStripe\ORM\DataList $list)
+     * protected function updateList(\SilverStripe\ORM\DataList $list)
      * {
      *     return $list->filter('Archived', false);
      * }
@@ -407,7 +393,7 @@ abstract class ModelAdmin extends LeftAndMain
      */
     public function getList()
     {
-        $list = DataObject::singleton($this->modelClass)->get();
+        $list = DataObject::singleton($this->getModelClass())->get();
 
         $this->extend('updateList', $list);
 
@@ -417,16 +403,14 @@ abstract class ModelAdmin extends LeftAndMain
     /**
      * The model managed by this instance.
      * See $managed_models for potential values.
-     *
-     * @return string
      */
-    public function getModelClass()
+    public function getModelClass(): string
     {
-        return $this->modelClass;
+        return $this->modelClass ?? '';
     }
 
     /**
-     * @return \SilverStripe\ORM\ArrayList An ArrayList of all managed models to build the tabs for this ModelAdmin
+     * @return \SilverStripe\Model\List\ArrayList An ArrayList of all managed models to build the tabs for this ModelAdmin
      */
     protected function getManagedModelTabs()
     {
@@ -590,7 +574,7 @@ abstract class ModelAdmin extends LeftAndMain
      */
     public function ImportForm()
     {
-        $modelSNG = singleton($this->modelClass);
+        $modelSNG = singleton($this->getModelClass());
         $modelName = $modelSNG->i18n_singular_name();
         // check if a import form should be generated
         if (!$this->showImportForm ||
@@ -605,7 +589,7 @@ abstract class ModelAdmin extends LeftAndMain
         }
 
         $fields = new FieldList(
-            new HiddenField('ClassName', false, $this->modelClass),
+            new HiddenField('ClassName', false, $this->getModelClass()),
             new FileField('_CsvFile', false)
         );
 
@@ -622,7 +606,7 @@ abstract class ModelAdmin extends LeftAndMain
             $specRelations->push(new ArrayData(['Name' => $name, 'Description' => $desc]));
         }
         $specHTML = $this->customise([
-            'ClassName' => $this->sanitiseClassName($this->modelClass),
+            'ClassName' => $this->sanitiseClassName($this->getModelClass()),
             'ModelName' => Convert::raw2att($modelName),
             'Fields' => $specFields,
             'Relations' => $specRelations,
@@ -665,7 +649,7 @@ abstract class ModelAdmin extends LeftAndMain
     public function import(array $data, Form $form): HTTPResponse
     {
         if (!$this->showImportForm || (is_array($this->showImportForm)
-                && !in_array($this->modelClass, $this->showImportForm ?? []))
+                && !in_array($this->getModelClass(), $this->showImportForm ?? []))
         ) {
             return $this->redirectBack();
         }

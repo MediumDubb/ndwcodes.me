@@ -603,6 +603,29 @@ trait ImageManipulation
     }
 
     /**
+     * Check if the image is animated (e.g. an animated GIF).
+     */
+    public function getIsAnimated(): bool
+    {
+        $backend = $this->getImageBackend();
+        if (!$backend) {
+            return false;
+        }
+        return $backend->getIsAnimated();
+    }
+
+    public function RemoveAnimation(int|string $position = 0): ?AssetContainer
+    {
+        if (!$this->getIsAnimated()) {
+            return $this;
+        }
+        $variant = $this->variantName(__FUNCTION__, $position);
+        return $this->manipulateImage($variant, function (Image_Backend $backend) use ($position) {
+            return $backend->removeAnimation($position);
+        });
+    }
+
+    /**
      * Set the quality of the resampled image
      *
      * @param int $quality Quality level from 0 - 100
@@ -1039,7 +1062,7 @@ trait ImageManipulation
      * This means we have to use a whitelist of "known formats", based on methods
      * available on the {@link Image} class as the "main" user of this trait.
      * The one exception to this is the variant for swapping file extensions, which is explicitly allowed.
-     * This class is commonly decorated with additional manipulation methods through {@link DataExtension}.
+     * This class is commonly decorated with additional manipulation methods through {@link Extension}.
      *
      * @param $variantName
      * @return array|null An array of arguments passed to {@link variantName}. The first item is the "format".

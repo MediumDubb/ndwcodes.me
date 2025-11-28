@@ -3,14 +3,15 @@ Name: cmsextensions
 ---
 SilverStripe\Admin\LeftAndMain:
   extensions:
-    - SilverStripe\CMS\Controllers\LeftAndMainPageIconsExtension
+    - SilverStripe\CMS\Controllers\LeftAndMainRecordIconsExtension
     - SilverStripe\CMS\Controllers\LeftAndMainBatchActionsExtension
 ---
 Name: cmsmodals
 ---
 SilverStripe\Admin\ModalController:
-  extensions:
-    - SilverStripe\CMS\Forms\InternalLinkModalExtension
+  link_modal_form_factories:
+    editorInternalLink: SilverStripe\CMS\Forms\InternalLinkFormFactory
+    editorAnchorLink: SilverStripe\CMS\Forms\AnchorLinkFormFactory
 ---
 Name: cmshierarchy
 ---

@@ -7,12 +7,12 @@ use InvalidArgumentException;
 use LogicException;
 use SilverStripe\Assets\Thumbnail;
 use SilverStripe\Control\Controller;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\CMSPreviewable;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\ManyManyList;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\UnexpectedDataException;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Permission;
@@ -83,7 +83,7 @@ class ChangeSetItem extends DataObject implements Thumbnail
         ]
     ];
 
-    public function onBeforeWrite()
+    protected function onBeforeWrite()
     {
         // Make sure ObjectClass refers to the base data class in the case of old or wrong code
         $this->ObjectClass = $this->getSchema()->baseDataClass($this->ObjectClass);
@@ -181,7 +181,7 @@ class ChangeSetItem extends DataObject implements Thumbnail
 
         // Ignore stage for unversioned objects
         if (!$this->isVersioned()) {
-            return DataObject::get_by_id($this->ObjectClass, $this->ObjectID);
+            return DataObject::get($this->ObjectClass)->setUseCache(true)->byID($this->ObjectID);
         }
 
         // Get versioned object
@@ -201,7 +201,7 @@ class ChangeSetItem extends DataObject implements Thumbnail
 
         // Ignore version for unversioned objects
         if (!$this->isVersioned()) {
-            return DataObject::get_by_id($this->ObjectClass, $this->ObjectID);
+            return DataObject::get($this->ObjectClass)->setUseCache(true)->byID($this->ObjectID);
         }
 
         // Get versioned object
@@ -531,18 +531,10 @@ class ChangeSetItem extends DataObject implements Thumbnail
         return $links;
     }
 
-    /**
-     * Get edit link for this item
-     *
-     * @return string
-     */
-    public function CMSEditLink()
+    public function CMSEditLink(): ?string
     {
         $link = $this->getObjectInStage(Versioned::DRAFT);
-        if ($link instanceof CMSPreviewable) {
-            return $link->CMSEditLink();
-        }
-        return null;
+        return $link->CMSEditLink();
     }
 
     /**

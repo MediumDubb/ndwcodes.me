@@ -19,7 +19,7 @@ use SilverStripe\Forms\GridField\GridField_URLHandler;
 use SilverStripe\Forms\HTMLEditor\HTMLEditorField;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\ReadonlyField;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DataObjectInterface;
@@ -119,7 +119,7 @@ class GridFieldEditableColumns extends GridFieldDataColumns implements
     {
         /** @var DataList $list */
         $list  = $grid->getList();
-        $value = $grid->Value();
+        $value = $grid->getValue();
 
         if (!isset($value[GridFieldEditableColumns::POST_KEY])
             || !is_array($value[GridFieldEditableColumns::POST_KEY])

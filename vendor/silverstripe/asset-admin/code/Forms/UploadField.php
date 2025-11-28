@@ -7,12 +7,13 @@ use SilverStripe\Assets\File;
 use SilverStripe\Assets\Folder;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Forms\FileHandleField;
 use SilverStripe\Forms\FileUploadReceiver;
 use SilverStripe\Forms\FormField;
-use SilverStripe\Forms\Validator;
+use SilverStripe\Forms\Validation\Validator;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\SS_List;
 
 /**
  * Represents a file upload field with ReactJS based frontend.
@@ -96,7 +97,7 @@ class UploadField extends FormField implements FileHandleField
      * @param string $title The field label.
      * @param SS_List $items Items assigned to this field
      */
-    public function __construct($name, $title = null, SS_List $items = null)
+    public function __construct($name, $title = null, ?SS_List $items = null)
     {
         $this->constructFileUploadReceiver();
 
@@ -113,7 +114,7 @@ class UploadField extends FormField implements FileHandleField
     {
         $defaults = parent::getSchemaDataDefaults();
         $uploadLink = $this->Link('upload');
-        $defaults['data']['createFileEndpoint'] = [
+        $defaults['data']['endpoints']['createFile'] = [
             'url' => $uploadLink,
             'method' => 'post',
             'payloadFormat' => 'urlencoded',
@@ -204,7 +205,7 @@ class UploadField extends FormField implements FileHandleField
     {
         $state = parent::getSchemaStateDefaults();
         $state['data']['files'] = $this->getEncodedItems();
-        $state['value'] = $this->Value() ?: ['Files' => []];
+        $state['value'] = $this->getFormattedValue() ?: ['Files' => []];
         return $state;
     }
 
@@ -295,8 +296,6 @@ class UploadField extends FormField implements FileHandleField
             'type' => 'file',
             'multiple' => $this->getIsMultiUpload(),
             'id' => $this->ID(),
-            'data-schema' => json_encode($this->getSchemaData()),
-            'data-state' => json_encode($this->getSchemaState()),
         );
 
         $attributes = array_merge($attributes, $this->attributes);
@@ -327,52 +326,45 @@ class UploadField extends FormField implements FileHandleField
 
     /**
      * Checks if the number of files attached adheres to the $allowedMaxFileNumber defined
-     * Also checks that extensions are valid, which is intended primarily for selecting
-     * existing files rather than newly uploaded files, as those will be checked by
-     * Upload_Validator which is used on the UploadReciever trait
-     *
-     * @param Validator $validator
-     * @return bool
      */
-    public function validate($validator)
+    public function validate(): ValidationResult
     {
-        $maxFiles = $this->getAllowedMaxFileNumber();
-        /** @var SS_List<File> $items */
-        $items = $this->getItems();
-        $count = $items->count();
-        $result = true;
-        // Validate file count
-        if ($maxFiles && $count > $maxFiles) {
-            $result = false;
-            $validator->validationError($this->getName(), _t(
-                __CLASS__ . '.ErrorMaxFilesReached',
-                'You can only upload {count} file.|You can only upload {count} files.',
-                [
-                    'count' => $maxFiles,
-                ]
-            ));
-        }
-        // Validate file extensions
-        $validExts = $this->getAllowedExtensions();
-        $invalidExts = [];
-        foreach ($items as $item) {
-            $ext = strtolower($item->getExtension());
-            if (!in_array($ext, $validExts)) {
-                $invalidExts[] = $ext;
+        $this->beforeExtending('updateValidate', function (ValidationResult $result) {
+            $maxFiles = $this->getAllowedMaxFileNumber();
+            /** @var SS_List<File> $items */
+            $items = $this->getItems();
+            $count = $items->count();
+            // Validate file count
+            if ($maxFiles && $count > $maxFiles) {
+                $result->addFieldError($this->getName(), _t(
+                    __CLASS__ . '.ErrorMaxFilesReached',
+                    'You can only upload {count} file.|You can only upload {count} files.',
+                    [
+                        'count' => $maxFiles,
+                    ]
+                ));
+            };
+            // Validate file extensions
+            $validExts = $this->getAllowedExtensions();
+            $invalidExts = [];
+            foreach ($items as $item) {
+                $ext = strtolower($item->getExtension());
+                if (!in_array($ext, $validExts)) {
+                    $invalidExts[] = $ext;
+                }
             }
-        }
-        $invalidExts = array_values(array_unique($invalidExts));
-        foreach ($invalidExts as $ext) {
-            $result = false;
-            $validator->validationError($this->getName(), _t(
-                File::class . '.INVALIDEXTENSION_SHORT_EXT',
-                'Extension \'{extension}\' is not allowed',
-                [
-                    'extension' => $ext,
-                ]
-            ));
-        }
-        return $this->extendValidationResult($result, $validator);
+            $invalidExts = array_values(array_unique($invalidExts));
+            foreach ($invalidExts as $ext) {
+                $result->addFieldError($this->getName(), _t(
+                    File::class . '.INVALIDEXTENSION_SHORT_EXT',
+                    'Extension \'{extension}\' is not allowed',
+                    [
+                        'extension' => $ext,
+                    ]
+                ));
+            }
+        });
+        return parent::validate();
     }
 
     /**

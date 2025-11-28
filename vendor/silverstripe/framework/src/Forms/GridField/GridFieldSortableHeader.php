@@ -4,16 +4,14 @@ namespace SilverStripe\Forms\GridField;
 
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\ORM\DataObjectSchema;
-use SilverStripe\ORM\Sortable;
-use SilverStripe\ORM\ArrayList;
-use SilverStripe\ORM\SS_List;
+use SilverStripe\Model\List\ArrayList;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\View\SSViewer;
 use LogicException;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Injector\Injector;
-use SilverStripe\Dev\Deprecation;
 
 /**
  * GridFieldSortableHeader adds column headers to a {@link GridField} that can
@@ -25,49 +23,9 @@ class GridFieldSortableHeader extends AbstractGridFieldComponent implements Grid
 {
 
     /**
-     * See {@link setThrowExceptionOnBadDataType()}
-     *
-     * @var bool
-     * @deprecated 5.2.0 Will be removed without equivalent functionality in a future major release
-     */
-    protected $throwExceptionOnBadDataType = true;
-
-    /**
      * @var array
      */
     public $fieldSorting = [];
-
-    /**
-     * Determine what happens when this component is used with a list that isn't {@link SS_Filterable}.
-     *
-     *  - true:  An exception is thrown
-     *  - false: This component will be ignored - it won't make any changes to the GridField.
-     *
-     * By default, this is set to true so that it's clearer what's happening, but the predefined
-     * {@link GridFieldConfig} subclasses set this to false for flexibility.
-     *
-     * @param bool $throwExceptionOnBadDataType
-     * @return $this
-     * @deprecated 5.2.0 Will be removed without equivalent functionality in a future major release
-     */
-    public function setThrowExceptionOnBadDataType($throwExceptionOnBadDataType)
-    {
-        Deprecation::notice('5.2.0', 'Will be removed without equivalent functionality in a future major release');
-        $this->throwExceptionOnBadDataType = $throwExceptionOnBadDataType;
-        return $this;
-    }
-
-    /**
-     * See {@link setThrowExceptionOnBadDataType()}
-     *
-     * @return bool
-     * @deprecated 5.2.0 Will be removed without equivalent functionality in a future major release
-     */
-    public function getThrowExceptionOnBadDataType()
-    {
-        Deprecation::notice('5.2.0', 'Will be removed without equivalent functionality in a future major release');
-        return $this->throwExceptionOnBadDataType;
-    }
 
     /**
      * Check that this dataList is of the right data type.
@@ -78,17 +36,12 @@ class GridFieldSortableHeader extends AbstractGridFieldComponent implements Grid
      */
     protected function checkDataType($dataList)
     {
-        if ($dataList instanceof Sortable) {
+        if ($dataList instanceof SS_List) {
             return true;
-        } else {
-            // This will be changed to always throw an exception in a future major release.
-            if ($this->throwExceptionOnBadDataType) {
-                throw new LogicException(
-                    static::class . " expects an SS_Sortable list to be passed to the GridField."
-                );
-            }
-            return false;
         }
+        throw new LogicException(
+            static::class . " expects an SS_List list to be passed to the GridField."
+        );
     }
 
     /**
@@ -246,7 +199,7 @@ class GridFieldSortableHeader extends AbstractGridFieldComponent implements Grid
      * {@link DataQuery} first.
      *
      * @param GridField $gridField
-     * @param SS_List&Sortable $dataList
+     * @param SS_List $dataList
      * @return SS_List
      */
     public function getManipulatedData(GridField $gridField, SS_List $dataList)

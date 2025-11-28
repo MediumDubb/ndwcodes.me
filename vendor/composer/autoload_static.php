@@ -4,7 +4,7 @@
 
 namespace Composer\Autoload;
 
-class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
+class ComposerStaticInit28ddb20bc2e01e501c0ec2a32f573dd5
 {
     public static $files = array (
         '6e3fae29631ef280660b3cdad06f25a8' => __DIR__ . '/..' . '/symfony/deprecation-contracts/function.php',
@@ -563,13 +563,13 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
         ),
         'SilverStripe\\Forms\\Tests\\' => 
         array (
-            0 => __DIR__ . '/..' . '/silverstripe/framework/tests/php/Forms',
-            1 => __DIR__ . '/..' . '/silverstripe/segment-field/tests',
+            0 => __DIR__ . '/..' . '/silverstripe/segment-field/tests',
+            1 => __DIR__ . '/..' . '/silverstripe/framework/tests/php/Forms',
         ),
         'SilverStripe\\Forms\\' => 
         array (
-            0 => __DIR__ . '/..' . '/silverstripe/framework/src/Forms',
-            1 => __DIR__ . '/..' . '/silverstripe/segment-field/src',
+            0 => __DIR__ . '/..' . '/silverstripe/segment-field/src',
+            1 => __DIR__ . '/..' . '/silverstripe/framework/src/Forms',
         ),
         'SilverStripe\\ErrorPage\\Tests\\' => 
         array (
@@ -686,8 +686,8 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
         ),
         'Psr\\Http\\Message\\' => 
         array (
-            0 => __DIR__ . '/..' . '/psr/http-factory/src',
-            1 => __DIR__ . '/..' . '/psr/http-message/src',
+            0 => __DIR__ . '/..' . '/psr/http-message/src',
+            1 => __DIR__ . '/..' . '/psr/http-factory/src',
         ),
         'Psr\\Http\\Client\\' => 
         array (
@@ -2106,10 +2106,10 @@ class ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc
     public static function getInitializer(ClassLoader $loader)
     {
         return \Closure::bind(function () use ($loader) {
-            $loader->prefixLengthsPsr4 = ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc::$prefixLengthsPsr4;
-            $loader->prefixDirsPsr4 = ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc::$prefixDirsPsr4;
-            $loader->prefixesPsr0 = ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc::$prefixesPsr0;
-            $loader->classMap = ComposerStaticInita087b08fe07e1430fdbd87c55547f7fc::$classMap;
+            $loader->prefixLengthsPsr4 = ComposerStaticInit28ddb20bc2e01e501c0ec2a32f573dd5::$prefixLengthsPsr4;
+            $loader->prefixDirsPsr4 = ComposerStaticInit28ddb20bc2e01e501c0ec2a32f573dd5::$prefixDirsPsr4;
+            $loader->prefixesPsr0 = ComposerStaticInit28ddb20bc2e01e501c0ec2a32f573dd5::$prefixesPsr0;
+            $loader->classMap = ComposerStaticInit28ddb20bc2e01e501c0ec2a32f573dd5::$classMap;
 
         }, null, ClassLoader::class);
     }

@@ -3,7 +3,7 @@
         'name' => 'silverstripe/installer',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => '7eb334beeda8eb982505e535834bb7c429d8f067',
+        'reference' => '39652f22954c1876194ffb9c97613ebf8b6a8342',
         'type' => 'silverstripe-recipe',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -505,8 +505,8 @@
         'psr/log-implementation' => array(
             'dev_requirement' => false,
             'provided' => array(
-                0 => '1.0|2.0|3.0',
-                1 => '3.0.0',
+                0 => '3.0.0',
+                1 => '1.0|2.0|3.0',
             ),
         ),
         'psr/simple-cache' => array(
@@ -781,7 +781,7 @@
         'silverstripe/installer' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => '7eb334beeda8eb982505e535834bb7c429d8f067',
+            'reference' => '39652f22954c1876194ffb9c97613ebf8b6a8342',
             'type' => 'silverstripe-recipe',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

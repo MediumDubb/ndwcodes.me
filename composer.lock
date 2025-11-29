@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "28ddb20bc2e01e501c0ec2a32f573dd5",
+    "content-hash": "2d84131d0b6fa392bbe7e4c3dbafbb6b",
     "packages": [
         {
             "name": "bummzack/sortablefile",
@@ -8804,9 +8804,6 @@
     "aliases": [],
     "minimum-stability": "dev",
     "stability-flags": {
-        "silverstripe/recipe-plugin": 0,
-        "silverstripe/vendor-plugin": 0,
-        "silverstripe/htmleditor-tinymce": 0,
         "silvershop/silverstripe-hasonefield": 20
     },
     "prefer-stable": true,

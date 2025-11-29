@@ -563,13 +563,13 @@ class ComposerStaticInit28ddb20bc2e01e501c0ec2a32f573dd5
         ),
         'SilverStripe\\Forms\\Tests\\' => 
         array (
-            0 => __DIR__ . '/..' . '/silverstripe/segment-field/tests',
-            1 => __DIR__ . '/..' . '/silverstripe/framework/tests/php/Forms',
+            0 => __DIR__ . '/..' . '/silverstripe/framework/tests/php/Forms',
+            1 => __DIR__ . '/..' . '/silverstripe/segment-field/tests',
         ),
         'SilverStripe\\Forms\\' => 
         array (
-            0 => __DIR__ . '/..' . '/silverstripe/segment-field/src',
-            1 => __DIR__ . '/..' . '/silverstripe/framework/src/Forms',
+            0 => __DIR__ . '/..' . '/silverstripe/framework/src/Forms',
+            1 => __DIR__ . '/..' . '/silverstripe/segment-field/src',
         ),
         'SilverStripe\\ErrorPage\\Tests\\' => 
         array (
@@ -686,8 +686,8 @@ class ComposerStaticInit28ddb20bc2e01e501c0ec2a32f573dd5
         ),
         'Psr\\Http\\Message\\' => 
         array (
-            0 => __DIR__ . '/..' . '/psr/http-message/src',
-            1 => __DIR__ . '/..' . '/psr/http-factory/src',
+            0 => __DIR__ . '/..' . '/psr/http-factory/src',
+            1 => __DIR__ . '/..' . '/psr/http-message/src',
         ),
         'Psr\\Http\\Client\\' => 
         array (

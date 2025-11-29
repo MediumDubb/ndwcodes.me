@@ -9,11 +9,11 @@ use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridFieldConfig_RecordEditor;
 use SilverStripe\Forms\HTMLEditor\HTMLEditorField;
-use SilverStripe\Forms\HTMLEditor\TinyMCEConfig;
 use SilverStripe\Forms\Tab;
 use SilverStripe\Forms\TabSet;
 use SilverStripe\Forms\TextField;
 use SilverStripe\Forms\UrlField;
+use SilverStripe\TinyMCE\TinyMCEConfig;
 use SirNoah\Whittendav\Models\SocialLink;
 use UndefinedOffset\SortableGridField\Forms\GridFieldSortableRows;
 

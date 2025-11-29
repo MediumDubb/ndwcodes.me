@@ -19,7 +19,7 @@ class MailerSubscriber implements EventSubscriberInterface
     use Injectable;
     use Extensible;
 
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             MessageEvent::class => 'onMessage',

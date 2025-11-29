@@ -1,17 +1,18 @@
-<div class="post-summary">
-    <p>$PostDate.Format('MM, yyyy') |
+<li class="post post-summary">
+    <p>$PostDate.Format('MM/yyyy') |
         <a href="$Link" title="Read more about {$Title}">$Title</a>
     </p>
 
-    <p class="post-image">
+    <% if $FeaturedImage %>
         <a href="$Link" title="Read more about {$Title}">
-            $FeaturedImage.ScaleWidth(795)
+            <p class="post-image" style="background-image: url('{$FeaturedImage.ScaleWidth(795).Link()}'); background-size:cover;" aria-label="Featured Image: {$FeaturedImage.Title}">
+            </p>
         </a>
-    </p>
+    <% end_if %>
 
     <% if $SpecialPreview %>
         $SpecialPreview
     <% else %>
         <p>$Excerpt</p>
     <% end_if %>
-</div>
+</li>

@@ -12,11 +12,11 @@
                     <% end_if %>
 
                     <% if $getPagePaginatedPosts.Exists %>
-                        <div id="blog-posts">
+                        <ul id="blog-posts">
                             <% loop $getPagePaginatedPosts %>
                                 <% include PostSummary %>
                             <% end_loop %>
-                        </div>
+                        </ul>
                         <% with $getPagePaginatedPosts %>
                             <% include Includes %>
                         <% end_with %>

@@ -36,7 +36,7 @@ class ResumePage extends Page
         // Contact section
         // Plans to use a cloudflare turnstile to vet user and return contact info when deemed not bot traffic
         'ContactHeading'    => 'Varchar(50)',
-        'Email'             => 'Varchar(50)',
+        'Email'             => 'Varchar(150)',
         'LinkedIn'          => 'Varchar(150)',
         // Education section
         'EduHeading'        => 'Varchar(50)',
@@ -129,6 +129,7 @@ class ResumePage extends Page
             Tab::create('SidebarResumeTab', 'Sidebar Fields:',
                 TabSet::create('SidebarTabSet',
                     Tab::create('ContactTab', 'Contact Fields:',
+                        TextField::create('ContactHeading', 'Contact Heading'),
                         TextField::create('Email', 'Email'),
                         TextField::create('LinkedIn', 'LinkedIn'),
                     ),

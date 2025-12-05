@@ -25,10 +25,6 @@ class Edu extends DataObject
         'ResumePage'    => ResumePage::class,
     ];
 
-    private static array $owns = [
-        'ResumePage',
-    ];
-
     public function getCMSFields()
     {
         $fields = parent::getCMSFields();

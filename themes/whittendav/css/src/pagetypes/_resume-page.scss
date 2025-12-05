@@ -102,6 +102,60 @@
                     }
                 }
             }
+            .more-info {
+                .accordion {
+                    .accordion-button[aria-expanded="true"] {
+                        background: #3c3c3c;
+                        span {
+                            color: white;
+                        }
+                    }
+                    .accordion-body {
+                        background-color: #5E4D5B;
+                        padding-top: 0;
+                        * {
+                            color: white;
+                        }
+                        .acc-section {
+                            .heading {
+                                padding-top: 1.5rem;
+                                margin-top:0;
+                            }
+                            &.skills,
+                            &.language{
+                                .heading {
+                                    margin-top: -1rem
+                                }
+                            }
+                            p {
+                                margin-bottom: 0;
+                                margin-top: .5rem;
+                                font-weight: 500;
+                            }
+                            &.edu {
+                                .heading {
+                                    padding-bottom: .5rem;
+                                }
+                                & > ul {
+                                    padding:0;
+                                    list-style: none;
+                                    row-gap: 1rem;
+                                    p {
+                                        margin: 0;
+                                    }
+                                    li {
+                                        font-weight: 300;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .skills {
+                .heading {
+                }
+            }
         }
     }
 }

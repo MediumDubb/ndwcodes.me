@@ -1,5 +1,8 @@
 .resume-page{
     padding-top: 42px;
+    * {
+        color: #3C3C3C;
+    }
     .container {
         .inner {
             .section {
@@ -9,9 +12,6 @@
                 }
                 padding: 0 30px 60px 30px;
                 background: #fff;
-                * {
-                    color: #3C3C3C;
-                }
                 .h2 {
                     margin-bottom: 0;
                 }
@@ -104,14 +104,20 @@
             }
             .more-info {
                 .accordion {
+                    .accordion-button:after {
+                        background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round'><path d='m2 5 6 6 6-6'/></svg>");
+                    }
                     .accordion-button[aria-expanded="true"] {
+                        &:after {
+                            background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round'><path d='m2 5 6 6 6-6'/></svg>");
+                        }
                         background: #3c3c3c;
                         span {
                             color: white;
                         }
                     }
                     .accordion-body {
-                        background-color: #5E4D5B;
+                        background-color: #8c8c8c;
                         padding-top: 0;
                         * {
                             color: white;

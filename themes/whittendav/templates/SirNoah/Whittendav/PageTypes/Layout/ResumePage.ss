@@ -4,10 +4,15 @@
             <div class="head section">
                 <div class="holder">
                     <h1>
-                        <span class="first">{$First}</span><span class="last">{$Last}</span>
+                        <span class="first d-inline-block" data-aos="fade-right" data-aos-delay="200" data-aos-duration="400">{$First}</span><span class="last d-inline-block" data-aos="fade-left" data-aos-delay="400" data-aos-duration="500">{$Last}</span>
                         <span class="title d-block">{$Title}</span>
                     </h1>
                 </div>
+                <% if $Resume %>
+                    <a href="{$Resume.Link()}" download class="d-inline-block mt-4">
+                        <button class="primary">Download Resume PDF</button>
+                    </a>
+                <% end_if %>
             </div>
             <div class="profile section">
                 <% if $ProfileHeading %>

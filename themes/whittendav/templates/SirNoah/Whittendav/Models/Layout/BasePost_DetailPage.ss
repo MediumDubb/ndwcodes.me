@@ -2,9 +2,10 @@
     <div class="container">
         <div class="d-flex align-items-center justify-content-center">
             <div class="content-area center">
-                {$Me.Debug.raw}
                 <% if $Me %>
-                    <h1>{$Title}</h1>
+                    <div class="hero" style="background-image: url({$FeaturedImage.ScaleMaxWidth(1920).Link()}); background-position: center; background-repeat: no-repeat; background-size: cover;">
+                        <h1>{$Title}</h1>
+                    </div>
                     <% loop $ContentSections %>
                         <section Aria-label="Content Section: {$Pos(1)} - {$SectionTitle}">
                             <% if $Images %>

@@ -6,5 +6,5 @@ Silverstripe\SiteConfig\SiteConfig:
     - SirNoah\Whittendav\SiteConfig\CustomSiteConfig
 SilverStripe\Assets\Image:
   has_one:
-    - SirNoah\Whittendav\Models\ImageBlockRotator
-    - SirNoah\Whittendav\Models\ContentSection
+    ImageBlockRotator: SirNoah\Whittendav\Models\ImageBlockRotator
+    ContentSection: SirNoah\Whittendav\Models\ContentSection

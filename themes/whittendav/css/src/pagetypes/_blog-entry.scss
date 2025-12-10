@@ -1,9 +1,16 @@
 .blog-entry {
+    .content {
+        hr {
+            margin: 2rem 0;
+        }
+    }
     #blog-posts {
         list-style: none;
         padding:0;
+        display: grid;
+        gap: 2rem;
+        grid-template-columns: repeat(3, 1fr);
         .post-summary.post {
-            max-width: 450px;
             h2 {
                 margin-bottom: .5rem;
             }

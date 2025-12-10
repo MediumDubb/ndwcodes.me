@@ -4,7 +4,7 @@
         <% loop $Me %>
         <li>
             <strong>
-                <a href="$Link">
+                <a href="$Link" class="text-decoration-none">
                     <% if $MenuTitle %>
                         $MenuTitle
                     <% else %>
@@ -15,7 +15,7 @@
             <% if $Content %>
                 <p>$Content.LimitWordCountXML</p>
             <% end_if %>
-            <a class="readMoreLink" href="$Link" title="Read more about &quot;{$Title}&quot;">Read more about &quot;{$Title}&quot;...</a>
+            <a class="readMoreLink d-block mb-3" href="$Link" title="Read more about &quot;{$Title}&quot;">Read more about &quot;{$Title}&quot;...</a>
         </li>
         <% end_loop %>
     </ul>

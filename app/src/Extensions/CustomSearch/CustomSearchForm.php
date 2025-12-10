@@ -13,6 +13,8 @@ use SilverStripe\Forms\TextField;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\Model\List\PaginatedList;
 use SilverStripe\ORM\DB;
+use SirNoah\Whittendav\Models\BasePost;
+use SirNoah\Whittendav\Models\ContentSection;
 
 class CustomSearchForm extends SearchForm
 {
@@ -40,10 +42,10 @@ class CustomSearchForm extends SearchForm
      * @param FieldList|null $actions Optional, defaults to a single field named "Go".
      */
     public function __construct(
-        RequestHandler $controller = null,
-                       $name = 'SearchForm',
-        FieldList $fields = null,
-        FieldList $actions = null
+        ?RequestHandler $controller = null,
+                        $name = 'SearchForm',
+        ?FieldList      $fields = null,
+        ?FieldList      $actions = null
     ) {
         if (!$fields) {
             $fields = new FieldList(
@@ -106,6 +108,17 @@ class CustomSearchForm extends SearchForm
         $extraFilter = "ClassName NOT IN ('" . implode("','", str_replace("\\","\\\\",$this->excludedPageTypes)) . "')";
 
         $results = DB::get_conn()->searchEngine($this->customClassesToSearch, $keywords, $start, $pageLength, "\"Relevance\" DESC", $extraFilter, $booleanSearch);
+
+        $sections = ContentSection::get()->filter('CopyBlock:PartialMatch', $request->getVar('q'));
+        $posts = ArrayList::create();
+
+        foreach ($sections as $section) {
+            $posts->push($section->BlogPost());
+        }
+
+        foreach (BasePost::get()->filter('ID',$posts->columnUnique()) as $blogResult) {
+            $results->add($blogResult);
+        }
 
         // filter by permission
         if ($results) {

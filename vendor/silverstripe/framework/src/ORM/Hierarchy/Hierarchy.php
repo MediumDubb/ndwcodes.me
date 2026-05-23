@@ -132,7 +132,7 @@ class Hierarchy extends Extension
 
     /**
      * The default method called on the Hierarchy class to get children
-     * This can be overriden on classes that use the Hierarchy extension, though it should only be
+     * This can be overridden on classes that use the Hierarchy extension, though it should only be
      * defined on the base class that has the hierarchy extension applied to it. For instance:
      * - MyBaseClass has the Hierarchy extension applied
      * - MySubClass extends MyBaseClass
@@ -303,21 +303,13 @@ class Hierarchy extends Extension
     {
         $owner = $this->getOwner();
         $clone = $owner->duplicate();
-        $children = $owner->AllChildren();
-        $sortField = $owner->getSortField();
-
-        $sort = 1;
+        // Disabling sort improves performance
+        $children = $owner->AllChildren()->sort(null);
         foreach ($children as $child) {
             $childClone = $child->duplicateWithChildren();
             $childClone->ParentID = $clone->ID;
-            if ($sortField) {
-                //retain sort order by manually setting sort values
-                $childClone->$sortField = $sort;
-                $sort++;
-            }
             $childClone->write();
         }
-
         return $clone;
     }
 
@@ -463,6 +455,9 @@ class Hierarchy extends Extension
         foreach ($parentIDs as $parentID) {
             Hierarchy::$children_for_tree_ids_cache[$baseClass][$parentID] = [];
         }
+        // Do not attempt to disable sort order to improves performance i.e. $children->sort(null)
+        // As this will mean that the sort order of children in the tree will be wrong after
+        // drag and drop re-ordering within siblings
         foreach ($children as $child) {
             $childID = $child->ID;
             $parentID = $child->ParentID;
@@ -563,7 +558,7 @@ class Hierarchy extends Extension
     {
         if (empty($options['numChildrenMethod']) || $options['numChildrenMethod'] === 'numChildren') {
             $idList = is_array($recordList) ? $recordList :
-                ($recordList instanceof DataList ? $recordList->column('ID') : null);
+                ($recordList instanceof DataList ? $recordList->sort(null)->column('ID') : null);
             Hierarchy::prepopulate_numchildren_cache($this->getHierarchyBaseClass(), $idList);
         }
 

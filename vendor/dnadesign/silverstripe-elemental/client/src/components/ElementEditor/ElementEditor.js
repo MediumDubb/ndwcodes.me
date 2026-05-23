@@ -1,5 +1,5 @@
 /* global window */
-import React, { PureComponent, createContext } from 'react';
+import React, { memo, useState, useEffect, useMemo, createContext } from 'react';
 import PropTypes from 'prop-types';
 import { connect } from 'react-redux';
 import { inject } from 'lib/Injector';
@@ -9,6 +9,7 @@ import backend from 'lib/Backend';
 import Config from 'lib/Config';
 import { getConfig } from 'state/editor/elementConfig';
 import * as toastsActions from 'state/toasts/ToastsActions';
+import * as editorActions from 'state/editor/editorActions';
 import getJsonErrorMessage from 'lib/getJsonErrorMessage';
 import { arrayMove } from '@dnd-kit/sortable';
 
@@ -18,45 +19,67 @@ export const ElementEditorContext = createContext(null);
  * The ElementEditor is used in the CMS to manage a list or nested lists of
  * elements for a page or other DataObject.
  */
-class ElementEditor extends PureComponent {
-  constructor(props) {
-    super(props);
+const ElementEditor = ({
+  ToolbarComponent,
+  ListComponent,
+  areaId,
+  elementTypes,
+  allowedElements,
+  sharedObject,
+  actions,
+  forceRefetchElements,
+}) => {
+  const [dragging, setDragging] = useState(false);
+  const [elements, setElements] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
 
-    this.state = {
-      dragTargetElementId: null,
-      dragSpot: null,
-      elements: null,
-      isLoading: true,
-      dragging: false,
-    };
-
-    this.handleDragStart = this.handleDragStart.bind(this);
-    this.handleDragEnd = this.handleDragEnd.bind(this);
-    this.fetchElements = this.fetchElements.bind(this);
-  }
+  /**
+   * Make an API call to read all elements endpoint (areaID)
+   */
+  const fetchElements = (doSetLoadingState = true) => {
+    if (doSetLoadingState) {
+      setLoading(true);
+    }
+    const url = `${getConfig().controllerLink.replace(/\/$/, '')}/api/readElements/${areaId}`;
+    return backend.get(url)
+      .then(async (response) => {
+        const responseJson = await response.json();
+        setElements(responseJson);
+        setLoading(false);
+        // refresh preview
+        const preview = window.jQuery('.cms-preview');
+        if (preview) {
+          preview.entwine('ss.preview')._loadUrl(preview.find('iframe').attr('src'));
+        }
+        actions.editor.reloadComplete(areaId);
+      })
+      .catch(async (err) => {
+        setElements([]);
+        setLoading(false);
+        const message = await getJsonErrorMessage(err);
+        actions.toasts.error(message);
+        actions.editor.reloadComplete(areaId);
+      });
+  };
 
   /**
    * Hook triggered when a draggable is picked up.
    */
-  handleDragStart(event) {
+  const handleDragStart = (event) => {
     const { active } = event;
-    this.setState({
-      dragging: active.id,
-    });
-  }
+    setDragging(active.id);
+  };
 
   /**
    * Hook triggered when a draggable is dropped onto a drop target.
    */
-  handleDragEnd(event) {
+  const handleDragEnd = (event) => {
     const { active, over } = event;
-    const { elements } = this.state;
 
     // This happens if letting go of the draggable where it started.
     if (active.id === over.id) {
-      this.setState({
-        dragging: false,
-      });
+      setDragging(false);
       return;
     }
 
@@ -73,105 +96,86 @@ class ElementEditor extends PureComponent {
     }, {
       'X-SecurityID': Config.get('SecurityID')
     })
-      .then(() => this.fetchElements())
+      .then(() => fetchElements())
       .catch(async (err) => {
         const message = await getJsonErrorMessage(err);
-        this.props.actions.toasts.error(message);
+        actions.toasts.error(message);
       });
 
-    this.setState({
-      dragging: false,
-      // Setting elements ensures there is no "pop" between dropping the element and reloading
-      // the list with fetchElements above, as the elements will already be rendered in the new order.
-      elements: sortedElements,
-    });
-  }
+    setDragging(false);
+    // Setting elements ensures there is no "pop" between dropping the element and reloading
+    // the list with fetchElements above, as the elements will already be rendered in the new order.
+    setElements(sortedElements);
+  };
 
   /**
-   * Make an API call to read all elements endpoint (areaID)
+   * Delay loading indicator to prevent FOUT
    */
-  fetchElements(doSetLoadingState = true) {
-    if (doSetLoadingState) {
-      this.setState(prevState => ({
-        ...prevState,
-        isLoading: true,
-      }));
+  useEffect(() => {
+    let timeoutId;
+    if (!loading) {
+      setShowLoadingIndicator(false);
+    } else {
+      timeoutId = setTimeout(() => {
+        setShowLoadingIndicator(true);
+      }, 300);
     }
-    const url = `${getConfig().controllerLink.replace(/\/$/, '')}/api/readElements/${this.props.areaId}`;
-    return backend.get(url)
-      .then(async (response) => {
-        const responseJson = await response.json();
-        this.setState(prevState => ({
-          ...prevState,
-          elements: responseJson,
-          isLoading: false,
-        }));
-        // refresh preview
-        const preview = window.jQuery('.cms-preview');
-        if (preview) {
-          preview.entwine('ss.preview')._loadUrl(preview.find('iframe').attr('src'));
-        }
-      })
-      .catch(async (err) => {
-        this.setState({
-          elements: [],
-          isLoading: false,
-        });
-        const message = await getJsonErrorMessage(err);
-        this.props.actions.toasts.error(message);
-      });
-  }
-
-  render() {
-    const {
-      ToolbarComponent,
-      ListComponent,
-      areaId,
-      elementTypes,
-      allowedElements,
-      sharedObject,
-      isLoading,
-    } = this.props;
-    const { dragging, elements } = this.state;
-
-    if (elements === null) {
-      this.fetchElements(false);
-      return null;
-    }
-
-    // Map the allowed elements because we want to retain the sort order provided by that array.
-    const allowedElementTypes = allowedElements.map(className =>
-      elementTypes.find(type => type.class === className)
-    );
-
-    // Need to convert this to a functional component in order to resolve the following eslint warning:
-    // warning  The 'providerValue' object (at line 124) passed as the value prop to the Context provider (at line 127) changes every render. To fix this consider wrapping it in a useMemo hook
-    // eslint-disable-next-line react/jsx-no-constructed-context-values
-    const providerValue = {
-      fetchElements: this.fetchElements,
+    // Cleanup timeout - this will run on unmount, and whenever dependency changes, i.e. loading state changes
+    //
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
+  }, [loading]);
 
-    return <div className="element-editor">
-      <ElementEditorContext.Provider value={providerValue}>
-        <ToolbarComponent
-          elementTypes={allowedElementTypes}
-          areaId={areaId}
-        />
-        <ListComponent
-          allowedElementTypes={allowedElementTypes}
-          elementTypes={elementTypes}
-          areaId={areaId}
-          onDragStart={this.handleDragStart}
-          onDragEnd={this.handleDragEnd}
-          dragging={dragging}
-          sharedObject={sharedObject}
-          elements={elements}
-          isLoading={isLoading}
-        />
-      </ElementEditorContext.Provider>
-    </div>;
+  /**
+   * Fetch elements if null or forcing a refetch, e.g. moving a block from one elemental area to another
+   * in the same parent DataObject record.
+   */
+  useEffect(() => {
+    if (forceRefetchElements || elements === null) {
+      fetchElements();
+    }
+  }, [forceRefetchElements, elements]);
+
+  // Memoize provider value to avoid unnecessary re-renders
+  const providerValue = useMemo(() => ({
+    fetchElements,
+    actions,
+    // fetchElements will be recreated each time areraId changes, so
+    // it's needed in the dep array, otherwise fetchElements will be stale
+  }), [fetchElements, actions]);
+
+  if (elements === null) {
+    return null;
   }
-}
+
+  // Map the allowed elements because we want to retain the sort order provided by that array.
+  const allowedElementTypes = allowedElements.map(className =>
+    elementTypes.find(type => type.class === className)
+  );
+
+  return <div className="element-editor">
+    <ElementEditorContext.Provider value={providerValue}>
+      <ToolbarComponent
+        elementTypes={allowedElementTypes}
+        areaId={areaId}
+      />
+      <ListComponent
+        allowedElementTypes={allowedElementTypes}
+        elementTypes={elementTypes}
+        areaId={areaId}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        dragging={dragging}
+        sharedObject={sharedObject}
+        elements={elements}
+        isLoading={showLoadingIndicator}
+      />
+    </ElementEditorContext.Provider>
+  </div>;
+};
 
 ElementEditor.propTypes = {
   elementTypes: PropTypes.arrayOf(elementTypeType).isRequired,
@@ -182,7 +186,10 @@ ElementEditor.propTypes = {
   }),
 };
 
-export { ElementEditor as Component };
+// Wrapping export in React.memo() because the old class component extended React.PureComponent
+const MemoizedElementEditor = memo(ElementEditor);
+
+export { MemoizedElementEditor as Component };
 
 const params = [
   inject(
@@ -195,15 +202,24 @@ const params = [
   )
 ];
 
+function mapStateToProps(state, ownProps) {
+  const forceRefetch = state.elemental.editor.forceRefetchElements[ownProps.areaId] || false;
+  return { forceRefetchElements: forceRefetch };
+}
+
 function mapDispatchToProps(dispatch) {
   return {
     actions: {
       toasts: bindActionCreators(toastsActions, dispatch),
+      editor: bindActionCreators(editorActions, dispatch)
     },
   };
 }
 
 export default compose(
-  connect(null, mapDispatchToProps),
+  connect(
+    mapStateToProps,
+    mapDispatchToProps
+  ),
   ...params,
-)(ElementEditor);
+)(MemoizedElementEditor);

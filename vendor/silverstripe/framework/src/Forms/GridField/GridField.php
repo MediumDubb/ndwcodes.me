@@ -145,10 +145,10 @@ class GridField extends FormField
 
     /**
      * Intentionally not set to FormField::SCHEMA_DATA_TYPE_STRUCTURAL even though there is no corresponding
-     * react component because we want a hard exception thrown for devleopers to see rather than have
+     * react component because we want a hard exception thrown for developers to see rather than have
      * them wonder why the field is not rendering.
      *
-     * Marked as @interal to allow change in a minor release as a react GridField may be implemented in the future
+     * Marked as @internal to allow change in a minor release as a react GridField may be implemented in the future
      *
      * @internal
      */
@@ -555,7 +555,7 @@ class GridField extends FormField
                         $sudoModeTransformation = true;
                     }
                 } else {
-                    // explicity set to false to update state for AJAX requests that refresh the gridfield after activating sudo mode
+                    // explicitly set to false to update state for AJAX requests that refresh the gridfield after activating sudo mode
                     $this->setReadonly(false);
                 }
             }
@@ -564,7 +564,6 @@ class GridField extends FormField
         $columns = $this->getColumns();
 
         $list = $this->getManipulatedList();
-        $total = null; // can be populated by GridFieldPaginator
 
         $content = [
             'before' => '',
@@ -588,9 +587,6 @@ class GridField extends FormField
                         $content[$fragmentKey] .= $fragmentValue . "\n";
                     }
                 }
-            }
-            if ($item instanceof GridFieldPaginator) {
-                $total = $item->getTotalItems();
             }
             if ($sudoModeTransformation) {
                 // Modify the GridFieldViewButton on any GridFields so that it doesn't suffix the view URL with 'view'
@@ -681,10 +677,9 @@ class GridField extends FormField
             }
         }
 
-        if ($total === null) {
-            $total = count($list ?? []);
-        }
-
+        // Note we can't rely on GridFieldPaginator to get the total, because
+        // it may get that count before other components edit the list.
+        $total = count($list ?? []);
         if ($total > 0) {
             $rows = [];
 
@@ -701,11 +696,10 @@ class GridField extends FormField
 
                 $rowContent = '';
 
-                foreach ($this->getColumns() as $column) {
+                foreach ($columns as $column) {
                     $colContent = $this->getColumnContent($record, $column);
 
                     // Null means this columns should be skipped altogether.
-
                     if ($colContent === null) {
                         continue;
                     }
@@ -742,6 +736,10 @@ class GridField extends FormField
                 'tr',
                 [
                     'class' => 'ss-gridfield-item ss-gridfield-no-items',
+                    // The "role" attribute should be redundant, but since it's clickable via javascript some assistive
+                    // technologies may think it's an interactive element for the purposes of WCAG 2.2 A 4.1.2.
+                    // We hope that adding an explicit "role" helps resolve that confusion.
+                    'role' => 'row',
                 ],
                 $cell
             );
@@ -861,6 +859,7 @@ class GridField extends FormField
 
         return [
             'class' => implode(' ', $rowClasses),
+            'role' => 'row',
             'data-id' => $record->ID,
             'data-class' => $record->ClassName,
         ];
@@ -1117,11 +1116,7 @@ class GridField extends FormField
      */
     public function getColumnCount()
     {
-        if (!$this->columnDispatch) {
-            $this->buildColumnDispatch();
-        }
-
-        return count($this->columnDispatch ?? []);
+        return count($this->getColumns());
     }
 
     /**

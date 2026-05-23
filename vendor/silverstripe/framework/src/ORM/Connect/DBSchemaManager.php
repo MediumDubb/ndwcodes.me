@@ -412,7 +412,6 @@ abstract class DBSchemaManager
                 if ($pos !== false) {
                     //If so, remove it and store that info separately
                     $arrayValue = substr($fieldSpec, $pos);
-                    $fieldSpec = substr($fieldSpec, 0, $pos);
                 }
 
                 /** @var DBField $fieldObj */
@@ -1012,7 +1011,7 @@ abstract class DBSchemaManager
     /*
      * This is a lookup table for data types.
      * For instance, Postgres uses 'INT', while MySQL uses 'UNSIGNED'
-     * So this is a DB-specific list of equivilents.
+     * So this is a DB-specific list of equivalents.
      *
      * @param string $type
      * @return string

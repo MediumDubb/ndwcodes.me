@@ -59,8 +59,8 @@ class DBText extends DBString
             'datatype' => 'mediumtext',
             'character set' => $charset,
             'collate' => $collation,
-            'default' => $this->defaultVal,
-            'arrayValue' => $this->arrayValue
+            'default' => $this->getDefaultValue(),
+            'arrayValue' => $this->arrayValue,
         ];
 
         return [
@@ -125,7 +125,7 @@ class DBText extends DBString
             return '';
         }
 
-        // If no $elipsis string is provided, use the default one.
+        // If no $ellipsis string is provided, use the default one.
         if ($add === false) {
             $add = $this->defaultEllipsis();
         }

@@ -27,16 +27,19 @@ class CMSMainAddForm extends Form
         parent::__construct($controller, 'AddForm', $this->createFields(), $this->createActions());
         $negotiator = $controller->getResponseNegotiator();
         $this->setHTMLID('Form_AddForm')->setStrictFormMethodCheck(false);
+        $this->setAttribute('data-pjax-fragment', 'CurrentForm');
         $this->setAttribute('data-hints', $controller->TreeHints());
         $this->setAttribute('data-childfilter', $controller->Link('childfilter'));
         $this->setValidationResponseCallback(function () use ($negotiator, $controller) {
             $request = $controller->getRequest();
             if ($request->isAjax() && $negotiator) {
-                $result = $this->forTemplate();
                 return $negotiator->respond($request, [
-                    'CurrentForm' => function () use ($result) {
-                        return $result;
-                    }
+                    'CurrentForm' => function () {
+                        return $this->forTemplate();
+                    },
+                    'Content' => function () {
+                        return $this->forTemplate();
+                    },
                 ]);
             }
             return null;
@@ -107,6 +110,12 @@ class CMSMainAddForm extends Form
             ['type' => mb_strtolower($singleton->i18n_singular_name())]
         );
 
+        $selectedModelClass = $controller->getDefaultModelClass();
+        $recordType = $controller->getRequest()->getVar('RecordType');
+        if ($recordType && class_exists($recordType) && is_subclass_of($recordType, $modelClass)) {
+            $selectedModelClass = $recordType;
+        }
+
         $fields = FieldList::create(
             $parentModeField = SelectionGroup::create(
                 'ParentModeField',
@@ -149,7 +158,7 @@ class CMSMainAddForm extends Form
                     ))
                 ),
                 $this->getRecordTypes($controller, $singleton),
-                $controller->getDefaultModelClass()
+                $selectedModelClass
             )
         );
 
@@ -191,11 +200,13 @@ class CMSMainAddForm extends Form
     {
         $actions = FieldList::create(
             FormAction::create('doAdd', _t(CMSMain::class . '.Create', 'Create'))
-                ->addExtraClass('btn-primary font-icon-plus-circled')
+                ->setIcon('plus-circled')
+                ->addExtraClass('btn-primary')
                 ->setUseButtonTag(true),
             FormAction::create('doCancel', _t(CMSMain::class . '.Cancel', 'Cancel'))
                 ->addExtraClass('btn-secondary')
                 ->setUseButtonTag(true)
+                ->setValidationExempt(true)
         );
         $this->extend('updateActions', $fields);
         return $actions;

@@ -92,6 +92,9 @@ class FormField extends RequestHandler implements FieldValidationInterface
     /** @see $schemaDataType */
     const SCHEMA_DATA_TYPE_STRUCTURAL = 'Structural';
 
+    /** @see $schemaDataType */
+    const SCHEMA_DATA_TYPE_STRUCTURAL_CUSTOM = 'StructuralCustom';
+
     /**
      * @var Form
      */
@@ -161,7 +164,7 @@ class FormField extends RequestHandler implements FieldValidationInterface
     /**
      * Stores a reference to the FieldList that contains this object.
      *
-     * @var FieldList
+     * @var null|FieldList
      */
     protected $containerFieldList;
 
@@ -242,6 +245,10 @@ class FormField extends RequestHandler implements FieldValidationInterface
      *   - Structural: Represents a field that is NOT posted back. This may contain other fields,
      *     or simply be a block of stand-alone content. As with 'Custom',
      *     the component property is mandatory if this is assigned.
+     *   - StructuralCustom: Represents a field that is NOT posted back. This field must have the
+     *     capability of containing other fields - the child field schema will be passed in instead
+     *     of passing in the child components directly. The component property is mandatory if this
+     *     is assigned.
      *
      * Each value has an equivalent constant, e.g. {@link FormField::SCHEMA_DATA_TYPE_STRING}.
      *
@@ -384,7 +391,7 @@ class FormField extends RequestHandler implements FieldValidationInterface
             );
         }
 
-        $link = Controller::join_links($this->form->FormAction(), 'field/' . $this->name, $action);
+        $link = Controller::join_links($this->form->FormAction(), 'field/' . $this->getName(), $action);
         $this->extend('updateLink', $link, $action);
         return $link;
     }
@@ -716,8 +723,8 @@ class FormField extends RequestHandler implements FieldValidationInterface
      */
     public function setValue($value, $data = null)
     {
-        // Note that unlike setSubmittedValue(), we are explicity not casting blank strings to null here.
-        // This is because setValue() is used when programatically setting a value on a field
+        // Note that unlike setSubmittedValue(), we are explicitly not casting blank strings to null here.
+        // This is because setValue() is used when programmatically setting a value on a field
         // and we want to enforce type strictness
         $this->value = $value;
         return $this;
@@ -1316,7 +1323,7 @@ class FormField extends RequestHandler implements FieldValidationInterface
     /**
      * Set the FieldList that contains this field.
      *
-     * @param FieldList $containerFieldList
+     * @param null|FieldList $containerFieldList
      * @return $this
      */
     public function setContainerFieldList($containerFieldList)
@@ -1328,7 +1335,7 @@ class FormField extends RequestHandler implements FieldValidationInterface
     /**
      * Get the FieldList that contains this field.
      *
-     * @return FieldList
+     * @return null|FieldList
      */
     public function getContainerFieldList()
     {

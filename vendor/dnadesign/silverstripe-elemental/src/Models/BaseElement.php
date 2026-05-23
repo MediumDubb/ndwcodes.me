@@ -7,6 +7,7 @@ use DNADesign\Elemental\Forms\TextCheckboxGroupField;
 use DNADesign\Elemental\Services\ReorderElements;
 use DNADesign\Elemental\Extensions\TopPageElementExtension;
 use Exception;
+use InvalidArgumentException;
 use SilverStripe\CMS\Controllers\CMSPageEditController;
 use SilverStripe\CMS\Model\SiteTree;
 use SilverStripe\Control\Controller;
@@ -339,6 +340,35 @@ class BaseElement extends DataObject implements CMSPreviewable
         $records = $records->filter('ParentID', $this->ParentID);
 
         $this->Sort = $records->max('Sort') + 1;
+    }
+
+    /**
+     * Move this element into a new elemental area.
+     *
+     * The element is unpublished before moving, and will be given a new sort value.
+     */
+    public function moveTo(ElementalArea $elementalArea)
+    {
+        if (!$elementalArea->isInDB()) {
+            throw new InvalidArgumentException('New elemental area must be in the database before moving to it');
+        }
+        if ($elementalArea->ID === $this->ParentID) {
+            throw new InvalidArgumentException('Cannot move to the same elemental area its already on');
+        }
+        $newOwnerPage = $elementalArea->getOwnerPage();
+        if ($newOwnerPage && !array_key_exists($this->ClassName, $newOwnerPage->getElementalTypes())) {
+            throw new InvalidArgumentException('New elemental area does not support blocks of this type');
+        }
+        $this->extend('onBeforeMoveTo', $elementalArea);
+        $this->doUnpublish();
+        $this->Sort = null;
+        $this->ParentID = $elementalArea->ID;
+        $this->cacheData = [];
+        // Invoke the hook before writing so extensions don't have to trigger a second write
+        $this->extend('onAfterMoveTo', $elementalArea);
+        // No validation, because if field values already stored in the block itself aren't valid
+        // that shouldn't prevent us from moving it
+        $this->write(skipValidation: true);
     }
 
     public function getCMSFields()
@@ -744,8 +774,8 @@ JS
         $anchors = [$this->getAnchor()];
         $anchorRegex = "/\\s+(name|id)\\s*=\\s*([\"'])([^\\2\\s>]*?)\\2|\\s+(name|id)\\s*=\\s*([^\"']+)[\\s +>]/im";
         $allFields = DataObject::getSchema()->fieldSpecs($this);
-        foreach ($allFields as $field => $fieldSpec) {
-            $fieldObj = $this->owner->dbObject($field);
+        foreach (array_keys($allFields) as $field) {
+            $fieldObj = $this->dbObject($field);
             if ($fieldObj instanceof DBHTMLText) {
                 $parseSuccess = preg_match_all($anchorRegex, $fieldObj->getValue() ?? '', $matches);
                 if ($parseSuccess >= 1) {
@@ -870,20 +900,11 @@ JS
         $relationName = $this->getAreaRelationName();
         $page = $this->getPage();
 
-        $link = null;
-
         if (!$page) {
-            return $link;
+            return null;
         }
 
-        if ($page instanceof SiteTree) {
-            $link = $page->getCMSEditLink();
-        } else {
-            $baseLink = $page->getCMSEditLink();
-            if ($baseLink) {
-                $link = Controller::join_links($baseLink, 'ItemEditForm');
-            }
-        }
+        $link = $page->getCMSEditLink();
 
         // In-line editable blocks should just take you to the page.
         // Editable ones should add the suffix for detail form.
@@ -898,10 +919,12 @@ JS
                     $this->ID,
                     'edit'
                 );
-            } else {
-                // If $page is not a Page, then generate $link base on $page->getCMSEditLink()
+            } elseif ($link) {
+                // If $page is not a Page, then generate $link based on $page->getCMSEditLink()
+                // for a gridfield edit form
                 return Controller::join_links(
                     $link,
+                    'ItemEditForm',
                     'field',
                     $relationName,
                     'item',
@@ -1144,11 +1167,11 @@ JS
      */
     public function getStyleVariant()
     {
-        $style = $this->Style;
+        $style = $this->Style ?? '';
         $styles = $this->config()->get('styles');
 
         if (isset($styles[$style])) {
-            $style = strtolower($style ?? '');
+            $style = strtolower($style);
         } else {
             $style = '';
         }

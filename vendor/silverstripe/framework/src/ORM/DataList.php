@@ -50,7 +50,7 @@ class DataList extends ModelData implements SS_List, Resettable
     use SearchFilterable;
 
     /**
-     * Whether to use placeholders for integer IDs on Primary and Foriegn keys during a WHERE IN query
+     * Whether to use placeholders for integer IDs on Primary and Foreign keys during a WHERE IN query
      * It is significantly faster to not use placeholders
      */
     private static bool $use_placeholders_for_integer_ids = false;
@@ -310,7 +310,7 @@ class DataList extends ModelData implements SS_List, Resettable
      *
      *
      * @param string|array|SQLConditionGroup $filter Predicate(s) to set, as escaped SQL statements or
-     * paramaterised queries
+     * parameterised queries
      * @return static<T>
      */
     public function where($filter)
@@ -332,7 +332,7 @@ class DataList extends ModelData implements SS_List, Resettable
      * won't expand multiple method arguments as SQLSelect does.
      *
      * @param string|array|SQLConditionGroup $filter Predicate(s) to set, as escaped SQL statements or
-     * paramaterised queries
+     * parameterised queries
      * @return static<T>
      */
     public function whereAny($filter)
@@ -491,7 +491,7 @@ class DataList extends ModelData implements SS_List, Resettable
         }
         // $columnName is a param that is passed by reference so is essentially as a return type
         // it will be returned in quoted SQL "TableName"."ColumnName" notation
-        // if it's equal to $col however it means that it WAS orginally raw sql, which is disallowed for sort()
+        // if it's equal to $col however it means that it WAS originally raw sql, which is disallowed for sort()
         //
         // applyRelation() will also throw an InvalidArgumentException if $column is not raw sql but
         // the Relation.FieldName is not a valid model relationship
@@ -1913,12 +1913,8 @@ class DataList extends ModelData implements SS_List, Resettable
      */
     public function setByIDList($idList)
     {
-        $has = [];
-
-        // Index current data
-        foreach ($this->column() as $id) {
-            $has[$id] = true;
-        }
+        // Track current data
+        $has = array_fill_keys($this->sort(null)->column('ID'), true);
 
         // Keep track of items to delete
         $itemsToDelete = $has;
@@ -1943,9 +1939,11 @@ class DataList extends ModelData implements SS_List, Resettable
      * Does not respect sort order. Use ->column("ID") to get an ID list with the current sort.
      *
      * @return array<int>
+     * @deprecated 6.2.0 Use `$list->sort(null)->column('ID')` instead.
      */
     public function getIDList()
     {
+        Deprecation::notice('6.2.0', 'Use `$list->sort(null)->column(\'ID\')` instead.');
         $ids = $this->column("ID");
         return $ids ? array_combine($ids, $ids) : [];
     }
@@ -2012,7 +2010,8 @@ class DataList extends ModelData implements SS_List, Resettable
      */
     public function removeByFilter($filter)
     {
-        foreach ($this->where($filter) as $item) {
+        // Disabling sort improves performance
+        foreach ($this->sort(null)->where($filter) as $item) {
             $this->remove($item);
         }
         return $this;
@@ -2035,7 +2034,8 @@ class DataList extends ModelData implements SS_List, Resettable
      */
     public function removeAll()
     {
-        foreach ($this as $item) {
+        // Disabling sort improves performance
+        foreach ($this->sort(null) as $item) {
             $this->remove($item);
         }
         return $this;
@@ -2188,12 +2188,12 @@ class DataList extends ModelData implements SS_List, Resettable
      * Prepopulate any extension caches with the current dataclass and IDs of records
      *
      * Note that because this calls column() and may result in other database queries based on
-     * the IDs that returns, this should be called after all filtering, sorting, etc has already
+     * the IDs that returns, this should be called after all filtering, etc has already
      * been set for this list.
      */
     public function prepopulateCaches(): void
     {
-        $ids = $this->column('ID');
+        $ids = $this->sort(null)->column('ID');
         $this->extend('onPrepopulateCaches', $ids);
     }
 

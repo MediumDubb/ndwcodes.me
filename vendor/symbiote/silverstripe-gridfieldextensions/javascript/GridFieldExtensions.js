@@ -24,6 +24,8 @@
 					resizable: false,
 					width: 500,
 					height: 600,
+					draggable: false,
+					title: this.text(),
 					close: function() {
 						$(this).dialog("destroy").remove();
 					}
@@ -170,7 +172,7 @@
 				}
 			},
 			onkeyup: function(e) {
-				if (e.keyCode == 90 && e.ctrlKey)
+				if (e.ctrlKey && e.key.toLowerCase() === "z")
 				{
 					var target = $(e.target);
 					var elementsChanged = target.data("pasteManipulatedElements");
@@ -195,7 +197,7 @@
 
 				tmpl.cache[this[0].id + "ss-gridfield-add-inline-template"] = tmpl(row.html());
 
-				this.find("tbody:first").append(tmpl(this[0].id + "ss-gridfield-add-inline-template", { num: num }));
+				this.find("tbody:first").prepend(tmpl(this[0].id + "ss-gridfield-add-inline-template", { num: num }));
 				this.find("tbody:first").children(".ss-gridfield-no-items").hide();
 				this.data("add-inline-num", num + 1);
 
@@ -298,6 +300,74 @@
 		 */
 
 		$(".ss-gridfield-orderable tbody").entwine({
+      /**
+       * Update the edit form "Publish" button state to be dirty.
+       *
+       * We do not update the state of the "Save" button because reordering items includes
+       * saving the records.
+       *
+       * This is fairly hackish code that duplicates the behaviour in CMSMain.Editform.js
+       * for the onmatch handleronmatch handler of `.cms-edit-form.changed`, however there's
+       * no clean way to do this without duplicating code since the existing jQuery change
+       * tracker does not allow independently updating only the publish button.
+       */
+      handleUnpublishedVersionedState: function () {
+        const cssSelector = [
+          // CMS page edit form publish button
+          '.cms-edit-form button[data-text-alternate]#Form_EditForm_action_publish',
+          // GridField managed DataObject edit form publish button
+          '.cms-edit-form button[data-text-alternate]#Form_ItemEditForm_action_doPublish'
+        ].join(',');
+        const publishButtons = $(cssSelector);
+        if (!publishButtons.length) {
+          return;
+        }
+        publishButtons.each(function() {
+          const button = $(this);
+          const buttonTitle = button.find('.btn__title');
+
+          // Button needs to be updated only if it's in published state.
+          // If the "standard" text data has been set and the current text
+          // doesn't match it, that means the button is in its NON-published state
+          // and we can skip this.
+          const standardText = button.data('textStandard');
+          if (standardText && buttonTitle.text() !== standardText) {
+            return;
+          }
+
+          // Set alternate-text
+          const alternateText = button.data('textAlternate');
+          if (alternateText) {
+            button.data('textStandard', buttonTitle.text());
+            buttonTitle.text(alternateText);
+          }
+
+          // Extra classes can also be specified as add / remove
+          const alternateClassesAdd = button.data('btnAlternateAdd');
+          if (alternateClassesAdd) {
+            button.addClass(alternateClassesAdd);
+          }
+          const alternateClassesRemove = button.data('btnAlternateRemove');
+          if (alternateClassesRemove) {
+            button.removeClass(alternateClassesRemove);
+          }
+
+          // Icons in the child element can also be swapped out
+          const iconElement = button.find('.btn__icon');
+          if (iconElement.length === 0) {
+            return;
+          }
+          const alternateIcon = button.data('iconAlternate');
+          if (alternateIcon) {
+            iconElement.addClass(`font-icon-${alternateIcon}`);
+          }
+          const standardIcon = button.data('iconStandard');
+          if (standardIcon) {
+            iconElement.addClass(`font-icon-${standardIcon}`);
+          }
+        });
+      },
+
       // reload the gridfield without triggering the change event
       // this is because the change has already been saved by reorder action
       reload: function (ajaxOpts, successCallback) {
@@ -336,21 +406,6 @@
             // multiple relationships via keyboard.
             if (focusedElName) self.find(':input[name="' + focusedElName + '"]').focus();
 
-            // Update filter
-            if (self.find('.grid-field__filter-header').length) {
-              var content;
-              if (ajaxOpts.data[0].filter == "show") {
-                content = '<span class="non-sortable"></span>';
-                self.addClass('show-filter').find('.grid-field__filter-header').show();
-              } else {
-                const contentTitle = ss.i18n._t('GridFieldExtensions.OPEN_SEARCH_FILTER', 'Open search and filter');
-                content = `<button type="button" title="${contentTitle}" name="showFilter" class="btn btn-secondary font-icon-search btn--no-text btn--icon-large grid-field__filter-open"></button>`;
-                self.removeClass('show-filter').find('.grid-field__filter-header').hide();
-              }
-
-              self.find('.sortable-header th:last').html(content);
-            }
-
             // update CMS preview
             var preview = $('.cms-preview');
             if (preview.length) {
@@ -363,17 +418,8 @@
             }
             self.trigger('reload', self);
 
-            // update publish button if necessary
-            const publish = $('#Form_EditForm_action_publish');
-
-            // button needs to be updated only if it's in published state
-            if (publish.length > 0 && publish.hasClass('btn-outline-primary')) {
-              publish.removeClass('btn-outline-primary');
-              publish.removeClass('font-icon-tick');
-              publish.addClass('btn-primary');
-              publish.addClass('font-icon-rocket');
-              publish.find('.btn__title').html(ss.i18n._t('GridFieldExtensions.SAVE_PUBLISH', 'Save & publish'));
-            }
+            // Update publish button display state if appropriate.
+            self.handleUnpublishedVersionedState();
           },
           error: function (e) {
             alert(i18n._t('Admin.ERRORINTRANSACTION'));
@@ -523,7 +569,7 @@
 				let currState = gridField.getState();
 				let toggleState = false;
 				let pjaxTarget = $(this).attr('data-pjax-target');
-				if ($(this).hasClass('font-icon-right-dir')) {
+				if ($(this).attr('aria-expanded') === 'false') {
 					toggleState = true;
 				}
 				if (typeof currState['GridFieldNestedForm'] == 'undefined' || currState['GridFieldNestedForm'] == null) {
@@ -568,23 +614,25 @@
 						$(this).closest('tr').next('.nested-gridfield').show();
 						fetch($(this).attr('data-toggle')+'1');
 					}
-					$(this).removeClass('font-icon-right-dir');
-					$(this).addClass('font-icon-down-dir');
 					$(this).attr('aria-expanded', 'true');
+					const icon = $(this).find('.nested-gridfield__toggle-icon');
+					icon.removeClass('font-icon-right-dir');
+					icon.addClass('font-icon-down-dir');
 				}
 				else {
 					fetch($(this).attr('data-toggle')+'0');
 					$(this).closest('tr').next('.nested-gridfield').hide();
-					$(this).removeClass('font-icon-down-dir');
-					$(this).addClass('font-icon-right-dir');
 					$(this).attr('aria-expanded', 'false');
+					const icon = $(this).find('.nested-gridfield__toggle-icon');
+					icon.removeClass('font-icon-down-dir');
+					icon.addClass('font-icon-right-dir');
 				}
 				e.preventDefault();
 				e.stopPropagation();
 				return false;
 			}
 		});
-		
+
 		// move nested gridfields onto their own rows below this row, to make it look nicer
 		$('.col-listChildrenLink > .grid-field.nested').entwine({
 			onadd: function() {

@@ -1,6 +1,6 @@
 <div class="cms-help__toggle">
     <button class="cms-help__menu" type="button" title="<%t SilverStripe\Admin\LeftAndMain.HelpMenu "Help menu" %>" aria-label="<%t SilverStripe\Admin\LeftAndMain.HelpMenu "Help menu" %>" aria-expanded="false">
-        <span class="cms-help__logo font-icon-silverstripe-cms"></span>
+        <span class="cms-help__logo font-icon-silverstripe-cms" aria-hidden="true"></span>
         <span class="cms-help__toggle-title">
             $ApplicationName
         </span>
@@ -9,7 +9,7 @@
                     <span class="cms-sitename__version" title="$ApplicationName (<%t SilverStripe\Admin\LeftAndMain.Version "Version" %> - $CMSVersion)">$CMSVersionNumber</span>
                 <% end_if %>
             </span>
-            <span class="cms-help__caret font-icon-caret-up-two"></span>
+            <span class="cms-help__caret font-icon-caret-up-two" aria-hidden="true"></span>
     </button>
     <% if $HelpLinks %>
         <div class="cms-help__links">
@@ -27,5 +27,14 @@
     <span class="sticky-toggle__status sticky-status-indicator"><%t SilverStripe\Admin\LeftAndMain.MenuToggleAuto "Auto" %></span>
 </div>
 
-<a class="toggle-expand" href="#" data-bs-toggle="tooltip" title="<%t SilverStripe\Admin\LeftAndMain.ExpandPanel "Expand panel" %>" aria-label="<%t SilverStripe\Admin\LeftAndMain.ExpandPanel "Expand panel" %>"><span>&raquo;</span></a>
-<a class="toggle-collapse" href="#" data-bs-toggle="tooltip" title="<%t SilverStripe\Admin\LeftAndMain.CollapsePanel "Collapse panel" %>" aria-label="<%t SilverStripe\Admin\LeftAndMain.CollapsePanel "Collapse panel" %>"><span>&laquo;</span></a>
+<button
+    class="cms-panel-toggle__button"
+    title="<%t SilverStripe\\Admin\\LeftAndMain.CollapsePanel "Collapse panel" %>"
+    data-bs-toggle="tooltip"
+    aria-expanded="true"
+    aria-controls="cms-menu"
+    data-expanded-label="&laquo;"
+    data-expanded-title="<%t SilverStripe\\Admin\\LeftAndMain.CollapsePanel "Collapse panel" %>"
+    data-collapsed-label="&raquo;"
+    data-collapsed-title="<%t SilverStripe\\Admin\\LeftAndMain.ExpandPanel "Expand panel" %>"
+>&laquo;</button>

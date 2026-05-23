@@ -25,6 +25,7 @@
       margin: 0;
       line-height: $line-height-base * $font-size-root;
       height: $line-height-base * $font-size-root !important;
+      // equivalent of font-icon-dot-3
       content: "9";
       font-size: 21px;
       color: $text-muted;
@@ -32,6 +33,15 @@
       width: 100% !important;
       text-align: center;
     }
+
+    .tab__icon {
+      height: $line-height-base * $font-size-root !important;
+      color: $text-muted;
+    }
+  }
+
+  .popover-actions-simulate--no-icon .ui-tabs-anchor:after {
+    content: none;
   }
 
   #ActionMenus_MoreOptions {

@@ -589,7 +589,7 @@ class AssetAdmin extends AssetAdminOpen implements PermissionProvider
         }
         $folder = $file->ParentID ? $file->Parent()->getFilename() : '/';
 
-        // If extension is the same, attempt to re-use existing name
+        // If extension is the same, attempt to reuse existing name
         if (File::get_file_extension($tmpFile['name']) === File::get_file_extension($data['Name'])) {
             $tmpFile['name'] = $data['Name'];
         } else {
@@ -720,10 +720,12 @@ class AssetAdmin extends AssetAdminOpen implements PermissionProvider
 
     /**
      * Retrieves a list of files by their IDs
+     * Does not respect default sort order
      */
     private function getFilesByIDs(array $ids, bool $includeFolders, int $missingFileErrorCode): ArrayList
     {
-        $files = File::get()->filter(['ID' => $ids]);
+        // Disabling sort improves performance
+        $files = File::get()->sort(null)->filter(['ID' => $ids]);
         if ($files->count() !== count($ids)) {
             $this->jsonError($missingFileErrorCode);
         }

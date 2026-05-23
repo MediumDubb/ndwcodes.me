@@ -2,17 +2,21 @@
 
 namespace SilverStripe\ORM;
 
+use Exception;
+use InvalidArgumentException;
+use ReflectionException;
+use ReflectionMethod;
 use SilverStripe\Core\ClassInfo;
+use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Convert;
 use SilverStripe\Core\Extensible;
 use SilverStripe\Core\Injector\Injector;
-use SilverStripe\ORM\Connect\Query;
-use SilverStripe\ORM\Queries\SQLConditionGroup;
-use SilverStripe\ORM\Queries\SQLSelect;
-use InvalidArgumentException;
-use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Resettable;
 use SilverStripe\Dev\Deprecation;
+use SilverStripe\ORM\Connect\Query;
+use SilverStripe\ORM\FieldType\DBField;
+use SilverStripe\ORM\Queries\SQLConditionGroup;
+use SilverStripe\ORM\Queries\SQLSelect;
 use SilverStripe\Security\RandomGenerator;
 
 /**
@@ -75,6 +79,13 @@ class DataQuery implements Resettable
     protected $querySubclasses = true;
 
     protected $filterByClassName = true;
+
+    /**
+     * A cache of database field specs and whether they implement an addToQuery() method
+     * @see DataQuery::shouldAddToQuery()
+     * @internal
+     */
+    private static array $shouldAddToQueryCache = [];
 
     /**
      * Whether the query result should be cached or not
@@ -496,7 +507,7 @@ class DataQuery implements Resettable
      * Return this query's SQL
      *
      * @param array $parameters Out variable for parameters required for this query
-     * @return string The resulting SQL query (may be paramaterised)
+     * @return string The resulting SQL query (may be parameterised)
      */
     public function sql(&$parameters = [])
     {
@@ -697,18 +708,45 @@ class DataQuery implements Resettable
                 } else {
                     $query->selectField($quotedField, $k);
                 }
-                $dbO = Injector::inst()->create($v, $k);
-                $dbO->setTable($tableName);
-                $dbO->addToQuery($query);
+
+                if ($this->shouldAddToQuery($v)) {
+                    $dbO = Injector::inst()->create($v, $k);
+                    $dbO->setTable($tableName);
+                    $dbO->addToQuery($query);
+                }
             }
         }
         foreach ($compositeFields as $k => $v) {
-            if ((is_null($columns) || in_array($k, $columns ?? [])) && $v) {
+            if ((is_null($columns) || in_array($k, $columns ?? [])) && $v && $this->shouldAddToQuery($v)) {
                 $dbO = Injector::inst()->create($v, $k);
                 $dbO->setTable($tableName);
                 $dbO->addToQuery($query);
             }
         }
+    }
+
+    /**
+     * This method determines whether a subclass of DBField has overridden the DBField::addToQuery() method to
+     * implement custom logic. This allows selectColumnsFromTable() to skip the relatively expensive step of
+     * building singleton objects to call the method if it has no effect
+     *
+     * @param string $dbFieldSpec A string like "Varchar(255)"
+     * @throws Exception
+     * @internal
+     */
+    private function shouldAddToQuery(string $dbFieldSpec): bool
+    {
+        [$serviceName] = ClassInfo::parse_class_spec($dbFieldSpec);
+        if (array_key_exists($serviceName, DataQuery::$shouldAddToQueryCache)) {
+            return DataQuery::$shouldAddToQueryCache[$serviceName];
+        }
+
+        $class = Injector::inst()->getServiceSpec($serviceName)['class'] ?? $serviceName;
+        $method = new ReflectionMethod($class, 'addToQuery');
+        $shouldAddToQuery = $method->getDeclaringClass()->getName() !== DBField::class;
+        DataQuery::$shouldAddToQueryCache[$serviceName] = $shouldAddToQuery;
+
+        return DataQuery::$shouldAddToQueryCache[$serviceName];
     }
 
     /**
@@ -809,7 +847,7 @@ class DataQuery implements Resettable
      * won't expand multiple arguments as SQLSelect does.
      *
      * @param string|array|SQLConditionGroup $filter Predicate(s) to set, as escaped SQL statements or
-     * paramaterised queries
+     * parameterised queries
      * @return $this
      */
     public function where($filter)
@@ -827,7 +865,7 @@ class DataQuery implements Resettable
      * won't expand multiple method arguments as SQLSelect does.
      *
      * @param string|array|SQLConditionGroup $filter Predicate(s) to set, as escaped SQL statements or
-     * paramaterised queries
+     * parameterised queries
      * @return $this
      */
     public function whereAny($filter)
@@ -1481,7 +1519,7 @@ class DataQuery implements Resettable
      */
     public function setQueryParam($key, $value)
     {
-        $this->queryParams[$key] = $value;
+        $this->queryParams[$key ?? ''] = $value;
         return $this;
     }
 

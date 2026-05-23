@@ -16,7 +16,6 @@ use SilverStripe\Core\Validation\ValidationInterface;
 use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Dev\Debug;
 use SilverStripe\Dev\Deprecation;
-use SilverStripe\Forms\FieldGroup;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\FormField;
 use SilverStripe\Forms\FormScaffolder;
@@ -640,7 +639,8 @@ class DataObject extends ModelData implements DataObjectInterface, i18nEntityPro
             $extraFieldNames = [];
         }
 
-        foreach ($source as $item) {
+        // Disabling sort improves performance
+        foreach ($source->sort(null) as $item) {
             // Merge extra fields
             $extraFields = [];
             foreach ($extraFieldNames as $fieldName => $fieldType) {
@@ -663,7 +663,8 @@ class DataObject extends ModelData implements DataObjectInterface, i18nEntityPro
         $source = $sourceObject->getComponents($relation);
         $dest = $destinationObject->getComponents($relation);
 
-        foreach ($source as $item) {
+        // Disabling sort improves performance
+        foreach ($source->sort(null) as $item) {
             // Don't write on duplicate; Wait until ParentID is available later.
             // writeRelations() will eventually write these records when converting
             // from UnsavedRelationList
@@ -1208,7 +1209,7 @@ class DataObject extends ModelData implements DataObjectInterface, i18nEntityPro
                     $leftComponents = $leftObj->getManyManyComponents($relationship);
                     $rightComponents = $rightObj->getManyManyComponents($relationship);
                     if ($rightComponents && $rightComponents->exists()) {
-                        $leftComponents->addMany($rightComponents->column('ID'));
+                        $leftComponents->addMany($rightComponents->sort(null)->column('ID'));
                     }
                     $leftComponents->write();
                 }
@@ -1219,7 +1220,7 @@ class DataObject extends ModelData implements DataObjectInterface, i18nEntityPro
                     $leftComponents = $leftObj->getComponents($relationship);
                     $rightComponents = $rightObj->getComponents($relationship);
                     if ($rightComponents && $rightComponents->exists()) {
-                        $leftComponents->addMany($rightComponents->column('ID'));
+                        $leftComponents->addMany($rightComponents->sort(null)->column('ID'));
                     }
                     $leftComponents->write();
                 }
@@ -2494,20 +2495,7 @@ class DataObject extends ModelData implements DataObjectInterface, i18nEntityPro
 
             // If we're using a WithinRangeFilter, split the field into two separate fields (from and to)
             if (is_a($spec['filter'] ?? '', WithinRangeFilter::class, true)) {
-                $fieldFrom = $field;
-                $fieldTo = clone $field;
-                $originalTitle = $field->Title();
-                $originalName = $field->getName();
-
-                $fieldFrom->setName($originalName . '_SearchFrom');
-                $fieldFrom->setTitle(_t(__CLASS__ . '.FILTER_WITHINRANGE_FROM', 'From'));
-                $fieldTo->setName($originalName . '_SearchTo');
-                $fieldTo->setTitle(_t(__CLASS__ . '.FILTER_WITHINRANGE_TO', 'To'));
-
-                $field = FieldGroup::create(
-                    $originalTitle,
-                    [$fieldFrom, $fieldTo]
-                )->setName($originalName)->addExtraClass('fieldgroup--fill-width');
+                $field = WithinRangeFilter::convertToRangeField($field);
             }
 
             $fields->push($field);
@@ -3956,7 +3944,7 @@ class DataObject extends ModelData implements DataObjectInterface, i18nEntityPro
                 // If the next part is a DBField, we've found the database-backed field.
                 break;
             } elseif ($component instanceof DataObject && $component->getRelationType($nextPart) !== null) {
-                // If it's a last part or only one elemnt of a relation, we don't have a database-backed field.
+                // If it's a last part or only one element of a relation, we don't have a database-backed field.
                 if (count($parts) === 1) {
                     return null;
                 }
@@ -4509,7 +4497,7 @@ class DataObject extends ModelData implements DataObjectInterface, i18nEntityPro
      * If true, the search phrase is split into individual terms, and checks all searchable fields for each search term.
      * If false, all fields are checked for the entire search phrase as a whole.
      *
-     * Note that splitting terms may cause unexpected resuls if using an ExactMatchFilter.
+     * Note that splitting terms may cause unexpected results if using an ExactMatchFilter.
      */
     private static bool $general_search_split_terms = true;
 

@@ -2499,7 +2499,7 @@ SQL
     protected function onPrepopulateTreeDataCache($recordList = null, array $options = [])
     {
         $idList = is_array($recordList) ? $recordList :
-            ($recordList instanceof DataList ? $recordList->column('ID') : null);
+            ($recordList instanceof DataList ? $recordList->sort(null)->column('ID') : null);
         Versioned::prepopulate_versionnumber_cache($this->owner->baseClass(), Versioned::DRAFT, $idList);
         Versioned::prepopulate_versionnumber_cache($this->owner->baseClass(), Versioned::LIVE, $idList);
     }
@@ -2709,8 +2709,8 @@ SQL
         if (!$id || !$this->isPublished()) {
             return false;
         }
-
-        $liveVersionNumber = static::get_versionnumber_by_stage($this->owner, Versioned::LIVE, $id);
+        $stage = $this->hasStages() ? Versioned::LIVE : Versioned::DRAFT;
+        $liveVersionNumber = static::get_versionnumber_by_stage($this->owner, $stage, $id);
         return $liveVersionNumber == $this->owner->Version;
     }
 
@@ -2725,7 +2725,6 @@ SQL
         if (!$id || !$this->isOnDraft()) {
             return false;
         }
-
         $draftVersionNumber = static::get_versionnumber_by_stage($this->owner, Versioned::DRAFT, $id);
         return $draftVersionNumber == $this->owner->Version;
     }

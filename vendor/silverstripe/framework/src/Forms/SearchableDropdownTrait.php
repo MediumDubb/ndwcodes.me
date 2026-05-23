@@ -21,7 +21,6 @@ use SilverStripe\ORM\RelationList;
 use SilverStripe\ORM\UnsavedRelationList;
 use SilverStripe\Core\Injector\Injector;
 use Psr\Log\LoggerInterface;
-use SilverStripe\Dev\Deprecation;
 
 trait SearchableDropdownTrait
 {
@@ -183,8 +182,8 @@ trait SearchableDropdownTrait
         if ($this->searchContext) {
             return $this->searchContext;
         }
-        if ($this->sourceList) {
-            $dataClass = $this->sourceList->dataClass();
+        if ($this->getSourceList()) {
+            $dataClass = $this->getSourceList()->dataClass();
             /** @var DataObject $obj */
             $obj = $dataClass::create();
             return $obj->getDefaultSearchContext();
@@ -266,7 +265,7 @@ trait SearchableDropdownTrait
      */
     public function getSource(): array
     {
-        return $this->getListMap($this->sourceList);
+        return $this->getListMap($this->getSourceList());
     }
 
     public function Field($properties = [])
@@ -285,6 +284,15 @@ trait SearchableDropdownTrait
         // docblock type is array|ArrayAccess i.e. does not allow DataList
         $this->sourceList = $source;
         return $this;
+    }
+
+    /**
+     * Get the underlying list that represents the source for this dropdown.
+     * To set, use setSource().
+     */
+    public function getSourceList(): ?DataList
+    {
+        return $this->sourceList;
     }
 
     /**
@@ -369,7 +377,7 @@ trait SearchableDropdownTrait
             //   0 => '10',
             //   1 => '15'
             // ];
-            return array_map('intval', $arr);
+            return array_map('intval', array_filter($arr));
         }
         if ((is_string($value) || is_int($value)) && ctype_digit((string) $value) && $value != 0) {
             return [(int) $value];
@@ -421,6 +429,18 @@ trait SearchableDropdownTrait
             }
             $relationList->setByIDList($ids);
         }
+    }
+
+    public function dataValue()
+    {
+        $name = $this->getName();
+        $ids = $this->getValueArray();
+        // This is how we distinguish between single and multi fields in saveInto()
+        // so use the same logic here.
+        if (substr($name, -2) === 'ID') {
+            return $ids[0] ?? 0;
+        }
+        return $ids;
     }
 
     public function getSchemaDataType(): string
@@ -488,10 +508,10 @@ trait SearchableDropdownTrait
 
     private function getOptionsForSearchRequest(string $term): array
     {
-        if (!$this->sourceList) {
+        if (!$this->getSourceList()) {
             return [];
         }
-        $dataClass = $this->sourceList->dataClass();
+        $dataClass = $this->getSourceList()->dataClass();
         $labelField = $this->getLabelField();
         /** @var DataObject $obj */
         $obj = $dataClass::create();
@@ -519,14 +539,14 @@ trait SearchableDropdownTrait
     private function getOptionsForSchema(bool $onlySelected = false): ArrayList
     {
         $options = ArrayList::create();
-        if (!$this->sourceList) {
+        if (!$this->getSourceList()) {
             return $options;
         }
         $values = $this->getValueArray();
         if (empty($values)) {
             $selectedValuesList = ArrayList::create();
         } else {
-            $selectedValuesList = $this->sourceList->filterAny(['ID' => $values]);
+            $selectedValuesList = $this->getSourceList()->filterAny(['ID' => $values]);
         }
         // SearchableDropdownField will have the getHasEmptyDefault() method from SingleSelectField
         // Note that SingleSelectField::getSourceEmpty() will not be called for the react-select component
@@ -541,7 +561,7 @@ trait SearchableDropdownTrait
         if ($onlySelected) {
             $options = $this->updateOptionsForSchema($options, $selectedValuesList, $selectedValuesList);
         } else {
-            $options = $this->updateOptionsForSchema($options, $this->sourceList, $selectedValuesList);
+            $options = $this->updateOptionsForSchema($options, $this->getSourceList(), $selectedValuesList);
         }
         return $options;
     }
@@ -598,7 +618,7 @@ trait SearchableDropdownTrait
         // call to $this->getSource() which will load the entire DataList into memory which
         // causes issues with very large datasets and isn't needed when the field is read-only
         $field = call_user_func('SilverStripe\\Forms\\FormField::castedCopy', SearchableLookupField::class);
-        $field->setSource($this->sourceList);
+        $field->setSource($this->getSourceList());
         $field->setReadonly(true);
 
         return $field;
@@ -606,6 +626,6 @@ trait SearchableDropdownTrait
 
     protected function getSourceValues()
     {
-        return $this->sourceList->sort(null)->column('ID');
+        return $this->getSourceList()->sort(null)->column('ID');
     }
 }

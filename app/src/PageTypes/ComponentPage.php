@@ -23,13 +23,11 @@ class ComponentPage extends Page
         return $fields;
     }
 
-
     public function onBeforeWrite() {
         $this->Content = $this->collateSearchContent();
 
         parent::onBeforeWrite();
     }
-
 
     protected function collateSearchContent() {
         $content = $this->getOwner()->getElementsForSearch();

@@ -205,7 +205,7 @@ class EmailRecipient extends DataObject
         $emailRecipientsConfig = GridFieldConfig_RecordEditor::create(10);
         $emailRecipientsConfig->getComponentByType(GridFieldAddNewButton::class)
             ->setButtonName(
-                _t(UserDefinedForm::class . '.ADDEMAILRECIPIENT', 'Add Email Recipient')
+                _t(UserDefinedForm::class . '.ADDNEWEMAILRECIPIENT', 'Add new Email Recipient')
             );
         $emailRecipientsConfig->getComponentByType(GridFieldDetailForm::class)
             ->setItemRequestClass(UserFormRecipientItemRequest::class);
@@ -533,8 +533,7 @@ class EmailRecipient extends DataObject
      */
     public function emailTemplateExists($template = '')
     {
-        $t = ($template ? $template : $this->EmailTemplate);
-
+        $t = ($template ? $template : $this->EmailTemplate) ?? '';
         return array_key_exists($t, (array) $this->getEmailTemplateDropdownValues());
     }
 

@@ -78,7 +78,8 @@ class GridFieldExportButton extends AbstractGridFieldComponent implements GridFi
             'export',
             null
         );
-        $button->addExtraClass('btn btn-secondary no-ajax font-icon-down-circled action_export');
+        $button->setIcon('down-circled');
+        $button->addExtraClass('btn btn-secondary no-ajax action_export');
         $button->setForm($gridField->getForm());
         return [
             $this->targetFragment => $button->Field(),
@@ -178,7 +179,7 @@ class GridFieldExportButton extends AbstractGridFieldComponent implements GridFi
     {
         $csvColumns = $this->getExportColumnsForGridField($gridField);
 
-        $csvWriter = Writer::createFromFileObject(new \SplTempFileObject());
+        $csvWriter = Writer::from(new \SplTempFileObject());
         $csvWriter->setDelimiter($this->getCsvSeparator());
         $csvWriter->setEnclosure($this->getCsvEnclosure());
         $csvWriter->setEndOfLine("\r\n"); //use windows line endings for compatibility with some csv libraries

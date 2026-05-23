@@ -23,10 +23,10 @@ $color-good:    #72c34b !default;
 $body-color-dark: darken($body-color, 10);
 
 // Extra state colors
-$state-draft: #cf3f00; // State draft border
-$state-draft-bg: #ff7f22;
+$state-draft: #c23a00; // State draft border
+$state-draft-bg: #ffede0;
 $state-modified: $state-draft; // State modified border
-$state-modified-bg: #fff7f0;
+$state-modified-bg: $state-draft-bg;
 $state-archived: $gray-700;
 $state-live: $green;
 
@@ -57,6 +57,12 @@ $font-size-root: 13px;
 // Custom size
 $font-size-xs: .846rem; // 11px
 $font-size-xxs: .75rem; // 10px
+
+// Focus outline
+$focus-outline-width: 2px;
+$focus-outline-style: solid;
+$focus-outline-color: #2A62BC;
+$focus-outline-offset: 2px;
 
 // Component
 $component-active-bg-light: lighten($component-active-bg, 57%);

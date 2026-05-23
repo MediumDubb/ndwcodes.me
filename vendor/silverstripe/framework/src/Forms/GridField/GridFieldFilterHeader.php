@@ -176,11 +176,11 @@ class GridFieldFilterHeader extends AbstractGridFieldComponent implements GridFi
             && ClassInfo::hasMethod($singleton, 'searchableFields')
         ) {
             // note: searchableFields() will return summary_fields if there are no searchable_fields on the model
-            $searchableFields = array_keys($singleton->searchableFields());
+            $searchableFields = array_keys($this->getSearchableFields($gridField, $singleton));
             $summaryFields = array_keys($singleton->summaryFields());
             sort($searchableFields);
             sort($summaryFields);
-            // searchable_fields has been explictily defined i.e. searchableFields() is not falling back to summary_fields
+            // searchable_fields has been explicitly defined i.e. searchableFields() is not falling back to summary_fields
             if (!empty($searchableFields) && ($searchableFields !== $summaryFields)) {
                 return true;
             }
@@ -192,7 +192,10 @@ class GridFieldFilterHeader extends AbstractGridFieldComponent implements GridFi
             }
         } else {
             // Allows non-DataObject classes to be used with this component
-            $columns = $gridField->getColumns();
+            $columns = array_merge(
+                $gridField->getColumns(),
+                array_keys($this->getSearchableFields($gridField, $singleton))
+            );
             foreach ($columns as $columnField) {
                 $metadata = $gridField->getColumnMetadata($columnField);
                 $title = $metadata['title'];
@@ -203,6 +206,19 @@ class GridFieldFilterHeader extends AbstractGridFieldComponent implements GridFi
             }
         }
         return false;
+    }
+
+    private function getSearchableFields(GridField $gridField, object $singleton): array
+    {
+        try {
+            return $this->getSearchContext($gridField)->getSearchFieldsSpec($singleton);
+        } catch (LogicException) {
+            // Fall back to just searchable fields on the record itself.
+            if (ClassInfo::hasMethod($singleton, 'searchableFields')) {
+                return $singleton->searchableFields();
+            }
+            return [];
+        }
     }
 
     /**

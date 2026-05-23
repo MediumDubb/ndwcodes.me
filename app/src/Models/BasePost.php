@@ -13,6 +13,7 @@ use SilverStripe\Forms\HTMLEditor\HTMLEditorField;
 use SilverStripe\Forms\ListboxField;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\ReadonlyField;
+use SilverStripe\Forms\TextareaField;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Versioned\Versioned;
 use UndefinedOffset\SortableGridField\Forms\GridFieldSortableRows;
@@ -32,6 +33,7 @@ class BasePost extends DataObject
         'URLSegment'        => 'Varchar(300)',
         'PublishedOn'       => 'Datetime',
         'PostDate'          => 'Date',
+        'Excerpt'           => 'Varchar(255)',
     ];
 
     private static array $has_one = [
@@ -84,6 +86,8 @@ class BasePost extends DataObject
             'PostDate',
             'FilterTags',
             'ContentSections',
+            'MetaDescription',
+            'Excerpt',
         ]);
 
         $fields->findOrMakeTab('Root.Main')->setTitle($this->i18n_singular_name());
@@ -105,6 +109,7 @@ class BasePost extends DataObject
             HTMLEditorField::create('SpecialPreview', 'Special Preview - Extra Summary')
                 ->setRows(3)
                 ->setDescription('This field is for special info that will appear on the post page above the post summary. Keep it short and sweet.'),
+            TextAreaField::create('Excerpt')->setDescription("Short saweet summary of post")
         ], 'PostBody');
 
         $fields->addFieldsToTab('Root.Main', [

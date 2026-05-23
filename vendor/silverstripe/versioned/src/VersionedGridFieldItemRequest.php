@@ -238,7 +238,7 @@ class VersionedGridFieldItemRequest extends GridFieldDetailForm_ItemRequest
         $canDelete = $record->canDelete();
 
         // "save", supports an alternate state that is still clickable, but notifies the user that the action is not needed.
-        $noChangesClasses = 'btn-outline-primary font-icon-tick';
+        $noChangesClasses = 'btn-outline-primary';
 
         /** @var DataObject|Versioned|RecursivePublishable $liveRecord */
         $liveRecord = Versioned::get_by_stage(get_class($record), Versioned::LIVE)->byID($record->ID);
@@ -251,8 +251,9 @@ class VersionedGridFieldItemRequest extends GridFieldDetailForm_ItemRequest
             'MoreOptions',
             _t(VersionedGridFieldItemRequest::class . '.MoreOptions', 'More options', 'Expands a view for more buttons')
         );
+        $moreOptions->setIcon('dot-3');
 
-        $moreOptions->addExtraClass('popover-actions-simulate');
+        $moreOptions->addExtraClass('popover-actions-simulate popover-actions-simulate--no-icon btn--icon-xl');
         $rootTabSet->push($moreOptions);
         $rootTabSet->addExtraClass('ss-ui-action-tabset action-menus noborder');
 
@@ -272,10 +273,12 @@ class VersionedGridFieldItemRequest extends GridFieldDetailForm_ItemRequest
         if ($canEdit && $isOnDraft && $actionSave !== null) {
             $actionSave
                 ->setTitle(_t(VersionedGridFieldItemRequest::class . '.BUTTONSAVED', 'Saved'))
-                ->removeExtraClass('btn-primary font-icon-save font-icon-rocket')
-                ->addExtraClass('btn-outline-primary font-icon-tick')
-                ->setAttribute('data-btn-alternate-add', 'btn-primary font-icon-save')
-                ->setAttribute('data-btn-alternate-remove', 'btn-outline-primary font-icon-tick')
+                ->setIcon('tick')
+                ->setAttribute('data-icon-alternate', 'save')
+                ->removeExtraClass('btn-primary')
+                ->addExtraClass('btn-outline-primary')
+                ->setAttribute('data-btn-alternate-add', 'btn-primary')
+                ->setAttribute('data-btn-alternate-remove', 'btn-outline-primary')
                 ->setAttribute('data-text-alternate', _t(CMSMain::class . '.SAVEDRAFT', 'Save draft'));
         }
 
@@ -283,8 +286,10 @@ class VersionedGridFieldItemRequest extends GridFieldDetailForm_ItemRequest
         if ($canPublish && $isOnDraft) {
             // "publish", as with "save", it supports an alternate state to show when action is needed.
             $actionPublish = FormAction::create('doPublish', _t(VersionedGridFieldItemRequest::class . '.BUTTONPUBLISHED', 'Published'))
+                ->setIcon('tick')
+                ->setAttribute('data-icon-alternate', 'rocket')
                 ->addExtraClass($noChangesClasses)
-                ->setAttribute('data-btn-alternate-add', 'btn-primary font-icon-rocket')
+                ->setAttribute('data-btn-alternate-add', 'btn-primary')
                 ->setAttribute('data-btn-alternate-remove', $noChangesClasses)
                 ->setUseButtonTag(true)
                 ->setAttribute('data-text-alternate', _t(VersionedGridFieldItemRequest::class . '.BUTTONSAVEPUBLISH', 'Publish'));
@@ -293,7 +298,8 @@ class VersionedGridFieldItemRequest extends GridFieldDetailForm_ItemRequest
 
             // Set up the initial state of the button to reflect the state of the underlying record object.
             if ($stagesDiffer) {
-                $actionPublish->addExtraClass('btn-primary font-icon-rocket');
+                $actionPublish->setIcon('rocket');
+                $actionPublish->addExtraClass('btn-primary');
                 $actionPublish->setTitle(_t(VersionedGridFieldItemRequest::class . '.BUTTONSAVEPUBLISH', 'Publish'));
                 $actionPublish->removeExtraClass($noChangesClasses);
             }
@@ -334,6 +340,25 @@ class VersionedGridFieldItemRequest extends GridFieldDetailForm_ItemRequest
         }
 
         $actions->insertAfter('MajorActions', $rootTabSet);
+
+        // Remove ActionMenus when ActionMenus.MoreOptions has no content
+        $this->afterExtending('updateItemEditForm', function (Form $form) {
+            $actionMenusMoreOptions = $form->Actions()->findTab('ActionMenus.MoreOptions');
+
+            if ($actionMenusMoreOptions) {
+                // Check if there are any fields other than structural Tab/TabSet fields
+                $hasContent = false;
+                $actionMenusMoreOptions->Fields()->recursiveWalk(function ($field) use (&$hasContent) {
+                    if (!$field instanceof Tab && !$field instanceof TabSet) {
+                        $hasContent = true;
+                    }
+                });
+
+                if (!$hasContent) {
+                    $form->Actions()->removeByName('ActionMenus');
+                }
+            }
+        });
     }
 
     /**
@@ -357,6 +382,8 @@ class VersionedGridFieldItemRequest extends GridFieldDetailForm_ItemRequest
         $saveAction->setTitle(_t(
             __CLASS__ . '.BUTTONAPPLYCHANGES',
             'Apply changes'
-        ))->addExtraClass('btn-primary font-icon-save');
+        ))
+            ->setIcon('save')
+            ->addExtraClass('btn-primary');
     }
 }

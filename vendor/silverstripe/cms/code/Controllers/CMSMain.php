@@ -144,6 +144,7 @@ class CMSMain extends LeftAndMain implements CurrentRecordIdentifier, Permission
     private static array $url_handlers = [
         'EditForm/$ID' => 'EditForm',
         'GET SearchForm' => 'getSearchForm',
+        'treeview/$ID' => 'treeview',
     ];
 
     private static array $casting = [
@@ -579,9 +580,23 @@ class CMSMain extends LeftAndMain implements CurrentRecordIdentifier, Permission
      */
     protected function getTreeNodeCustomisations()
     {
-        return function (DataObject $node) {
+        $isFirstPageAssigned = false;
+        $currentRecordID = $this->currentRecordID();
+        $hasCurrentPage = $currentRecordID !== null;
+
+        return function (DataObject $node) use ($currentRecordID, $hasCurrentPage, &$isFirstPageAssigned) {
+            $isCurrentPage = $node->ID === $currentRecordID;
+            $isFirstPage = false;
+            if (!$isFirstPageAssigned) {
+                $isFirstPage = true;
+                $isFirstPageAssigned = true;
+            }
+
             return [
                 'Controller' => $this,
+                'isCurrentPage' => $isCurrentPage,
+                'isFirstPage' => $isFirstPage,
+                'hasCurrentPage' => $hasCurrentPage,
                 'listViewLink' => $this->LinkListViewChildren($node->ID),
                 'rootTitle' => $this->getCMSTreeTitle(),
                 'extraClass' => $this->getTreeNodeClasses($node),
@@ -1194,7 +1209,7 @@ class CMSMain extends LeftAndMain implements CurrentRecordIdentifier, Permission
         $record->invokeWithExtensions('updateTreeIconClasses', $iconClasses);
         $titleText = $record->getTreeTitle();
         // Hierarchy::getTreeTitle() will call Convert::raw2xml(), though this may have been
-        // overriden by another method that doesn't call this
+        // overridden by another method that doesn't call this
         // Check to see if it was converted first by calling the xml2raw() to before calling
         // raw2xml() to ensure we don't double convert and end up with "&amp;amp;"
         $wasChanged = Convert::xml2raw($titleText) !== $titleText;
@@ -1207,7 +1222,7 @@ class CMSMain extends LeftAndMain implements CurrentRecordIdentifier, Permission
             $titleText = _t(__CLASS__ . '.TREE_NO_TITLE', '(no title)');
         }
         $treeTitle = sprintf(
-            '<span class="%s"></span><span class="item" data-allowedchildren="%s">%s</span>',
+            '<span class="%s" aria-hidden="true"></span><span class="item" data-allowedchildren="%s">%s</span>',
             implode(' ', $iconClasses),
             Convert::raw2att(json_encode($children)),
             $titleText
@@ -1368,7 +1383,7 @@ class CMSMain extends LeftAndMain implements CurrentRecordIdentifier, Permission
         }
 
         // Use <button> to allow full jQuery UI styling
-        $actionsFlattened = $actions->dataFields();
+        $actionsFlattened = $actions->getDataFields();
         if ($actionsFlattened) {
             /** @var FormAction $action */
             foreach ($actionsFlattened as $action) {
@@ -1404,7 +1419,7 @@ class CMSMain extends LeftAndMain implements CurrentRecordIdentifier, Permission
 
         $this->extend('updateEditForm', $form);
 
-        // Use custom reqest handler for LeftAndMain requests;
+        // Use custom request handler for LeftAndMain requests;
         // CMS Forms cannot be identified solely by name, but also need ID (and sometimes OtherID)
         $form->setRequestHandler(
             LeftAndMainFormRequestHandler::create($form, [$id])
@@ -1466,8 +1481,8 @@ class CMSMain extends LeftAndMain implements CurrentRecordIdentifier, Permission
      */
     protected function collateDescendants($recordIDs, &$collator)
     {
-
-        $children = DataObject::get($this->getModelClass())->filter(['ParentID' => $recordIDs])->column();
+        // Disabling sort improves performance
+        $children = DataObject::get($this->getModelClass())->filter(['ParentID' => $recordIDs])->sort(null)->column('ID');
         if ($children) {
             foreach ($children as $item) {
                 $collator[] = $item;
@@ -1486,6 +1501,10 @@ class CMSMain extends LeftAndMain implements CurrentRecordIdentifier, Permission
      */
     public function treeview()
     {
+        $id = $this->getRequest()->param('ID');
+        if ($id) {
+            $this->setCurrentRecordID($id);
+        }
         return $this->renderWith($this->getTemplatesWithSuffix('_TreeView'));
     }
 
@@ -1613,8 +1632,9 @@ class CMSMain extends LeftAndMain implements CurrentRecordIdentifier, Permission
                 if ($num) {
                     $screenReaderText = _t(__CLASS__ . '.NUM_CHILD_RECORDS', 'one child record|{count} child records', ['count' => $num]);
                     return sprintf(
-                        '<a class="btn btn-secondary btn--no-text btn--icon-large font-icon-right-dir cms-panel-link list-children-link" data-pjax-target="ListViewForm,Breadcrumbs" href="%s"><span class="visually-hidden">%s</span></a>',
+                        '<a class="btn btn-secondary btn--no-text btn--icon-large font-icon-right-dir cms-panel-link list-children-link" data-pjax-target="ListViewForm,Breadcrumbs" href="%s" aria-label="%s" title="%s"></a>',
                         $this->LinkListViewChildren((int)$item->ID),
+                        $screenReaderText,
                         $screenReaderText
                     );
                 }
@@ -2181,9 +2201,10 @@ class CMSMain extends LeftAndMain implements CurrentRecordIdentifier, Permission
         }
 
         if (($id = $this->urlParams['ID']) && is_numeric($id)) {
+            $modelClass = $this->getModelClass();
             /** @var DataObject&Hierarchy $record */
-            $record = DataObject::get($this->getModelClass())->byID($id);
-            if ($record && !$record->canCreate(null, ['Parent' => $record->Parent()])) {
+            $record = DataObject::get($modelClass)->byID($id);
+            if ($record && !$record->canCreate(null, ['Parent' => $record->getParent() ?? $modelClass::create()])) {
                 return Security::permissionFailure($this);
             }
             if (!$record || !$record->ID) {
@@ -2227,9 +2248,10 @@ class CMSMain extends LeftAndMain implements CurrentRecordIdentifier, Permission
         }
         Environment::increaseTimeLimitTo();
         if (($id = $this->urlParams['ID']) && is_numeric($id)) {
+            $modelClass = $this->getModelClass();
             /** @var DataObject&Hierarchy $record */
-            $record = DataObject::get($this->getModelClass())->byID($id);
-            if ($record && !$record->canCreate(null, ['Parent' => $record->Parent()])) {
+            $record = DataObject::get($modelClass)->byID($id);
+            if ($record && !$record->canCreate(null, ['Parent' => $record->getParent() ?? $modelClass::create()])) {
                 return Security::permissionFailure($this);
             }
             if (!$record || !$record->ID) {

@@ -611,7 +611,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
     public function RelativeLink($action = null)
     {
         if ($this->ParentID && static::config()->get('nested_urls')) {
-            $parent = $this->Parent();
+            $parent = $this->getParent();
             // If page is removed select parent from version history (for archive page view)
             if ((!$parent || !$parent->exists()) && !$this->isOnDraft()) {
                 $parent = Versioned::get_latest_version(SiteTree::class, $this->ParentID);
@@ -722,7 +722,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
         }
 
         // Parent must exist and not be an orphan itself
-        $parent = $this->Parent();
+        $parent = $this->getParent();
         return !$parent || !$parent->exists() || $parent->isOrphaned();
     }
 
@@ -776,7 +776,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
             if ($sectionName === $page->URLSegment) {
                 return true;
             }
-            $page = $page->Parent();
+            $page = $page->getParent();
         }
         return false;
     }
@@ -850,7 +850,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
                 $pages[] = $page;
             }
 
-            $page = $page->Parent();
+            $page = $page->getParent();
         }
 
         return new ArrayList(array_reverse($pages ?? []));
@@ -879,7 +879,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
     /**
      * Get the parent of this page.
      *
-     * @return SiteTree Parent of this page
+     * @return SiteTree|null Parent of this page
      */
     public function getParent()
     {
@@ -894,7 +894,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
      * Return a string of the form "parent - page" or "grandparent - parent - page" using page titles
      *
      * @param int $level The maximum amount of levels to traverse.
-     * @param string $separator Seperating string
+     * @param string $separator Separating string
      * @return string The resulting string
      */
     public function NestedTitle($level = 2, $separator = " - ")
@@ -999,7 +999,8 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
         // check for inherit
         if ($this->CanViewType === InheritedPermissions::INHERIT) {
             if ($this->ParentID) {
-                return $this->Parent()->canView($member);
+                $parent = $this->getParent() ?? SiteTree::create();
+                return $parent->canView($member);
             } else {
                 return $this->getSiteConfig()->canViewPages($member);
             }
@@ -1502,12 +1503,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
         }
 
         // If there is no URLSegment set, generate one from Title
-        $defaultSegment = $this->generateURLSegment(_t(
-            'SilverStripe\\CMS\\Controllers\\CMSMain.NEWPAGE',
-            'New {pagetype}',
-            ['pagetype' => $this->i18n_singular_name()]
-        ));
-        if ((!$this->hasURLSegment() || $this->URLSegment == $defaultSegment) && $this->Title) {
+        if ($this->Title && (!$this->hasURLSegment() || $this->URLSegment === $this->getDefaultUrlSegment())) {
             $this->URLSegment = $this->generateURLSegment($this->Title);
         } elseif ($this->isChanged('URLSegment', 2)) {
             // Do a strict check on change level, to avoid double encoding caused by
@@ -1569,6 +1565,15 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
         }
     }
 
+    private function getDefaultUrlSegment(): string
+    {
+        return $this->generateURLSegment(_t(
+            'SilverStripe\\CMS\\Controllers\\CMSMain.NEWPAGE',
+            'New {pagetype}',
+            ['pagetype' => $this->i18n_singular_name()]
+        ));
+    }
+
     private function sanitiseExtraMeta(): void
     {
         $htmlValue = HTMLValue::create($this->ExtraMeta);
@@ -1606,7 +1611,8 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
 
         // If deleting this page, delete all its children.
         if ($this->isInDB() && SiteTree::config()->get('enforce_strict_hierarchy')) {
-            foreach ($this->AllChildren() as $child) {
+            # Disabling sort improves performance
+            foreach ($this->AllChildren()->sort(null) as $child) {
                 $child->delete();
             }
         }
@@ -1649,7 +1655,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
         // Check known urlsegment blacklists
         if (static::config()->get('nested_urls') && $this->ParentID) {
             // Guard against url segments for sub-pages
-            $parent = $this->Parent();
+            $parent = $this->getParent() ?? SiteTree::create();
             if ($controller = ModelAsController::controller_for($parent)) {
                 if ($controller instanceof Controller && $controller->hasAction($this->URLSegment)) {
                     return false;
@@ -1699,7 +1705,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
         $filter = URLSegmentFilter::create();
         $filteredTitle = $filter->filter($title);
 
-        // Fallback to generic page name if path is empty (= no valid, convertable characters)
+        // Fallback to generic page name if path is empty (= no valid, convertible characters)
         if (!$filteredTitle || $filteredTitle == '-' || $filteredTitle == '-1') {
             $filteredTitle = "page-$this->ID";
         }
@@ -1783,7 +1789,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
     /**
      * Returns the pages that depend on this page. This includes virtual pages, pages that link to it, etc.
      *
-     * @param bool $includeVirtuals Set to false to exlcude virtual pages.
+     * @param bool $includeVirtuals Set to false to exclude virtual pages.
      * @return ArrayList<SiteTree>
      */
     public function DependentPages($includeVirtuals = true)
@@ -1909,17 +1915,13 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
 
             $baseLink = Controller::join_links(
                 Director::absoluteBaseURL(),
-                (static::config()->get('nested_urls') && $this->ParentID ? $this->Parent()->RelativeLink(true) : null)
+                (static::config()->get('nested_urls') && $this->ParentID ? $this->getParent()?->RelativeLink(true) : null)
             );
 
             $urlsegment = SiteTreeURLSegmentField::create("URLSegment", $this->fieldLabel('URLSegment'))
                 ->setURLPrefix($baseLink)
                 ->setURLSuffix('?stage=Stage')
-                ->setDefaultURL($this->generateURLSegment(_t(
-                    'SilverStripe\\CMS\\Controllers\\CMSMain.NEWPAGE',
-                    'New {pagetype}',
-                    ['pagetype' => $this->i18n_singular_name()]
-                )))
+                ->setDefaultURL($this->getDefaultUrlSegment())
                 ->addExtraClass(($this->isHomePage() ? 'homepage-warning' : ''));
             $helpText = (static::config()->get('nested_urls') && $this->numChildren())
                 ? $this->fieldLabel('LinkChangeNote')
@@ -2249,7 +2251,8 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
             'MoreOptions',
             _t(__CLASS__.'.MoreOptions', 'More options', 'Expands a view for more buttons')
         );
-        $moreOptions->addExtraClass('popover-actions-simulate');
+        $moreOptions->setIcon('dot-3');
+        $moreOptions->addExtraClass('popover-actions-simulate popover-actions-simulate--no-icon btn--icon-xl');
         $rootTabSet->push($moreOptions);
         $rootTabSet->addExtraClass('ss-ui-action-tabset action-menus noborder');
 
@@ -2304,7 +2307,8 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
         if ($canEdit && !$isOnDraft && $isPublished) {
             $majorActions->push(
                 FormAction::create('revert', _t('SilverStripe\\CMS\\Controllers\\CMSMain.RESTORE', 'Restore'))
-                    ->addExtraClass('btn-warning font-icon-back-in-time')
+                        ->setIcon('back-in-time')
+                    ->addExtraClass('btn-warning')
                     ->setUseButtonTag(true)
             );
         }
@@ -2325,9 +2329,10 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
             if (!$this->isParentArchived() || $restoreToRoot) {
                 $majorActions->push(
                     FormAction::create('restore', $title)
+                        ->setIcon('back-in-time')
                         ->setDescription($description)
                         ->setAttribute('data-to-root', $restoreToRoot)
-                        ->addExtraClass('btn-warning font-icon-back-in-time')
+                        ->addExtraClass('btn-warning')
                         ->setUseButtonTag(true)
                 );
             }
@@ -2349,12 +2354,14 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
         }
 
         // "save", supports an alternate state that is still clickable, but notifies the user that the action is not needed.
-        $noChangesClasses = 'btn-outline-primary font-icon-tick';
+        $noChangesClasses = 'btn-outline-primary';
         if ($canEdit && $isOnDraft) {
             $majorActions->push(
                 FormAction::create('save', _t(__CLASS__.'.BUTTONSAVED', 'Saved'))
+                    ->setIcon('tick')
+                    ->setAttribute('data-icon-alternate', 'save')
                     ->addExtraClass($noChangesClasses)
-                    ->setAttribute('data-btn-alternate-add', 'btn-primary font-icon-save')
+                    ->setAttribute('data-btn-alternate-add', 'btn-primary')
                     ->setAttribute('data-btn-alternate-remove', $noChangesClasses)
                     ->setUseButtonTag(true)
                     ->setAttribute('data-text-alternate', _t('SilverStripe\\CMS\\Controllers\\CMSMain.SAVEDRAFT', 'Save'))
@@ -2365,8 +2372,10 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
             // "publish", as with "save", it supports an alternate state to show when action is needed.
             $majorActions->push(
                 $publish = FormAction::create('publish', _t(__CLASS__.'.BUTTONPUBLISHED', 'Published'))
+                    ->setIcon('tick')
+                    ->setAttribute('data-icon-alternate', 'rocket')
                     ->addExtraClass($noChangesClasses)
-                    ->setAttribute('data-btn-alternate-add', 'btn-primary font-icon-rocket')
+                    ->setAttribute('data-btn-alternate-add', 'btn-primary')
                     ->setAttribute('data-btn-alternate-remove', $noChangesClasses)
                     ->setUseButtonTag(true)
                     ->setAttribute('data-text-alternate', _t(__CLASS__.'.BUTTONSAVEPUBLISH', 'Publish'))
@@ -2374,7 +2383,8 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
 
             // Set up the initial state of the button to reflect the state of the underlying SiteTree object.
             if ($stagesDiffer) {
-                $publish->addExtraClass('btn-primary font-icon-rocket');
+                $publish->setIcon('rocket');
+                $publish->addExtraClass('btn-primary');
                 $publish->setTitle(_t(__CLASS__.'.BUTTONSAVEPUBLISH', 'Publish'));
                 $publish->removeExtraClass($noChangesClasses);
             }
@@ -2403,7 +2413,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
     }
 
     /**
-     * Update draft dependant pages
+     * Update draft dependent pages
      */
     protected function onAfterRevertToLive()
     {
@@ -2513,7 +2523,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
                 if ($instance instanceof HiddenClass) {
                     continue;
                 }
-                if (!$instance->canCreate(null, ['Parent' => $this->ParentID ? $this->Parent() : null])) {
+                if (!$instance->canCreate(null, ['Parent' => $this->ParentID ? $this->getParent() : null])) {
                     continue;
                 }
             }
@@ -2573,7 +2583,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
     {
         $parent = $this;
         $stack = [$parent];
-        while (($parent = $parent->Parent()) && $parent->exists()) {
+        while (($parent = $parent->getParent()) && $parent->exists()) {
             array_unshift($stack, $parent);
         }
 
@@ -2588,14 +2598,14 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
     public function getPageLevel()
     {
         if ($this->ParentID) {
-            return 1 + $this->Parent()->getPageLevel();
+            return 1 + ($this->getParent()?->getPageLevel() ?? 1);
         }
         return 1;
     }
 
     /**
      * Find the controller name by our convention of {$ModelClass}Controller
-     * Can be overriden by config variable
+     * Can be overridden by config variable
      *
      * @return string
      */
@@ -2655,7 +2665,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
 
     /**
      * Stops extendCMSFields() being called on getCMSFields(). This is useful when you need access to fields added by
-     * subclasses of SiteTree in a extension. Call before calling parent::getCMSFields(), and reenable afterwards.
+     * subclasses of SiteTree in a extension. Call before calling parent::getCMSFields(), and re-enable afterwards.
      */
     public static function disableCMSFieldsExtensions()
     {
@@ -2777,7 +2787,7 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
     }
 
     /**
-     * Update dependant pages
+     * Update dependent pages
      */
     protected function updateDependentPages()
     {
@@ -2831,13 +2841,13 @@ class SiteTree extends DataObject implements PermissionProvider, i18nEntityProvi
     public function getAnchorsOnPage()
     {
         $content = $this->Content ?? '';
-        
+
         // Shortcodes may contain name/id attributes, they mess up the parsing below
         // we replace them with their content first
         // Note: We don't use ShortcodeParser::parse() here as that would execute the shortcodes
         // which may have performance and side effects
         $tags = ShortcodeParser::get_active()->extractTags($content);
-        
+
         // replace any tags found with their content
         foreach ($tags as $tag) {
             $content = str_replace($tag['text'], $tag['content'], $content);

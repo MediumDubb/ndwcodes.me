@@ -954,7 +954,7 @@ class EditableFormField extends DataObject
         // Check for field dependencies / default
         foreach ($this->DisplayRules() as $rule) {
             // Get the field which is effected
-            $formFieldWatch = DataObject::get_by_id(EditableFormField::class, $rule->ConditionFieldID);
+            $formFieldWatch = EditableFormField::get()->setUseCache(true)->byID($rule->ConditionFieldID);
             // Skip deleted fields
             if (!$formFieldWatch) {
                 continue;
@@ -1020,7 +1020,7 @@ class EditableFormField extends DataObject
         foreach ($displayRules as $rule) {
             $controllingField = $rule->ConditionField();
 
-            // recursively check - if any of the dependant fields are hidden, assume the rule can not be satisfied
+            // recursively check - if any of the dependent fields are hidden, assume the rule can not be satisfied
             $ruleSatisfied = $this->checkIsDisplayedRecursionProtection()
             && $controllingField->isDisplayed($data)
             && $rule->validateAgainstFormData($data);

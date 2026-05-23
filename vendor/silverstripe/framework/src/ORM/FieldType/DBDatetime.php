@@ -58,9 +58,9 @@ class DBDatetime extends DBDate implements TemplateGlobalProvider
     ];
 
     /**
-     * Flag idicating if this field is considered immutable
+     * Flag indicating if this field is considered immutable
      * when this is enabled setting the value of this field will return a new field instance
-     * instead updatin the old one
+     * instead updating the old one
      */
     protected bool $immutable = false;
 
@@ -181,22 +181,24 @@ class DBDatetime extends DBDate implements TemplateGlobalProvider
         $dateTimeFormat = $field->getDatetimeFormat();
         $locale = $field->getLocale();
 
-        // Set date formatting hints and example
-        $date = static::now()->Format($dateTimeFormat, $locale);
-        $field
-            ->setDescription(_t(
+        // Set date formatting hints and example when not using HTML5 inputs,
+        // as browsers handle format display natively for HTML5 datetime-local fields
+        $field->setAttribute('placeholder', $dateTimeFormat);
+        if (!$field->getHTML5()) {
+            $date = static::now()->Format($dateTimeFormat, $locale);
+            $field->setDescription(_t(
                 'SilverStripe\\Forms\\FormField.EXAMPLE',
                 'e.g. {format}',
                 'Example format',
                 ['format' => $date]
-            ))
-            ->setAttribute('placeholder', $dateTimeFormat);
+            ));
+        }
 
         return $field;
     }
 
     /**
-     * Get the amount of time inbetween two datetimes.
+     * Get the amount of time between two datetimes.
      */
     public static function getTimeBetween(DBDateTime $from, DBDateTime $to): string
     {

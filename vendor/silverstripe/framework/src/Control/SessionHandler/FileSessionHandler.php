@@ -125,6 +125,7 @@ class FileSessionHandler extends AbstractSessionHandler
      */
     public function read(#[SensitiveParameter] string $id): string|false
     {
+        $this->checkSessionID($id);
         $path = $this->getFilePath($id);
         $filesystem = new Filesystem();
         // If the file doesn't exist, it's a new session so just return empty string.
@@ -326,7 +327,7 @@ class FileSessionHandler extends AbstractSessionHandler
     /**
      * Check if a session file is expired.
      *
-     * This method is necessary becuse garbage collection may not have run yet.
+     * This method is necessary because garbage collection may not have run yet.
      *
      * @throws RuntimeException if the modified time of the file can't be read
      */

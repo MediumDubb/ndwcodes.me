@@ -376,37 +376,36 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
         $component = $this->gridField->getConfig()->getComponentByType(GridFieldDetailForm::class);
         $paginator = $this->getGridField()->getConfig()->getComponentByType(GridFieldPaginator::class);
         $gridState = $this->getGridField()->getState();
+
         if ($component && $paginator && $component->getShowPagination()) {
             $previousIsDisabled = !$this->getPreviousRecordID();
             $nextIsDisabled = !$this->getNextRecordID();
+            $previousTitle = _t(__CLASS__ . ".PREVIOUS", "Go to previous record");
+            $nextTitle = _t(__CLASS__ . ".NEXT", "Go to next record");
 
-            $previousAndNextGroup->push(
-                LiteralField::create(
-                    'previous-record',
-                    HTML::createTag($previousIsDisabled ? 'span' : 'a', [
-                        'href' => $previousIsDisabled ? '#' : $this->getEditLinkForAdjacentRecord(-1),
-                        'data-grid-state' => $previousIsDisabled ? $gridState : $this->getGridStateForAdjacentRecord(-1),
-                        'title' => _t(__CLASS__ . '.PREVIOUS', 'Go to previous record'),
-                        'aria-label' => _t(__CLASS__ . '.PREVIOUS', 'Go to previous record'),
-                        'class' => 'btn btn-secondary font-icon-left-open action--previous discard-confirmation'
-                            . ($previousIsDisabled ? ' disabled' : ''),
-                    ])
-                )
-            );
-
-            $previousAndNextGroup->push(
-                LiteralField::create(
-                    'next-record',
-                    HTML::createTag($nextIsDisabled ? 'span' : 'a', [
-                        'href' => $nextIsDisabled ? '#' : $this->getEditLinkForAdjacentRecord(+1),
-                        'data-grid-state' => $nextIsDisabled ? $gridState : $this->getGridStateForAdjacentRecord(+1),
-                        'title' => _t(__CLASS__ . '.NEXT', 'Go to next record'),
-                        'aria-label' => _t(__CLASS__ . '.NEXT', 'Go to next record'),
-                        'class' => 'btn btn-secondary font-icon-right-open action--next discard-confirmation'
-                            . ($nextIsDisabled ? ' disabled' : ''),
-                    ])
-                )
-            );
+            foreach ([-1 => 'previous', 1 => 'next'] as $offset => $type) {
+                $isDisabled = $type === 'previous' ? $previousIsDisabled : $nextIsDisabled;
+                $title = $type === 'previous' ? $previousTitle : $nextTitle;
+                $openClass = $type === 'previous' ? 'left-open' : 'right-open';
+                $attrs = [
+                    "title" => $title,
+                    'aria-label' => $title,
+                    'class' => "btn btn-secondary font-icon-$openClass action--$type discard-confirmation"
+                ];
+                if ($isDisabled) {
+                    $attrs['class'] .= ' disabled';
+                    $attrs['aria-disabled'] = 'true';
+                } else {
+                    $attrs['data-grid-state'] = $this->getGridStateForAdjacentRecord($offset);
+                    $attrs['href'] = $this->getEditLinkForAdjacentRecord($offset);
+                }
+                $previousAndNextGroup->push(
+                    LiteralField::create(
+                        "{$type}-record",
+                        HTML::createTag('a', $attrs)
+                    )
+                );
+            }
         }
 
         $rightGroup->push($previousAndNextGroup);
@@ -449,10 +448,12 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
                     throw new LogicException(get_class($this->record) . ' must implement ' . DataObjectInterface::class);
                 }
 
-                $noChangesClasses = 'btn-outline-primary font-icon-tick';
+                $noChangesClasses = 'btn-outline-primary';
                 $majorActions->push(FormAction::create('doSave', _t('SilverStripe\\Forms\\GridField\\GridFieldDetailForm.Save', 'Save'))
+                    ->setIcon('tick')
+                    ->setAttribute('data-icon-alternate', 'save')
                     ->addExtraClass($noChangesClasses)
-                    ->setAttribute('data-btn-alternate-add', 'btn-primary font-icon-save')
+                    ->setAttribute('data-btn-alternate-add', 'btn-primary')
                     ->setAttribute('data-btn-alternate-remove', $noChangesClasses)
                     ->setUseButtonTag(true)
                     ->setAttribute('data-text-alternate', _t('SilverStripe\\CMS\\Controllers\\CMSMain.SAVEDRAFT', 'Save')));
@@ -464,7 +465,8 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
                 }
                 $actions->insertAfter('MajorActions', FormAction::create('doDelete', _t('SilverStripe\\Forms\\GridField\\GridFieldDetailForm.Delete', 'Delete'))
                     ->setUseButtonTag(true)
-                    ->addExtraClass('btn-outline-danger btn-hide-outline font-icon-trash-bin action--delete'));
+                    ->setIcon('trash-bin')
+                    ->addExtraClass('btn-outline-danger btn-hide-outline action--delete'));
             }
 
             $gridState = $this->gridField->getState(false);
@@ -475,7 +477,8 @@ class GridFieldDetailForm_ItemRequest extends RequestHandler
             //Change the Save label to 'Create'
             $majorActions->push(FormAction::create('doSave', _t('SilverStripe\\Forms\\GridField\\GridFieldDetailForm.Create', 'Create'))
                 ->setUseButtonTag(true)
-                ->addExtraClass('btn-primary font-icon-plus-thin'));
+                ->setIcon('plus-thin')
+                ->addExtraClass('btn-primary'));
 
             // Add a Cancel link which is a button-like link and link back to one level up.
             $crumbs = $this->Breadcrumbs();

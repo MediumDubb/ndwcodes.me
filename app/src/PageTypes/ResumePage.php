@@ -30,7 +30,7 @@ class ResumePage extends Page
         'Title'             => 'Varchar(50)',
         // profile section
         'ProfileHeading'    => 'Varchar(50)',
-        'Description'       => 'Varchar(750)',
+        'Description'       => 'Varchar(1250)',
         // Exp section
         'ExpHeading'        => 'Varchar(50)',
         // Contact section

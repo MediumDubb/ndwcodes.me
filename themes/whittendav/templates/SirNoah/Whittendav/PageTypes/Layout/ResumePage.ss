@@ -9,7 +9,7 @@
                     </h1>
                 </div>
                 <% if $Resume %>
-                    <a href="{$Resume.Link()}" download class="d-inline-block mt-4" target="_blank">
+                    <a href="{$Resume.Link()}" class="d-inline-block mt-4" target="_blank">
                         <button class="primary">Download Resume PDF</button>
                     </a>
                 <% end_if %>

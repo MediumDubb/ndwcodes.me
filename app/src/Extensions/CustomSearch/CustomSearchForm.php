@@ -109,15 +109,22 @@ class CustomSearchForm extends SearchForm
 
         $results = DB::get_conn()->searchEngine($this->customClassesToSearch, $keywords, $start, $pageLength, "\"Relevance\" DESC", $extraFilter, $booleanSearch);
 
-        $sections = ContentSection::get()->filter('CopyBlock:PartialMatch', $request->getVar('q'));
+        $sections = ContentSection::get();
+
+        if ($sections->count()  > 0) {
+            $sections = $sections->filter('CopyBlock:PartialMatch', $request->getVar('q'));
+        }
+
         $posts = ArrayList::create();
 
         foreach ($sections as $section) {
             $posts->push($section->BlogPost());
         }
 
-        foreach (BasePost::get()->filter('ID',$posts->columnUnique()) as $blogResult) {
-            $results->add($blogResult);
+        if ($posts->count() > 0) {
+            foreach (BasePost::get()->filter('ID',$posts->columnUnique()) as $blogResult) {
+                $results->add($blogResult);
+            }
         }
 
         // filter by permission

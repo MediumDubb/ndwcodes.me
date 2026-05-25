@@ -31,8 +31,8 @@
                 <% if $Experiences %>
                     <ul class="list">
                         <% loop $Experiences %>
-                            <li data-aos="fade-down" data-aos-delay="{$Pos(1)}00" data-aos-duration="500">
-                                <div class="dates d-flex justify-content-between align-items-center">
+                            <li class="break-word" data-aos="fade-down" data-aos-delay="{$Pos(1)}00" data-aos-duration="500">
+                                <div class="dates d-flex justify-content-between align-items-center flex-wrap">
                                     <p class="name">{$Title}</p>
                                     <p class="start-stop"><span class="begin">{$YearStart.format('Y')}</span><span class="sep">-</span><% if $YearEnd %><span class="end">{$YearEnd.format('Y')}</span><% else_if $Current %><span class="present">PRESENT</span><% end_if %></p>
                                 </div>
@@ -55,8 +55,8 @@
                             <div class="accordion-body">
                                 <div class="acc-section contact">
                                     <% if $ContactHeading %><p class="heading h3">{$ContactHeading}</p><% end_if %>
-                                    <% if $Email %><p>{$Email}</p><% end_if %>
-                                    <% if $LinkedIn %><p>{$LinkedIn}</p><% end_if %>
+                                    <% if $Email %><p class="break-word">{$Email}</p><% end_if %>
+                                    <% if $LinkedIn %><p class="break-word">{$LinkedIn}</p><% end_if %>
                                 </div>
                                 <div class="acc-section edu">
                                     <% if $EduHeading %><p class="heading h3">{$EduHeading}</p><% end_if %>

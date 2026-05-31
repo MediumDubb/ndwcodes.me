@@ -10,7 +10,7 @@
     <% if $SiteConfig.Favicon %>
         <link rel="shortcut icon" href="{$SiteConfig.Favicon.ScaleMaxWidth(128).Link()}" />
     <% else %>
-        <link rel="shortcut icon" href="$resourceURL('themes/whittendav/images/favicon.ico')" />
+        <link rel="shortcut icon" href="$resourceURL('favicon.ico')" />
     <% end_if %>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

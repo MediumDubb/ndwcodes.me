@@ -3,6 +3,6 @@
          data-aos="fade"
          data-aos-easing="ease-in-back"
          data-aos-delay="200">
-        &copy;&nbsp;2025 <% if $Now.format('Y') != '2025' %> - {$Now.format('Y')} <% end_if %>Noah Whittington
+        &copy;&nbsp;2020 <% if $Now.format('Y') != '2025' %> - {$Now.format('Y')} <% end_if %>Noah Whittington
     </div>
 </footer>
